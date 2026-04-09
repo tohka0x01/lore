@@ -63,7 +63,7 @@ export async function fetchRecallBlock(pluginCfg: any, query: string, sessionId:
   // All display params (min_display_score, max_display_items, etc.) controlled server-side via /settings
   const payload = { query, session_id: sessionId };
   const data = await fetchJson(pluginCfg, "/browse/recall", { method: "POST", body: JSON.stringify(payload) });
-  const block = formatRecallBlock(data?.items || [], 2);
+  const block = formatRecallBlock(data?.items || [], 2, sessionId);
   return block ? { block, data } : null;
 }
 
@@ -113,9 +113,10 @@ function detectProjectInfo(): ProjectInfo {
   return { dirName, repoName };
 }
 
-function formatRecallTag(items: any[], source: string, query: string): string {
+function formatRecallTag(items: any[], source: string, query: string, sessionId?: string): string {
   if (!Array.isArray(items) || items.length === 0) return "";
-  const lines = [`<recall source="${source}" query="${query}">`];
+  const attrs = `source="${source}" query="${query}"${sessionId ? ` session_id="${sessionId}"` : ""}`;
+  const lines = [`<recall ${attrs}>`];
   for (const item of items) {
     const score = Number.isFinite(item?.score_display)
       ? Number(item.score_display).toFixed(2)

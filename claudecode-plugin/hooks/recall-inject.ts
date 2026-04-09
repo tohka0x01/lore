@@ -32,9 +32,9 @@ function readCueList(item: any): string[] {
   return cues.map((x: any) => String(x || "").replace(/\s+/g, " ").trim()).filter(Boolean).slice(0, 3);
 }
 
-function formatRecallBlock(items: any[]): string {
+function formatRecallBlock(items: any[], sessionId?: string): string {
   if (!Array.isArray(items) || items.length === 0) return "";
-  const lines = ["<recall>"];
+  const lines = [sessionId ? `<recall session_id="${sessionId}">` : "<recall>"];
   for (const item of items) {
     const score = Number.isFinite(item?.score_display) ? Number(item.score_display).toFixed(2) : String(item?.score ?? "");
     const cues = readCueList(item);
@@ -87,7 +87,7 @@ async function main() {
     if (!response.ok) process.exit(0);
 
     const data = await response.json();
-    const block = formatRecallBlock(data?.items || []);
+    const block = formatRecallBlock(data?.items || [], sessionId);
     if (block) {
       process.stdout.write(block);
     }

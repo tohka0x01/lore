@@ -126,9 +126,10 @@ async function fetchRecallItems(query: string): Promise<any[]> {
   return data?.items || [];
 }
 
-function formatRecallTag(items: any[], source: string, query: string): string {
+function formatRecallTag(items: any[], source: string, query: string, sessionId?: string): string {
   if (!Array.isArray(items) || items.length === 0) return "";
-  const lines = [`<recall source="${source}" query="${query}">`];
+  const attrs = `source="${source}" query="${query}"${sessionId ? ` session_id="${sessionId}"` : ""}`;
+  const lines = [`<recall ${attrs}>`];
   for (const item of items) {
     const score = Number.isFinite(item?.score_display)
       ? Number(item.score_display).toFixed(2)

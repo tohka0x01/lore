@@ -58,7 +58,7 @@ export function registerTools(api: any, pluginCfg: any) {
   api.registerTool({
     name: "lore_get_node",
     label: "Lore get node",
-    description: "Open a memory node to inspect its full content, metadata, and nearby structure.",
+    description: "Open a memory node to inspect its full content, metadata, and nearby structure. Pass session_id from the <recall session_id=\"...\"> tag to enable per-session read tracking.",
     parameters: {
       type: "object",
       additionalProperties: false,
@@ -66,13 +66,14 @@ export function registerTools(api: any, pluginCfg: any) {
       properties: {
         uri: { type: "string", description: "Full memory URI for the node you want to open, such as core://soul." },
         nav_only: { type: "boolean", description: "If true, skip expensive glossary processing." },
+        session_id: { type: "string", description: "Session identifier from the <recall session_id=\"...\"> tag. Enables per-session read tracking and recall suppression." },
         __session_id: { type: "string", description: "Internal session tracking field." },
         __session_key: { type: "string", description: "Internal session tracking field." }
       }
     },
     async execute(_id: any, params: any) {
       const navOnly = params?.nav_only === true;
-      const sessionId = typeof params?.__session_id === "string" && params.__session_id.trim() ? params.__session_id.trim() : "";
+      const sessionId = (typeof params?.session_id === "string" && params.session_id.trim()) || (typeof params?.__session_id === "string" && params.__session_id.trim()) || "";
       const sessionKey = typeof params?.__session_key === "string" && params.__session_key.trim() ? params.__session_key.trim() : "";
       let domain = pluginCfg.defaultDomain;
       let path = "";

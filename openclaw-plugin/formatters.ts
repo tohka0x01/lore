@@ -88,9 +88,9 @@ export function readCueList(item: any) {
   return cleaned.slice(0, 3);
 }
 
-export function formatRecallBlock(items: any, precision = DEFAULT_RECALL_SCORE_PRECISION) {
+export function formatRecallBlock(items: any, precision = DEFAULT_RECALL_SCORE_PRECISION, sessionId?: string) {
   if (!Array.isArray(items) || items.length === 0) return "";
-  const lines = ["<recall>"];
+  const lines = [sessionId ? `<recall session_id="${sessionId}">` : "<recall>"];
   for (const item of items) {
     const score = Number.isFinite(item?.score_display) ? Number(item.score_display).toFixed(precision) : String(item?.score ?? "");
     const cues = readCueList(item);

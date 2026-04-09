@@ -88,10 +88,11 @@ export function createMcpServer(): InstanceType<typeof McpServer> {
   // ── lore_get_node ────────────────────────────────────────────
   server.tool(
     'lore_get_node',
-    'Open a memory node to inspect its full content, metadata, and nearby structure.',
+    'Open a memory node to inspect its full content, metadata, and nearby structure. Pass session_id from the <recall> tag to enable per-session read tracking.',
     {
       uri: z.string().describe('Full memory URI for the node you want to open, such as core://soul.'),
       nav_only: z.boolean().optional().describe('If true, skip expensive glossary processing.'),
+      session_id: z.string().optional().describe('Session identifier from the <recall session_id="..."> tag. Enables per-session read tracking and recall suppression.'),
     },
     async (args) => {
       try {
@@ -100,10 +101,11 @@ export function createMcpServer(): InstanceType<typeof McpServer> {
 
         // best-effort session read tracking
         const node = data?.node || {};
+        const sid = typeof args?.session_id === 'string' && args.session_id.trim() ? args.session_id.trim() : 'mcp-embedded';
         if (node.uri && node.node_uuid) {
           try {
             await markSessionRead({
-              session_id: 'mcp-embedded',
+              session_id: sid,
               uri: node.uri,
               node_uuid: node.node_uuid,
               source: 'mcp:lore_get_node',
@@ -249,18 +251,20 @@ export function createMcpServer(): InstanceType<typeof McpServer> {
       disclosure: z.string().optional().describe('New disclosure / trigger condition.'),
       glossary_add: z.array(z.string()).optional().describe('Keywords to add to the glossary.'),
       glossary_remove: z.array(z.string()).optional().describe('Keywords to remove from the glossary.'),
+      session_id: z.string().optional().describe('Session identifier from the <recall session_id="..."> tag.'),
     },
     async (args) => {
       try {
         const { domain, path } = resolveUri(args, defaultDomain);
         if (!path) throw new Error('uri is required.');
+        const sid = typeof args?.session_id === 'string' && args.session_id.trim() ? args.session_id.trim() : 'mcp-embedded';
 
         // -- policy gate --
         const policyResult = await validateUpdatePolicy({
           domain, path,
           priority: Number.isFinite(args?.priority) ? args!.priority! : undefined,
           disclosure: typeof args?.disclosure === 'string' ? args.disclosure : undefined,
-          sessionId: 'mcp-embedded',
+          sessionId: sid,
         });
         if (policyResult.errors.length > 0) return fail('Lore update blocked by policy', policyResult.errors.join('; '));
 
@@ -299,14 +303,16 @@ export function createMcpServer(): InstanceType<typeof McpServer> {
     'Remove a memory path that is obsolete, duplicated, or no longer wanted.',
     {
       uri: z.string().describe('Full memory URI for the path you want to remove.'),
+      session_id: z.string().optional().describe('Session identifier from the <recall session_id="..."> tag.'),
     },
     async (args) => {
       try {
         const { domain, path } = resolveUri(args, defaultDomain);
         if (!path) throw new Error('uri is required.');
+        const sid = typeof args?.session_id === 'string' && args.session_id.trim() ? args.session_id.trim() : 'mcp-embedded';
 
         // -- policy gate --
-        const policyResult = await validateDeletePolicy({ domain, path, sessionId: 'mcp-embedded' });
+        const policyResult = await validateDeletePolicy({ domain, path, sessionId: sid });
         if (policyResult.errors.length > 0) return fail('Lore delete blocked by policy', policyResult.errors.join('; '));
 
         await deleteNodeByPath({ domain, path }, { source: 'mcp:lore_delete_node' });
