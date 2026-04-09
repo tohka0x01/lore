@@ -12,10 +12,10 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
   const { searchParams } = new URL(request.url);
   try {
     return NextResponse.json(await searchMemories({
-      query: searchParams.get('query') || '',
+      query: searchParams.get('q') || searchParams.get('query') || '',
       domain: searchParams.get('domain') || null,
       limit: Number(searchParams.get('limit') || 10),
-      hybrid: searchParams.get('hybrid') !== 'false',
+      content_limit: Number(searchParams.get('content_limit') || 5),
     }));
   } catch (error) {
     return NextResponse.json({ detail: (error as Error)?.message || 'Search failed' }, { status: 500 });
@@ -33,7 +33,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
       domain: body?.domain || null,
       limit: Number(body?.limit || 10),
       embedding: body?.embedding || null,
-      hybrid: body?.hybrid !== false,
+      content_limit: Number(body?.content_limit || 5),
     }));
   } catch (error) {
     return NextResponse.json({ detail: (error as Error)?.message || 'Search failed' }, { status: 500 });

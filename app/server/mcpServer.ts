@@ -121,33 +121,37 @@ export function createMcpServer(): InstanceType<typeof McpServer> {
   // ── lore_search ──────────────────────────────────────────────
   server.tool(
     'lore_search',
-    'Find relevant memories by keyword or domain when you need to locate prior knowledge.',
+    'Search memories by keyword, semantic similarity, or both. Returns full content for top results — use this when you need to read memory content directly without a separate get_node call.',
     {
       query: z.string().describe('Search query text.'),
       domain: z.string().optional().describe('Optional domain filter to narrow the search.'),
       limit: z.number().int().min(1).max(100).optional().describe('Maximum number of results.'),
+      content_limit: z.number().int().min(0).max(20).optional().describe('How many top results include full content (default 5).'),
     },
     async (args) => {
       try {
         const query = String(args?.query || '').trim();
         const safeLimit = Number.isFinite(args?.limit) ? Math.max(1, Math.min(100, args.limit!)) : 10;
+        const safeContentLimit = Number.isFinite(args?.content_limit) ? Math.max(0, Math.min(20, args.content_limit!)) : 5;
         const domainFilter = typeof args?.domain === 'string' && args.domain.trim() ? args.domain.trim() : null;
 
-        const data = await searchMemories({ query, domain: domainFilter, limit: safeLimit, hybrid: true });
-        const results = Array.isArray(data?.results) ? data.results : Array.isArray(data) ? data : [];
+        const data = await searchMemories({ query, domain: domainFilter, limit: safeLimit, content_limit: safeContentLimit });
+        const results = data?.results || [];
 
-        const text = results.length > 0
-          ? (results as Record<string, unknown>[]).map((item: Record<string, unknown>, idx: number) => {
-              const parts = [`${idx + 1}. ${item.uri} (priority: ${item.priority}`];
-              if (typeof item?.score === 'number') parts.push(`score: ${item.score.toFixed(3)}`);
-              if (Array.isArray(item?.matched_on) && item.matched_on.length > 0) parts.push(`via: ${item.matched_on.join('+')}`);
-              return `${parts.join(', ')})\n   ${item.snippet}`;
-            }).join('\n')
-          : 'No matching memories found.';
+        if (results.length === 0) return ok('No matching memories found.');
 
-        const meta = (data as unknown as Record<string, unknown>)?.meta as Record<string, unknown> | undefined;
-        const suffix = meta?.semantic_error ? `\n\nSemantic fallback skipped: ${meta.semantic_error}` : '';
-        return ok(`${text}${suffix}`);
+        const text = results.map((item, idx) => {
+          const parts = [`${idx + 1}. ${item.uri} (priority: ${item.priority}, score: ${item.score_display})`];
+          if (item.cues.length > 0) parts.push(`   via: ${item.cues.join(', ')}`);
+          if (item.content) {
+            parts.push(`   ---\n${item.content}`);
+          } else if (item.snippet) {
+            parts.push(`   ${item.snippet}`);
+          }
+          return parts.join('\n');
+        }).join('\n\n');
+
+        return ok(text);
       } catch (error) {
         return fail('Lore search failed', error);
       }

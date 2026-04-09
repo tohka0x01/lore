@@ -1,126 +1,139 @@
 import { sql } from '../../db';
 import { NORMALIZED_DOCUMENTS_CTE } from '../view/retrieval';
-import { embedTexts, vectorLiteral, resolveEmbeddingConfig } from '../view/embeddings';
+import { embedTexts, resolveEmbeddingConfig } from '../view/embeddings';
+import { countQueryTokens, getFtsConfig, getFtsQueryConfig } from '../view/viewBuilders';
 import { clampLimit } from '../core/utils';
-import { getFtsConfig, getFtsQueryConfig } from '../view/viewBuilders';
+import {
+  fetchDenseMemoryViewRows,
+  fetchLexicalMemoryViewRows,
+  fetchExactMemoryRows,
+} from '../view/memoryViewQueries';
+import { fetchGlossarySemanticRows } from './glossarySemantic';
+import { collectCandidates, runStrategy, DEFAULT_STRATEGY, STRATEGIES } from '../recall/recallScoring';
+import { getSettings as getSettingsBatch } from '../config/settings';
 import type { EmbeddingConfig } from '../core/types';
+import type { ScoredResult, ScoringConfig } from '../recall/recallScoring';
 
-// ---- Internal row shapes returned from SQL ----
+// ---- Types ----
 
-interface LexicalRow {
+export interface SearchResult {
   uri: string;
   domain: string;
   path: string;
   priority: number;
   disclosure: string | null;
-  snippet: string | null;
-  fts_score: number | string;
-  exact_score: number | string;
-  fts_hit: boolean;
-  uri_hit: boolean;
-  path_hit: boolean;
-  name_hit: boolean;
-  glossary_hit: boolean;
-  disclosure_hit: boolean;
-  content_hit: boolean;
-}
-
-interface SemanticRow {
-  uri: string;
-  domain: string;
-  path: string;
-  priority: number;
-  disclosure: string | null;
-  snippet: string | null;
-  cue_text?: string | null;
-  semantic_score: number | string;
-}
-
-// ---- Public result shape ----
-
-export interface SearchMergedResult {
-  uri: string;
-  domain: string;
-  path: string;
-  priority: number;
-  disclosure: string | null;
-  snippet: string;
   score: number;
-  score_breakdown: { fts: number; exact: number; semantic: number };
+  score_display: number;
+  /** Actual node content — included for top results only */
+  content: string | null;
+  /** Short snippet for results without full content */
+  snippet: string | null;
   matched_on: string[];
+  cues: string[];
 }
 
 export interface SearchMeta {
   query: string;
   domain: string | null;
-  limit?: number;
-  mode: 'empty' | 'lexical' | 'hybrid';
-  lexical_candidates?: number;
-  semantic_candidates?: number;
-  semantic_error?: string | null;
+  limit: number;
+  content_limit: number;
+  strategy: string;
+  candidates: {
+    exact: number;
+    glossary_semantic: number;
+    dense: number;
+    view_lexical: number;
+    content_lexical: number;
+  };
 }
 
 export interface SearchResponse {
-  results: SearchMergedResult[];
+  results: SearchResult[];
   meta: SearchMeta;
 }
 
-// ---- Internal accumulator used during merge ----
+// ---- Scoring config loader (reuses recall settings) ----
 
-interface MergeAccumulator {
+const SCORING_KEYS = [
+  'recall.scoring.strategy',
+  'recall.scoring.rrf_k',
+  'recall.scoring.dense_floor',
+  'recall.scoring.gs_floor',
+  'recall.weights.w_exact',
+  'recall.weights.w_glossary_semantic',
+  'recall.weights.w_dense',
+  'recall.weights.w_lexical',
+  'recall.bonus.priority_base',
+  'recall.bonus.priority_step',
+  'recall.bonus.multi_view_step',
+  'recall.bonus.multi_view_cap',
+  'recall.recency.enabled',
+  'recall.recency.half_life_days',
+  'recall.recency.max_bonus',
+  'recall.recency.priority_exempt',
+  'views.prior.gist',
+  'views.prior.question',
+] as const;
+
+async function loadScoringConfig(): Promise<ScoringConfig & { strategy: string }> {
+  const s = await getSettingsBatch([...SCORING_KEYS]);
+  const rawStrategy = String(s['recall.scoring.strategy'] || DEFAULT_STRATEGY);
+  const strategy = STRATEGIES.includes(rawStrategy as typeof STRATEGIES[number]) ? rawStrategy : DEFAULT_STRATEGY;
+  return {
+    strategy,
+    rrf_k: Number(s['recall.scoring.rrf_k'] || 20),
+    dense_floor: Number(s['recall.scoring.dense_floor'] || 0.50),
+    gs_floor: Number(s['recall.scoring.gs_floor'] || 0.40),
+    w_exact: s['recall.weights.w_exact'] as number,
+    w_glossary_semantic: s['recall.weights.w_glossary_semantic'] as number,
+    w_dense: s['recall.weights.w_dense'] as number,
+    w_lexical: s['recall.weights.w_lexical'] as number,
+    priority_base: s['recall.bonus.priority_base'] as number,
+    priority_step: s['recall.bonus.priority_step'] as number,
+    multi_view_step: s['recall.bonus.multi_view_step'] as number,
+    multi_view_cap: s['recall.bonus.multi_view_cap'] as number,
+    recency_enabled: (s['recall.recency.enabled'] === true),
+    recency_half_life_days: Number(s['recall.recency.half_life_days'] || 180),
+    recency_max_bonus: Number(s['recall.recency.max_bonus'] || 0.04),
+    recency_priority_exempt: Number(s['recall.recency.priority_exempt'] ?? 1),
+    view_priors: {
+      gist: Number(s['views.prior.gist'] ?? 0.03),
+      question: Number(s['views.prior.question'] ?? 0.02),
+    },
+  };
+}
+
+// ---- Raw content lexical search (searches actual node content, not views) ----
+
+interface ContentLexicalRow {
   uri: string;
   domain: string;
   path: string;
   priority: number;
   disclosure: string | null;
-  snippet: string;
-  lexical_score: number;
-  semantic_score: number;
-  score: number;
-  score_breakdown: { fts: number; exact: number; semantic: number };
-  matched_on: string[];
+  snippet: string | null;
+  content_score: number;
 }
 
-// ---- Helper functions ----
-
-async function normalizeEmbedding(
-  embedding: Partial<EmbeddingConfig> | null | undefined,
-): Promise<EmbeddingConfig | null> {
-  try {
-    return await resolveEmbeddingConfig(embedding);
-  } catch {
-    return null;
-  }
-}
-
-export function dedupeMatchedOn(values: unknown[]): string[] {
-  return [...new Set(values.map((item) => String(item || '').trim()).filter(Boolean))];
-}
-
-async function fetchLexicalSearchRows({
+async function fetchContentLexicalRows({
   query,
   domain = null,
-  limit = 10,
+  limit = 40,
 }: {
   query: string;
   domain?: string | null;
   limit?: number;
-}): Promise<LexicalRow[]> {
-  const cleanedQuery = String(query || '').trim();
-  if (!cleanedQuery) return [];
+}): Promise<ContentLexicalRow[]> {
+  const cleaned = String(query || '').trim();
+  if (!cleaned) return [];
   const fts = await getFtsConfig();
   const ftsQuery = await getFtsQueryConfig();
-
-  const candidateLimit = clampLimit(limit, 1, 200, 10);
-  const params: unknown[] = [cleanedQuery];
+  const candidateLimit = clampLimit(limit, 1, 300, 40);
+  const params: unknown[] = [cleaned];
   const where: string[] = [
     `(
       sd.search_vector @@ si.ts_query
       OR sd.uri ILIKE si.like_query
-      OR sd.path ILIKE si.like_query
-      OR sd.name ILIKE si.like_query
-      OR sd.glossary_text ILIKE si.like_query
-      OR sd.disclosure ILIKE si.like_query
       OR sd.latest_content ILIKE si.like_query
     )`,
   ];
@@ -145,7 +158,6 @@ async function fetchLexicalSearchRows({
           REGEXP_REPLACE(COALESCE(nd.latest_content, ''), E'[\n\r\t]+', ' ', 'g') AS flat_content,
           (
             setweight(to_tsvector('${fts}', COALESCE(nd.name, '')), 'A') ||
-            setweight(to_tsvector('${fts}', REGEXP_REPLACE(COALESCE(nd.path, ''), '[/_\\-]+', ' ', 'g')), 'A') ||
             setweight(to_tsvector('${fts}', COALESCE(nd.glossary_text, '')), 'A') ||
             setweight(to_tsvector('${fts}', COALESCE(nd.disclosure, '')), 'B') ||
             setweight(to_tsvector('${fts}', COALESCE(nd.latest_content, '')), 'C')
@@ -153,246 +165,178 @@ async function fetchLexicalSearchRows({
         FROM normalized_documents nd
       )
       SELECT
-        sd.domain,
-        sd.path,
-        sd.uri,
-        sd.name,
-        sd.priority,
-        sd.disclosure,
+        sd.uri, sd.domain, sd.path, sd.priority, sd.disclosure,
         COALESCE(
           NULLIF(
-            ts_headline(
-              'simple',
-              sd.flat_content,
-              si.ts_query,
-              'MaxFragments=2, MinWords=8, MaxWords=18, FragmentDelimiter= … '
-            ),
+            ts_headline('simple', sd.flat_content, si.ts_query,
+              'MaxFragments=2, MinWords=8, MaxWords=25, FragmentDelimiter= … '),
             ''
           ),
-          LEFT(sd.flat_content, 220)
+          LEFT(sd.flat_content, 250)
         ) AS snippet,
-        ts_rank_cd(sd.search_vector, si.ts_query, 32) AS fts_score,
-        (
-          CASE WHEN sd.uri ILIKE si.like_query THEN 0.2 ELSE 0 END +
-          CASE WHEN sd.path ILIKE si.like_query THEN 0.12 ELSE 0 END +
-          CASE WHEN sd.name ILIKE si.like_query THEN 0.12 ELSE 0 END +
-          CASE WHEN sd.glossary_text ILIKE si.like_query THEN 0.18 ELSE 0 END +
-          CASE WHEN sd.disclosure ILIKE si.like_query THEN 0.06 ELSE 0 END
-        ) AS exact_score,
-        (sd.search_vector @@ si.ts_query) AS fts_hit,
-        (sd.uri ILIKE si.like_query) AS uri_hit,
-        (sd.path ILIKE si.like_query) AS path_hit,
-        (sd.name ILIKE si.like_query) AS name_hit,
-        (sd.glossary_text ILIKE si.like_query) AS glossary_hit,
-        (sd.disclosure ILIKE si.like_query) AS disclosure_hit,
-        (sd.latest_content ILIKE si.like_query) AS content_hit
+        ts_rank_cd(sd.search_vector, si.ts_query, 32) AS content_score
       FROM search_documents sd
       CROSS JOIN search_input si
       WHERE ${where.join(' AND ')}
-      ORDER BY (ts_rank_cd(sd.search_vector, si.ts_query, 32) + (
-        CASE WHEN sd.uri ILIKE si.like_query THEN 0.2 ELSE 0 END +
-        CASE WHEN sd.path ILIKE si.like_query THEN 0.12 ELSE 0 END +
-        CASE WHEN sd.name ILIKE si.like_query THEN 0.12 ELSE 0 END +
-        CASE WHEN sd.glossary_text ILIKE si.like_query THEN 0.18 ELSE 0 END +
-        CASE WHEN sd.disclosure ILIKE si.like_query THEN 0.06 ELSE 0 END
-      )) DESC,
-      sd.priority ASC,
-      char_length(sd.path) ASC,
-      sd.uri ASC
+      ORDER BY ts_rank_cd(sd.search_vector, si.ts_query, 32) DESC,
+        sd.priority ASC, sd.uri ASC
       LIMIT $${params.length}
     `,
     params,
   );
-
-  return result.rows as LexicalRow[];
+  return result.rows as ContentLexicalRow[];
 }
 
-async function fetchSemanticSearchRows({
-  query,
-  domain = null,
-  limit = 10,
-  embedding,
-}: {
-  query: string;
-  domain?: string | null;
-  limit?: number;
-  embedding: EmbeddingConfig;
-}): Promise<SemanticRow[]> {
-  const normalizedEmbedding = await normalizeEmbedding(embedding);
-  if (!normalizedEmbedding) return [];
+// ---- Fetch actual content for top results ----
 
-  const [queryVector] = await embedTexts(normalizedEmbedding, [String(query || '').trim()]);
-  const candidateLimit = clampLimit(limit, 1, 200, 10);
-  const params: unknown[] = [vectorLiteral(queryVector), normalizedEmbedding.model];
-  const where: string[] = [`embedding_model = $2`];
-
-  if (domain) {
-    params.push(domain);
-    where.push(`domain = $${params.length}`);
-  }
-
-  params.push(candidateLimit);
-
+async function fetchContentForUris(uris: string[]): Promise<Map<string, string>> {
+  if (uris.length === 0) return new Map();
+  const placeholders = uris.map((_, i) => `$${i + 1}`).join(',');
   const result = await sql(
     `
-      SELECT
-        domain,
-        path,
-        uri,
-        COALESCE(NULLIF(REGEXP_REPLACE(path, '^.*/', ''), ''), 'root') AS name,
-        priority,
-        disclosure,
-        LEFT(text_content, 220) AS snippet,
-        NULL AS cue_text,
-        1 - (embedding_vector <=> CAST($1 AS vector)) AS semantic_score
-      FROM memory_views
-      WHERE status = 'active' AND ${where.join(' AND ')}
-      ORDER BY embedding_vector <=> CAST($1 AS vector), priority ASC, char_length(path) ASC
-      LIMIT $${params.length}
+      ${NORMALIZED_DOCUMENTS_CTE}
+      SELECT uri, latest_content
+      FROM normalized_documents
+      WHERE uri IN (${placeholders})
     `,
-    params,
+    uris,
   );
-
-  return result.rows as SemanticRow[];
+  const map = new Map<string, string>();
+  for (const row of result.rows) {
+    map.set(row.uri as string, (row.latest_content as string) || '');
+  }
+  return map;
 }
 
-export function mergeSearchResults({
-  lexicalRows,
-  semanticRows,
-  limit,
-}: {
-  lexicalRows: LexicalRow[];
-  semanticRows: SemanticRow[];
-  limit: number;
-}): SearchMergedResult[] {
-  const byUri = new Map<string, MergeAccumulator>();
-
-  for (const row of lexicalRows) {
-    const ftsScore = Number(row.fts_score || 0);
-    const exactScore = Number(row.exact_score || 0);
-    const lexicalScore = ftsScore + exactScore;
-    const matched_on: string[] = [];
-    if (row.fts_hit) matched_on.push('fts');
-    if (row.uri_hit) matched_on.push('uri');
-    if (row.path_hit) matched_on.push('path');
-    if (row.name_hit) matched_on.push('name');
-    if (row.glossary_hit) matched_on.push('glossary');
-    if (row.disclosure_hit) matched_on.push('disclosure');
-    if (row.content_hit) matched_on.push('content');
-
-    byUri.set(row.uri, {
-      uri: row.uri,
-      domain: row.domain,
-      path: row.path,
-      priority: row.priority,
-      disclosure: row.disclosure,
-      snippet: row.snippet || '',
-      lexical_score: lexicalScore,
-      semantic_score: 0,
-      score: lexicalScore,
-      score_breakdown: {
-        fts: Number(ftsScore.toFixed(6)),
-        exact: Number(exactScore.toFixed(6)),
-        semantic: 0,
-      },
-      matched_on,
-    });
-  }
-
-  for (const row of semanticRows) {
-    const semanticScore = Number(row.semantic_score || 0);
-    const existing = byUri.get(row.uri);
-    if (existing) {
-      existing.semantic_score = Math.max(existing.semantic_score, semanticScore);
-      existing.score_breakdown.semantic = Number(existing.semantic_score.toFixed(6));
-      existing.score = existing.lexical_score + existing.semantic_score * 0.55;
-      existing.matched_on = dedupeMatchedOn([...existing.matched_on, 'semantic']);
-      if (!existing.snippet && row.snippet) existing.snippet = row.snippet;
-      continue;
-    }
-
-    byUri.set(row.uri, {
-      uri: row.uri,
-      domain: row.domain,
-      path: row.path,
-      priority: row.priority,
-      disclosure: row.disclosure,
-      snippet: row.snippet || '',
-      lexical_score: 0,
-      semantic_score: semanticScore,
-      score: semanticScore * 0.55,
-      score_breakdown: {
-        fts: 0,
-        exact: 0,
-        semantic: Number(semanticScore.toFixed(6)),
-      },
-      matched_on: ['semantic'],
-    });
-  }
-
-  return [...byUri.values()]
-    .map((item): SearchMergedResult => ({
-      uri: item.uri,
-      domain: item.domain,
-      path: item.path,
-      priority: item.priority,
-      disclosure: item.disclosure,
-      snippet: item.snippet || '',
-      score: Number(item.score.toFixed(6)),
-      score_breakdown: item.score_breakdown,
-      matched_on: dedupeMatchedOn(item.matched_on),
-    }))
-    .sort((a, b) => b.score - a.score || a.priority - b.priority || a.uri.localeCompare(b.uri))
-    .slice(0, limit);
-}
+// ---- Main search function ----
 
 export async function searchMemories({
   query,
   domain = null,
   limit = 10,
   embedding = null,
-  hybrid = true,
+  content_limit = 5,
 }: {
   query: unknown;
   domain?: string | null;
   limit?: number;
   embedding?: Partial<EmbeddingConfig> | null;
-  hybrid?: boolean;
+  content_limit?: number;
 }): Promise<SearchResponse> {
-  const cleanedQuery = String(query || '').trim();
-  if (!cleanedQuery) return { results: [], meta: { query: cleanedQuery, domain: null, mode: 'empty' } };
+  const cleaned = String(query || '').trim();
+  if (!cleaned) {
+    return {
+      results: [],
+      meta: { query: cleaned, domain, limit: 0, content_limit: 0, strategy: DEFAULT_STRATEGY, candidates: { exact: 0, glossary_semantic: 0, dense: 0, view_lexical: 0, content_lexical: 0 } },
+    };
+  }
 
   const safeLimit = clampLimit(limit, 1, 100, 10);
-  const candidateLimit = Math.max(safeLimit * 4, 20);
-  const lexicalRows = await fetchLexicalSearchRows({ query: cleanedQuery, domain, limit: candidateLimit });
+  const safeContentLimit = clampLimit(content_limit, 0, 20, 5);
+  const candidateLimit = Math.max(safeLimit * 4, 40);
 
-  let semanticRows: SemanticRow[] = [];
-  let semanticError: string | null = null;
-  const normalizedEmbedding = hybrid ? await normalizeEmbedding(embedding) : null;
-  if (normalizedEmbedding) {
-    try {
-      semanticRows = await fetchSemanticSearchRows({
-        query: cleanedQuery,
-        domain,
-        limit: candidateLimit,
-        embedding: normalizedEmbedding,
+  // 1. Resolve embedding
+  const resolvedEmbedding = await resolveEmbeddingConfig(embedding);
+
+  // 2. Run all 5 retrieval paths in parallel
+  const [queryVector] = await embedTexts(resolvedEmbedding, [cleaned]);
+  const scoringConfig = await loadScoringConfig();
+  scoringConfig.query_tokens = await countQueryTokens(cleaned);
+
+  const [exactRows, gsRows, denseRows, viewLexicalRows, contentRows] = await Promise.all([
+    fetchExactMemoryRows({ query: cleaned, limit: candidateLimit, domain }),
+    fetchGlossarySemanticRows({ embedding: resolvedEmbedding, queryVector, limit: candidateLimit, domain }),
+    fetchDenseMemoryViewRows({ embedding: resolvedEmbedding, queryVector, limit: candidateLimit, domain }),
+    fetchLexicalMemoryViewRows({ query: cleaned, limit: candidateLimit, domain }),
+    fetchContentLexicalRows({ query: cleaned, domain, limit: candidateLimit }),
+  ]);
+
+  // 3. Score via recall's strategy engine (4 view-based paths)
+  const byUri = collectCandidates(
+    { exactRows, glossarySemanticRows: gsRows, denseRows, lexicalRows: viewLexicalRows },
+    { viewPriors: scoringConfig.view_priors as Record<string, number> | null },
+  );
+  const scored = runStrategy(scoringConfig.strategy, byUri, scoringConfig);
+
+  // 4. Merge content lexical hits — boost score for URI matches, add new URIs
+  const scoredMap = new Map<string, ScoredResult>();
+  for (const item of scored) scoredMap.set(item.uri, item);
+
+  for (const row of contentRows) {
+    const contentBonus = Number(row.content_score || 0) * 0.15; // moderate boost for raw content match
+    const existing = scoredMap.get(row.uri);
+    if (existing) {
+      existing.score += contentBonus;
+      if (!existing.cues.includes('content')) existing.cues.push('content');
+    } else {
+      // Content-only match (not in views) — add as new candidate
+      scoredMap.set(row.uri, {
+        uri: row.uri,
+        score: contentBonus + 0.05,
+        priority: row.priority,
+        disclosure: row.disclosure || '',
+        cues: ['content'],
+        view_types: [],
+        timestamps: [],
       });
-    } catch (error: unknown) {
-      semanticError = (error instanceof Error ? error.message : null) ?? 'Semantic search failed';
     }
   }
 
-  const results = mergeSearchResults({ lexicalRows, semanticRows, limit: safeLimit });
+  // 5. Re-sort and slice
+  const merged = [...scoredMap.values()]
+    .sort((a, b) => b.score - a.score || a.priority - b.priority || a.uri.localeCompare(b.uri))
+    .slice(0, safeLimit);
+
+  // 6. Fetch content for top N
+  const topUris = merged.slice(0, safeContentLimit).map((r) => r.uri);
+  const contentMap = await fetchContentForUris(topUris);
+
+  // 7. Build snippet map from content lexical rows
+  const snippetMap = new Map<string, string>();
+  for (const row of contentRows) {
+    if (row.snippet && !snippetMap.has(row.uri)) snippetMap.set(row.uri, row.snippet);
+  }
+
+  // 8. Build results
+  const results: SearchResult[] = merged.map((item) => ({
+    uri: item.uri,
+    domain: item.uri.split('://')[0] || '',
+    path: item.uri.includes('://') ? item.uri.split('://')[1] : item.uri,
+    priority: item.priority,
+    disclosure: item.disclosure || null,
+    score: Number(item.score.toFixed(6)),
+    score_display: Number(item.score.toFixed(2)),
+    content: contentMap.get(item.uri) || null,
+    snippet: snippetMap.get(item.uri) || null,
+    matched_on: item.cues || [],
+    cues: item.cues || [],
+  }));
+
   return {
     results,
     meta: {
-      query: cleanedQuery,
+      query: cleaned,
       domain: domain || null,
       limit: safeLimit,
-      mode: normalizedEmbedding ? 'hybrid' : 'lexical',
-      lexical_candidates: lexicalRows.length,
-      semantic_candidates: semanticRows.length,
-      semantic_error: semanticError,
+      content_limit: safeContentLimit,
+      strategy: scoringConfig.strategy,
+      candidates: {
+        exact: exactRows.length,
+        glossary_semantic: gsRows.length,
+        dense: denseRows.length,
+        view_lexical: viewLexicalRows.length,
+        content_lexical: contentRows.length,
+      },
     },
   };
+}
+
+// Legacy exports for backward compatibility with existing tests
+export { fetchContentLexicalRows };
+export function dedupeMatchedOn(values: unknown[]): string[] {
+  return [...new Set(values.map((item) => String(item || '').trim()).filter(Boolean))];
+}
+export function mergeSearchResults({ lexicalRows, semanticRows, limit }: { lexicalRows: any[]; semanticRows: any[]; limit: number }) {
+  // Deprecated — kept for test compatibility only
+  return [];
 }
