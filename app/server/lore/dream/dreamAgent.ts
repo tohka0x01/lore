@@ -132,7 +132,7 @@ export async function executeDreamTool(name: string, args: Record<string, unknow
   try {
     switch (name) {
       case 'get_node': { const { domain, path: p } = parseUri(args.uri as string); return await getNodePayload({ domain, path: p }); }
-      case 'search': return await searchMemories({ query: args.query as string, limit: (args.limit as number) || 10, hybrid: true });
+      case 'search': return await searchMemories({ query: args.query as string, limit: (args.limit as number) || 10,  });
       case 'list_domains': return await listDomains();
       case 'create_node': {
         const { domain, path: p } = args.uri ? parseUri(args.uri as string) : { domain: 'core', path: '' };
