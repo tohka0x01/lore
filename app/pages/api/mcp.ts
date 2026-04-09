@@ -40,16 +40,14 @@ async function readJsonBody(req: NextApiRequest): Promise<unknown> {
 }
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse): Promise<void> {
-  // Auth: accept Bearer header or ?token= query param.
-  // If neither is provided, allow access (MCP clients like Claude Code
-  // don't support pre-configured auth; the token in the URL is the guard).
+  // Bearer token auth: header or ?token= query param
   const expectedToken = process.env.API_TOKEN || '';
   if (expectedToken) {
     const auth = (req.headers.authorization as string) || '';
     const queryToken = (req.query.token as string) || '';
     const provided = auth.startsWith('Bearer ') ? auth.slice(7).trim() : queryToken;
-    if (provided && provided !== expectedToken) {
-      res.status(403).json({ jsonrpc: '2.0', error: { code: -32000, message: 'Forbidden' }, id: null });
+    if (!provided || provided !== expectedToken) {
+      res.status(401).json({ jsonrpc: '2.0', error: { code: -32000, message: 'Unauthorized' }, id: null });
       return;
     }
   }
