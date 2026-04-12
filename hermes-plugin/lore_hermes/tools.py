@@ -314,27 +314,6 @@ def register_tools(register_fn: Callable[[str, str, Dict, Callable], None], clie
         lore_search
     )
     
-    def lore_recall(query: str, session_id: Optional[str] = None) -> ToolResult:
-        """Recall relevant memories for a query"""
-        try:
-            data = client.recall(query, session_id=session_id)
-            items = data.get("items", [])
-            query_id = data.get("event_log", {}).get("query_id", "")
-            block = format_recall_block(items, session_id, query_id)
-            return ToolResult(block or "No relevant memories recalled.", ok=True, items=items, query_id=query_id)
-        except LoreError as e:
-            return ToolResult(f"Lore recall failed: {e}", ok=False, error=str(e))
-    
-    register_fn(
-        "lore_recall",
-        "Recall relevant memories before processing a user query",
-        {
-            "query": {"type": "string", "description": "Query to find relevant memories"},
-            "session_id": {"type": "string", "description": "Session ID for tracking"}
-        },
-        lore_recall
-    )
-    
     # ---- Domains ----
     
     def lore_list_domains() -> ToolResult:

@@ -138,11 +138,15 @@ def _register_tools(ctx: Any, client: LoreClient) -> None:
         name="lore_status",
         toolset="lore",
         schema={
-            "type": "object",
-            "properties": {},
-            "description": "Check Lore memory backend availability and connection health"
+            "name": "lore_status",
+            "description": "Check Lore memory backend availability and connection health",
+            "parameters":                 {
+                                "type": "object",
+                                "properties": {},
+                                "required": []
+                }
         },
-        handler=lore_status,
+        handler=lambda args, **kw: lore_status(),
         description="Check Lore memory backend availability and connection health",
         emoji="🧠"
     )
@@ -159,11 +163,15 @@ def _register_tools(ctx: Any, client: LoreClient) -> None:
         name="lore_boot",
         toolset="lore",
         schema={
-            "type": "object",
-            "properties": {},
-            "description": "Load the boot memory view that restores long-term identity and core operating context"
+            "name": "lore_boot",
+            "description": "Load the boot memory view that restores long-term identity and core operating context",
+            "parameters":                 {
+                                "type": "object",
+                                "properties": {},
+                                "required": []
+                }
         },
-        handler=lore_boot,
+        handler=lambda args, **kw: lore_boot(),
         description="Load the boot memory view that restores long-term identity and core operating context",
         emoji="🧠"
     )
@@ -196,27 +204,30 @@ def _register_tools(ctx: Any, client: LoreClient) -> None:
         name="lore_get_node",
         toolset="lore",
         schema={
-            "type": "object",
-            "properties": {
-                "uri": {
-                    "type": "string",
-                    "description": "Memory URI (e.g., 'core://identity', 'project://myapp/arch')"
-                },
-                "nav_only": {
-                    "type": "boolean",
-                    "description": "If true, return only navigation info without full content",
-                    "default": False
-                },
-                "session_id": {
-                    "type": "string",
-                    "description": "Optional session ID for read tracking",
-                    "default": None
+            "name": "lore_get_node",
+            "description": "Read a memory node by its URI",
+            "parameters":                 {
+                                "type": "object",
+                                "properties": {
+                                                "uri": {
+                                                                "type": "string",
+                                                                "description": "Memory URI (e.g., 'core://identity', 'project://myapp/arch')"
+                                                },
+                                                "nav_only": {
+                                                                "type": "boolean",
+                                                                "description": "If true, return only navigation info without full content"
+                                                },
+                                                "session_id": {
+                                                                "type": "string",
+                                                                "description": "Optional session ID for read tracking"
+                                                }
+                                },
+                                "required": [
+                                                "uri"
+                                ]
                 }
-            },
-            "required": ["uri"],
-            "description": "Read a memory node by its URI"
         },
-        handler=lore_get_node,
+        handler=lambda args, **kw: lore_get_node(args.get("uri"), args.get("nav_only", False), args.get("session_id")),
         description="Read a memory node by its URI",
         emoji="🧠"
     )
@@ -227,8 +238,7 @@ def _register_tools(ctx: Any, client: LoreClient) -> None:
         title: Optional[str] = None,
         domain: str = "core",
         parent_path: str = "",
-        disclosure: Optional[str] = None,
-        glossary: Optional[List[str]] = None
+        disclosure: Optional[str] = None
     ) -> str:
         """Create a new memory node"""
         try:
@@ -238,8 +248,7 @@ def _register_tools(ctx: Any, client: LoreClient) -> None:
                 title=title,
                 content=content,
                 priority=priority,
-                disclosure=disclosure,
-                glossary=glossary or []
+                disclosure=disclosure
             )
             node = data.get("node", {})
             return f"Created: {node.get('uri', '')}\n\n{node.get('content', '')[:500]}"
@@ -250,20 +259,42 @@ def _register_tools(ctx: Any, client: LoreClient) -> None:
         name="lore_create_node",
         toolset="lore",
         schema={
-            "type": "object",
-            "properties": {
-                "content": {"type": "string", "description": "Memory content"},
-                "priority": {"type": "integer", "description": "Priority level (0=core, 1=important, 2+=normal)", "default": 2},
-                "title": {"type": "string", "description": "Node title (optional)"},
-                "domain": {"type": "string", "description": "Memory domain", "default": "core"},
-                "parent_path": {"type": "string", "description": "Parent path within domain", "default": ""},
-                "disclosure": {"type": "string", "description": "When to disclose this memory"},
-                "glossary": {"type": "array", "items": {"type": "string"}, "description": "Keywords for indexing"}
-            },
-            "required": ["content"],
-            "description": "Create a new memory node"
+            "name": "lore_create_node",
+            "description": "Create a new memory node",
+            "parameters":                 {
+                                "type": "object",
+                                "properties": {
+                                                "content": {
+                                                                "type": "string",
+                                                                "description": "Memory content"
+                                                },
+                                                "priority": {
+                                                                "type": "integer",
+                                                                "description": "Priority level (0=core, 1=important, 2+=normal)"
+                                                },
+                                                "title": {
+                                                                "type": "string",
+                                                                "description": "Node title (optional)"
+                                                },
+                                                "domain": {
+                                                                "type": "string",
+                                                                "description": "Memory domain"
+                                                },
+                                                "parent_path": {
+                                                                "type": "string",
+                                                                "description": "Parent path within domain"
+                                                },
+                                                "disclosure": {
+                                                                "type": "string",
+                                                                "description": "When to disclose this memory"
+                                                }
+                                },
+                                "required": [
+                                                "content"
+                                ]
+                }
         },
-        handler=lore_create_node,
+        handler=lambda args, **kw: lore_create_node(args.get("content"), args.get("priority", 2), args.get("title"), args.get("domain", "core"), args.get("parent_path", ""), args.get("disclosure")),
         description="Create a new memory node",
         emoji="🧠"
     )
@@ -272,8 +303,7 @@ def _register_tools(ctx: Any, client: LoreClient) -> None:
         uri: str,
         content: Optional[str] = None,
         priority: Optional[int] = None,
-        disclosure: Optional[str] = None,
-        glossary: Optional[List[str]] = None
+        disclosure: Optional[str] = None
     ) -> str:
         """Update an existing memory node"""
         try:
@@ -283,8 +313,7 @@ def _register_tools(ctx: Any, client: LoreClient) -> None:
                 path=path,
                 content=content,
                 priority=priority,
-                disclosure=disclosure,
-                glossary=glossary
+                disclosure=disclosure
             )
             node = data.get("node", {})
             return f"Updated: {node.get('uri', '')}"
@@ -295,18 +324,34 @@ def _register_tools(ctx: Any, client: LoreClient) -> None:
         name="lore_update_node",
         toolset="lore",
         schema={
-            "type": "object",
-            "properties": {
-                "uri": {"type": "string", "description": "Memory URI to update"},
-                "content": {"type": "string", "description": "New content (optional)"},
-                "priority": {"type": "integer", "description": "New priority (optional)"},
-                "disclosure": {"type": "string", "description": "New disclosure (optional)"},
-                "glossary": {"type": "array", "items": {"type": "string"}, "description": "New glossary (optional)"}
-            },
-            "required": ["uri"],
-            "description": "Update an existing memory node"
+            "name": "lore_update_node",
+            "description": "Update an existing memory node",
+            "parameters":                 {
+                                "type": "object",
+                                "properties": {
+                                                "uri": {
+                                                                "type": "string",
+                                                                "description": "Memory URI to update"
+                                                },
+                                                "content": {
+                                                                "type": "string",
+                                                                "description": "New content (optional)"
+                                                },
+                                                "priority": {
+                                                                "type": "integer",
+                                                                "description": "New priority (optional)"
+                                                },
+                                                "disclosure": {
+                                                                "type": "string",
+                                                                "description": "New disclosure (optional)"
+                                                }
+                                },
+                                "required": [
+                                                "uri"
+                                ]
+                }
         },
-        handler=lore_update_node,
+        handler=lambda args, **kw: lore_update_node(args.get("uri"), args.get("content"), args.get("priority"), args.get("disclosure")),
         description="Update an existing memory node",
         emoji="🧠"
     )
@@ -324,14 +369,22 @@ def _register_tools(ctx: Any, client: LoreClient) -> None:
         name="lore_delete_node",
         toolset="lore",
         schema={
-            "type": "object",
-            "properties": {
-                "uri": {"type": "string", "description": "Memory URI to delete"}
-            },
-            "required": ["uri"],
-            "description": "Delete a memory node"
+            "name": "lore_delete_node",
+            "description": "Delete a memory node",
+            "parameters":                 {
+                                "type": "object",
+                                "properties": {
+                                                "uri": {
+                                                                "type": "string",
+                                                                "description": "Memory URI to delete"
+                                                }
+                                },
+                                "required": [
+                                                "uri"
+                                ]
+                }
         },
-        handler=lore_delete_node,
+        handler=lambda args, **kw: lore_delete_node(args.get("uri")),
         description="Delete a memory node",
         emoji="🧠"
     )
@@ -348,15 +401,27 @@ def _register_tools(ctx: Any, client: LoreClient) -> None:
         name="lore_move_node",
         toolset="lore",
         schema={
-            "type": "object",
-            "properties": {
-                "old_uri": {"type": "string", "description": "Source URI"},
-                "new_uri": {"type": "string", "description": "Destination URI"}
-            },
-            "required": ["old_uri", "new_uri"],
-            "description": "Move or rename a memory node"
+            "name": "lore_move_node",
+            "description": "Move or rename a memory node",
+            "parameters":                 {
+                                "type": "object",
+                                "properties": {
+                                                "old_uri": {
+                                                                "type": "string",
+                                                                "description": "Source URI"
+                                                },
+                                                "new_uri": {
+                                                                "type": "string",
+                                                                "description": "Destination URI"
+                                                }
+                                },
+                                "required": [
+                                                "old_uri",
+                                                "new_uri"
+                                ]
+                }
         },
-        handler=lore_move_node,
+        handler=lambda args, **kw: lore_move_node(args.get("old_uri"), args.get("new_uri")),
         description="Move or rename a memory node",
         emoji="🧠"
     )
@@ -367,7 +432,7 @@ def _register_tools(ctx: Any, client: LoreClient) -> None:
         """Search memories by keyword"""
         try:
             data = client.search(query, domain, limit)
-            return formatters.format_search_results(data)
+            return formatters.format_search_results(data.get("results", []), data.get("meta"))
         except LoreError as e:
             return f"Error: {e}"
     
@@ -375,43 +440,31 @@ def _register_tools(ctx: Any, client: LoreClient) -> None:
         name="lore_search",
         toolset="lore",
         schema={
-            "type": "object",
-            "properties": {
-                "query": {"type": "string", "description": "Search query"},
-                "domain": {"type": "string", "description": "Optional domain filter"},
-                "limit": {"type": "integer", "description": "Max results", "default": 10}
-            },
-            "required": ["query"],
-            "description": "Search memories using keyword search"
+            "name": "lore_search",
+            "description": "Search memories using keyword search",
+            "parameters":                 {
+                                "type": "object",
+                                "properties": {
+                                                "query": {
+                                                                "type": "string",
+                                                                "description": "Search query"
+                                                },
+                                                "domain": {
+                                                                "type": "string",
+                                                                "description": "Optional domain filter"
+                                                },
+                                                "limit": {
+                                                                "type": "integer",
+                                                                "description": "Max results"
+                                                }
+                                },
+                                "required": [
+                                                "query"
+                                ]
+                }
         },
-        handler=lore_search,
+        handler=lambda args, **kw: lore_search(args.get("query"), args.get("domain"), args.get("limit", 10)),
         description="Search memories using keyword search",
-        emoji="🧠"
-    )
-    
-    def lore_recall(query: str, session_id: Optional[str] = None) -> str:
-        """Semantic recall for context"""
-        try:
-            data = client.recall(query, session_id)
-            items = data.get("items", [])
-            return formatters.format_recall_block(items, 2, session_id, data.get("event_log", {}).get("query_id"))
-        except LoreError as e:
-            return f"Error: {e}"
-    
-    ctx.register_tool(
-        name="lore_recall",
-        toolset="lore",
-        schema={
-            "type": "object",
-            "properties": {
-                "query": {"type": "string", "description": "Query for semantic recall"},
-                "session_id": {"type": "string", "description": "Optional session ID"}
-            },
-            "required": ["query"],
-            "description": "Perform semantic recall to find relevant memories"
-        },
-        handler=lore_recall,
-        description="Perform semantic recall to find relevant memories",
         emoji="🧠"
     )
     
@@ -427,11 +480,15 @@ def _register_tools(ctx: Any, client: LoreClient) -> None:
         name="lore_list_domains",
         toolset="lore",
         schema={
-            "type": "object",
-            "properties": {},
-            "description": "List all available memory domains"
+            "name": "lore_list_domains",
+            "description": "List all available memory domains",
+            "parameters":                 {
+                                "type": "object",
+                                "properties": {},
+                                "required": []
+                }
         },
-        handler=lore_list_domains,
+        handler=lambda args, **kw: lore_list_domains(),
         description="List all available memory domains",
         emoji="🧠"
     )
@@ -450,14 +507,22 @@ def _register_tools(ctx: Any, client: LoreClient) -> None:
         name="lore_list_session_reads",
         toolset="lore",
         schema={
-            "type": "object",
-            "properties": {
-                "session_id": {"type": "string", "description": "Session ID"}
-            },
-            "required": ["session_id"],
-            "description": "Show which memory nodes have been read in this session"
+            "name": "lore_list_session_reads",
+            "description": "Show which memory nodes have been read in this session",
+            "parameters":                 {
+                                "type": "object",
+                                "properties": {
+                                                "session_id": {
+                                                                "type": "string",
+                                                                "description": "Session ID"
+                                                }
+                                },
+                                "required": [
+                                                "session_id"
+                                ]
+                }
         },
-        handler=lore_list_session_reads,
+        handler=lambda args, **kw: lore_list_session_reads(args.get("session_id")),
         description="Show which memory nodes have been read in this session",
         emoji="🧠"
     )
@@ -474,14 +539,22 @@ def _register_tools(ctx: Any, client: LoreClient) -> None:
         name="lore_clear_session_reads",
         toolset="lore",
         schema={
-            "type": "object",
-            "properties": {
-                "session_id": {"type": "string", "description": "Session ID"}
-            },
-            "required": ["session_id"],
-            "description": "Clear the session read tracking list"
+            "name": "lore_clear_session_reads",
+            "description": "Clear the session read tracking list",
+            "parameters":                 {
+                                "type": "object",
+                                "properties": {
+                                                "session_id": {
+                                                                "type": "string",
+                                                                "description": "Session ID"
+                                                }
+                                },
+                                "required": [
+                                                "session_id"
+                                ]
+                }
         },
-        handler=lore_clear_session_reads,
+        handler=lambda args, **kw: lore_clear_session_reads(args.get("session_id")),
         description="Clear the session read tracking list",
         emoji="🧠"
     )
