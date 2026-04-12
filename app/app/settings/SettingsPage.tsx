@@ -394,6 +394,7 @@ function BackupActionPanel(): React.JSX.Element {
   const [exporting, setExporting] = useState(false);
   const [importing, setImporting] = useState(false);
   const [backupRunning, setBackupRunning] = useState(false);
+  const [restoringFile, setRestoringFile] = useState<string | null>(null);
   const [backups, setBackups] = useState<BackupInfo[]>([]);
   const [status, setStatus] = useState<BackupStatus | null>(null);
   const [message, setMessage] = useState<ToastState | null>(null);
@@ -472,6 +473,21 @@ function BackupActionPanel(): React.JSX.Element {
     } finally { setBackupRunning(false); }
   };
 
+  const handleRestoreFile = async (filename: string) => {
+    const ok = await confirmDialog({ message: t('Confirm restore? This will replace ALL current data.'), destructive: true, confirmLabel: t('Restore') });
+    if (!ok) return;
+    setRestoringFile(filename);
+    try {
+      const result = await api.post('/backup', { action: 'restore-file', filename });
+      setMessage({ type: 'success', text: `${t('Restore completed')} (${(result.data as Record<string, unknown>).duration_ms}ms)` });
+      loadStatus();
+      loadBackups();
+    } catch (err) {
+      const axiosErr = err as AxiosError<{ detail?: string }>;
+      setMessage({ type: 'error', text: axiosErr.response?.data?.detail || axiosErr.message });
+    } finally { setRestoringFile(null); }
+  };
+
   return (
     <div className="animate-in stagger-6">
       <Section
@@ -510,6 +526,7 @@ function BackupActionPanel(): React.JSX.Element {
                   <tr className="border-b border-separator-thin text-[11px] font-medium uppercase tracking-[0.06em] text-txt-tertiary">
                     <th className="px-4 py-2">{t('Date')}</th>
                     <th className="px-4 py-2 text-right">{t('Size')}</th>
+                    <th className="px-4 py-2 text-right">{t('Actions')}</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -517,6 +534,11 @@ function BackupActionPanel(): React.JSX.Element {
                     <tr key={b.filename} className="border-b border-separator-hairline last:border-b-0">
                       <td className="px-4 py-2 font-mono text-txt-primary">{b.filename.replace('lore-backup-', '').replace('.json', '')}</td>
                       <td className="px-4 py-2 text-right text-txt-tertiary">{fmtBytes(b.size)}</td>
+                      <td className="px-4 py-2 text-right">
+                        <Button variant="ghost" size="sm" onClick={() => handleRestoreFile(b.filename)} disabled={!!restoringFile}>
+                          {restoringFile === b.filename ? t('Restoring…') : t('Restore')}
+                        </Button>
+                      </td>
                     </tr>
                   ))}
                 </tbody>
