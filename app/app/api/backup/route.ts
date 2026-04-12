@@ -87,6 +87,22 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
       return NextResponse.json(result);
     }
 
+    if (action === 'restore-file') {
+      const { restoreDatabase, readLocalBackup } = await import('../../../server/lore/ops/backup');
+      const filename = body.filename;
+      if (!filename || typeof filename !== 'string') {
+        return NextResponse.json({ detail: 'Missing filename' }, { status: 400 });
+      }
+      try {
+        const content = await readLocalBackup(filename);
+        const data = JSON.parse(content);
+        const result = await restoreDatabase(data);
+        return NextResponse.json(result);
+      } catch {
+        return NextResponse.json({ detail: 'Backup file not found or invalid' }, { status: 404 });
+      }
+    }
+
     // Default: run backup
     const { exportToLocal, exportToWebDAV, cleanupLocalBackups, cleanupWebDAVBackups } = await import('../../../server/lore/ops/backup');
     const { getSettings } = await import('../../../server/lore/config/settings');

@@ -3,10 +3,10 @@
 import React, { useEffect, useState, useRef } from 'react';
 import { format } from 'date-fns';
 import clsx from 'clsx';
-import { Database, Download, Upload, Trash2, RefreshCw, HardDrive, CheckCircle } from 'lucide-react';
+import { Database, Download, Upload, Trash2, RefreshCw, HardDrive, CheckCircle, RotateCcw } from 'lucide-react';
 import { PageCanvas, PageTitle, Button, Card, Section, Badge, EmptyState } from '../../components/ui';
 import { useT } from '../../lib/i18n';
-import { getBackupStatus, listBackups, createBackup, restoreBackup } from '../../lib/api';
+import { getBackupStatus, listBackups, createBackup, restoreBackup, restoreBackupByFilename } from '../../lib/api';
 import { useConfirm } from '../../components/ConfirmDialog';
 
 interface BackupMeta {
@@ -36,6 +36,7 @@ export default function BackupPage(): React.JSX.Element {
   const [loading, setLoading] = useState(false);
   const [restoring, setRestoring] = useState(false);
   const [restored, setRestored] = useState(false);
+  const [restoredFile, setRestoredFile] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loaded, setLoaded] = useState(false);
 
@@ -90,6 +91,28 @@ export default function BackupPage(): React.JSX.Element {
       await (restoreBackup as (d: unknown) => Promise<unknown>)(data);
       setRestored(true);
       setTimeout(() => setRestored(false), 3000);
+    } catch (e: unknown) {
+      setError((e as Error)?.message || 'Restore failed');
+    } finally {
+      setRestoring(false);
+    }
+  };
+
+  const handleRestoreFile = async (filename: string) => {
+    const ok = await confirmDialog({
+      message: `Restore from "${filename}" will overwrite current memory data. Are you sure?`,
+      destructive: true,
+      confirmLabel: 'Restore',
+    });
+    if (!ok) return;
+
+    setRestoring(true);
+    setError(null);
+    try {
+      await restoreBackupByFilename(filename);
+      setRestoredFile(filename);
+      setTimeout(() => setRestoredFile(null), 3000);
+      await loadStatus();
     } catch (e: unknown) {
       setError((e as Error)?.message || 'Restore failed');
     } finally {
@@ -218,6 +241,19 @@ export default function BackupPage(): React.JSX.Element {
                     </div>
                   </div>
                 </div>
+                <button
+                  onClick={() => handleRestoreFile(b.filename)}
+                  disabled={restoring}
+                  className="press shrink-0 ml-2 flex h-7 w-7 items-center justify-center rounded-full bg-sys-green/15 text-sys-green hover:bg-sys-green/25 transition-colors disabled:opacity-40"
+                  title="Restore"
+                >
+                  <RotateCcw size={13} />
+                </button>
+                {restoredFile === b.filename && (
+                  <span className="ml-2 flex items-center gap-1 text-[12px] text-sys-green">
+                    <CheckCircle size={12} /> Restored
+                  </span>
+                )}
                 <a
                   href={`/api/backup?action=download&filename=${encodeURIComponent(b.filename)}`}
                   download

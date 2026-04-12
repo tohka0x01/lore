@@ -46,5 +46,7 @@ export const downloadBackup = (filename: string): Promise<unknown> =>
 export const createBackup = (): Promise<unknown> => api.post('/backup', {}).then((r) => r.data);
 export const restoreBackup = (data: unknown): Promise<unknown> =>
   api.post('/backup', { action: 'restore', data }).then((r) => r.data);
+export const restoreBackupByFilename = (filename: string): Promise<unknown> =>
+  api.post('/backup', { action: 'restore-file', filename }).then((r) => r.data);
 
 export default api;
