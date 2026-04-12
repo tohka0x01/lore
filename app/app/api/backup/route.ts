@@ -1,12 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { requireBearerAuth } from '../../../server/auth';
-import { initBackupScheduler } from '../../../server/lore/ops/backupScheduler';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 export const maxDuration = 300;
-
-initBackupScheduler();
 
 export async function GET(request: NextRequest): Promise<NextResponse | Response> {
   const unauthorized = requireBearerAuth(request);
