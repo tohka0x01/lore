@@ -32,13 +32,10 @@ logger = logging.getLogger(__name__)
 
 from .client import LoreClient, LoreError
 from .tools import ToolResult
-from .recall import RecallInjector
-
-__all__ = ["LoreClient", "LoreError", "ToolResult", "RecallInjector", "register"]
+__all__ = ["LoreClient", "LoreError", "ToolResult", "register"]
 
 # Global client instance for plugin mode
 _client: Optional[LoreClient] = None
-_injector: Optional[RecallInjector] = None
 _guidance_text: Optional[str] = None
 _boot_cache: Optional[str] = None
 
@@ -56,7 +53,8 @@ When a <recall> block appears, judge each line by its score, cue words, and actu
 If a recalled memory looks genuinely relevant, open the most relevant node or nodes before you act or reply, and ground your work in what those memories actually say.
 If the recall block looks weak, noisy, or only loosely related, do not force it; search further or continue with normal reasoning as appropriate.
 When you need to create, revise, remove, or reorganize long-term memory, choose the Lore tool that matches that memory operation.
-Read a memory node before updating or deleting it."""
+Read a memory node before updating or deleting it.
+If the recall block contains session_id and query_id attributes, pass them both to lore_get_node so the system can track recall usage and suppress redundant recalls."""
     return _guidance_text
 
 
@@ -98,12 +96,18 @@ def _format_boot_section(data: Dict) -> str:
     return "\n".join(lines).strip()
 
 
-def _format_recall_tag(items: List[Dict], source: str, query: str) -> str:
+def _format_recall_tag(items: List[Dict], source: str, query: str, session_id: Optional[str] = None, query_id: Optional[str] = None) -> str:
     """Format recall items into XML-like tag"""
     if not items:
         return ""
     
-    lines = [f'<recall source="{source}" query="{query}">']
+    attrs = f'source="{source}" query="{query}"'
+    if session_id:
+        attrs += f' session_id="{session_id}"'
+    if query_id:
+        attrs += f' query_id="{query_id}"'
+    
+    lines = [f'<recall {attrs}>']
     for item in items:
         score = item.get("score_display", item.get("score", ""))
         if isinstance(score, float):
@@ -178,7 +182,7 @@ def _register_tools(ctx: Any, client: LoreClient) -> None:
     
     # ---- Node Operations ----
     
-    def lore_get_node(uri: str, nav_only: bool = False, session_id: Optional[str] = None) -> str:
+    def lore_get_node(uri: str, nav_only: bool = False, session_id: Optional[str] = None, query_id: Optional[str] = None) -> str:
         """Get a memory node by URI"""
         try:
             domain, path = client.parse_uri(uri)
@@ -195,6 +199,18 @@ def _register_tools(ctx: Any, client: LoreClient) -> None:
                     )
                 except Exception:
                     pass  # best effort
+            
+            if query_id and node.get("uri"):
+                try:
+                    client.mark_recall_used(
+                        query_id=query_id,
+                        session_id=session_id or "hermes-embedded",
+                        node_uris=[node["uri"]],
+                        source="tool:lore_get_node",
+                        success=True
+                    )
+                except Exception:
+                    pass
             
             return formatters.format_node(data)
         except LoreError as e:
@@ -220,6 +236,10 @@ def _register_tools(ctx: Any, client: LoreClient) -> None:
                                                 "session_id": {
                                                                 "type": "string",
                                                                 "description": "Optional session ID for read tracking"
+                                                },
+                                                "query_id": {
+                                                                "type": "string",
+                                                                "description": "Query ID from the <recall> tag for recall usage tracking"
                                                 }
                                 },
                                 "required": [
@@ -227,7 +247,7 @@ def _register_tools(ctx: Any, client: LoreClient) -> None:
                                 ]
                 }
         },
-        handler=lambda args, **kw: lore_get_node(args.get("uri"), args.get("nav_only", False), args.get("session_id")),
+        handler=lambda args, **kw: lore_get_node(args.get("uri"), args.get("nav_only", False), args.get("session_id"), args.get("query_id")),
         description="Read a memory node by its URI",
         emoji="🧠"
     )
@@ -238,17 +258,42 @@ def _register_tools(ctx: Any, client: LoreClient) -> None:
         title: Optional[str] = None,
         domain: str = "core",
         parent_path: str = "",
-        disclosure: Optional[str] = None
+        disclosure: Optional[str] = None,
+        uri: Optional[str] = None,
+        glossary: Optional[List[str]] = None
     ) -> str:
         """Create a new memory node"""
         try:
+            if uri:
+                parsed_domain, parsed_path = client.parse_uri(uri)
+                if domain != "core" and parsed_domain != domain:
+                    raise LoreError(f"URI domain ({parsed_domain}) conflicts with explicit domain ({domain})")
+                # Derive parent_path and title from parsed_path
+                parts = parsed_path.split("/")
+                if parts:
+                    derived_title = parts[-1]
+                    derived_parent_path = "/".join(parts[:-1]) if len(parts) > 1 else ""
+                else:
+                    derived_title = ""
+                    derived_parent_path = ""
+                if title and title.strip() and title.strip() != derived_title:
+                    raise LoreError(f"URI tail ({derived_title}) conflicts with explicit title ({title})")
+                effective_domain = parsed_domain
+                effective_parent_path = derived_parent_path
+                effective_title = derived_title
+            else:
+                effective_domain = domain
+                effective_parent_path = parent_path
+                effective_title = title
+            
             data = client.create_node(
-                domain=domain,
-                parent_path=parent_path,
-                title=title,
+                domain=effective_domain,
+                parent_path=effective_parent_path,
+                title=effective_title,
                 content=content,
                 priority=priority,
-                disclosure=disclosure
+                disclosure=disclosure,
+                glossary=glossary
             )
             node = data.get("node", {})
             return f"Created: {node.get('uri', '')}\n\n{node.get('content', '')[:500]}"
@@ -287,6 +332,15 @@ def _register_tools(ctx: Any, client: LoreClient) -> None:
                                                 "disclosure": {
                                                                 "type": "string",
                                                                 "description": "When to disclose this memory"
+                                                },
+                                                "uri": {
+                                                                "type": "string",
+                                                                "description": "Optional final memory URI, e.g. project://myapp/arch"
+                                                },
+                                                "glossary": {
+                                                                "type": "array",
+                                                                "items": {"type": "string"},
+                                                                "description": "Glossary keywords for better recall"
                                                 }
                                 },
                                 "required": [
@@ -294,7 +348,16 @@ def _register_tools(ctx: Any, client: LoreClient) -> None:
                                 ]
                 }
         },
-        handler=lambda args, **kw: lore_create_node(args.get("content"), args.get("priority", 2), args.get("title"), args.get("domain", "core"), args.get("parent_path", ""), args.get("disclosure")),
+        handler=lambda args, **kw: lore_create_node(
+            args.get("content"),
+            args.get("priority", 2),
+            args.get("title"),
+            args.get("domain", "core"),
+            args.get("parent_path", ""),
+            args.get("disclosure"),
+            args.get("uri"),
+            args.get("glossary")
+        ),
         description="Create a new memory node",
         emoji="🧠"
     )
@@ -303,7 +366,10 @@ def _register_tools(ctx: Any, client: LoreClient) -> None:
         uri: str,
         content: Optional[str] = None,
         priority: Optional[int] = None,
-        disclosure: Optional[str] = None
+        disclosure: Optional[str] = None,
+        session_id: Optional[str] = None,
+        glossary_add: Optional[List[str]] = None,
+        glossary_remove: Optional[List[str]] = None
     ) -> str:
         """Update an existing memory node"""
         try:
@@ -313,7 +379,10 @@ def _register_tools(ctx: Any, client: LoreClient) -> None:
                 path=path,
                 content=content,
                 priority=priority,
-                disclosure=disclosure
+                disclosure=disclosure,
+                session_id=session_id,
+                glossary_add=glossary_add,
+                glossary_remove=glossary_remove
             )
             node = data.get("node", {})
             return f"Updated: {node.get('uri', '')}"
@@ -344,6 +413,20 @@ def _register_tools(ctx: Any, client: LoreClient) -> None:
                                                 "disclosure": {
                                                                 "type": "string",
                                                                 "description": "New disclosure (optional)"
+                                                },
+                                                "session_id": {
+                                                                "type": "string",
+                                                                "description": "Session ID for policy validation"
+                                                },
+                                                "glossary_add": {
+                                                                "type": "array",
+                                                                "items": {"type": "string"},
+                                                                "description": "Glossary keywords to add"
+                                                },
+                                                "glossary_remove": {
+                                                                "type": "array",
+                                                                "items": {"type": "string"},
+                                                                "description": "Glossary keywords to remove"
                                                 }
                                 },
                                 "required": [
@@ -351,16 +434,24 @@ def _register_tools(ctx: Any, client: LoreClient) -> None:
                                 ]
                 }
         },
-        handler=lambda args, **kw: lore_update_node(args.get("uri"), args.get("content"), args.get("priority"), args.get("disclosure")),
+        handler=lambda args, **kw: lore_update_node(
+            args.get("uri"),
+            args.get("content"),
+            args.get("priority"),
+            args.get("disclosure"),
+            args.get("session_id"),
+            args.get("glossary_add"),
+            args.get("glossary_remove")
+        ),
         description="Update an existing memory node",
         emoji="🧠"
     )
     
-    def lore_delete_node(uri: str) -> str:
+    def lore_delete_node(uri: str, session_id: Optional[str] = None) -> str:
         """Delete a memory node"""
         try:
             domain, path = client.parse_uri(uri)
-            client.delete_node(domain, path)
+            client.delete_node(domain, path, session_id=session_id)
             return f"Deleted: {uri}"
         except LoreError as e:
             return f"Error: {e}"
@@ -377,6 +468,10 @@ def _register_tools(ctx: Any, client: LoreClient) -> None:
                                                 "uri": {
                                                                 "type": "string",
                                                                 "description": "Memory URI to delete"
+                                                },
+                                                "session_id": {
+                                                                "type": "string",
+                                                                "description": "Session ID for policy validation"
                                                 }
                                 },
                                 "required": [
@@ -384,7 +479,7 @@ def _register_tools(ctx: Any, client: LoreClient) -> None:
                                 ]
                 }
         },
-        handler=lambda args, **kw: lore_delete_node(args.get("uri")),
+        handler=lambda args, **kw: lore_delete_node(args.get("uri"), args.get("session_id")),
         description="Delete a memory node",
         emoji="🧠"
     )
@@ -615,14 +710,14 @@ def _register_hooks(ctx: Any, client: LoreClient) -> None:
         
         # 2. Perform recall based on user message
         try:
-            recall_data = client.recall(user_content.strip()[:500])  # Limit query length
+            session_id = kwargs.get("session_id")
+            recall_data = client.recall(user_content.strip()[:500], session_id=session_id)  # Limit query length
             items = recall_data.get("items", [])
             if items:
                 recall_block = formatters.format_recall_block(
-                    items, 
-                    2, 
-                    None, 
-                    recall_data.get("event_log", {}).get("query_id")
+                    items,
+                    session_id=session_id,
+                    query_id=recall_data.get("event_log", {}).get("query_id")
                 )
                 if recall_block:
                     result_parts.append("以下记忆节点与当前查询相关,建议提前读取。\n\n" + recall_block)
@@ -657,7 +752,7 @@ def register(ctx: Any) -> None:
     Args:
         ctx: PluginContext provided by Hermes
     """
-    global _client, _injector
+    global _client
     
     # Initialize Lore client
     base_url = os.environ.get("LORE_BASE_URL", "http://127.0.0.1:18901")
@@ -669,8 +764,6 @@ def register(ctx: Any) -> None:
         api_token=api_token,
         default_domain=default_domain
     )
-    
-    _injector = RecallInjector(_client)
     
     # Register tools
     _register_tools(ctx, _client)

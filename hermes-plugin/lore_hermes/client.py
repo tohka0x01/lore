@@ -120,7 +120,8 @@ class LoreClient:
         content: str,
         priority: int,
         title: Optional[str] = None,
-        disclosure: Optional[str] = None
+        disclosure: Optional[str] = None,
+        glossary: Optional[List[str]] = None
     ) -> Dict:
         """Create a new memory node"""
         data = {
@@ -133,7 +134,15 @@ class LoreClient:
             data["title"] = title
         if disclosure:
             data["disclosure"] = disclosure
-        return self._request("POST", "/browse/node", data=data) or {}
+        result = self._request("POST", "/browse/node", data=data) or {}
+        node_uuid = result.get("node", {}).get("node_uuid")
+        if node_uuid and glossary:
+            for keyword in glossary:
+                try:
+                    self.add_glossary(keyword, node_uuid)
+                except Exception:
+                    pass
+        return result
     
     def update_node(
         self,
@@ -141,7 +150,10 @@ class LoreClient:
         path: str,
         content: Optional[str] = None,
         priority: Optional[int] = None,
-        disclosure: Optional[str] = None
+        disclosure: Optional[str] = None,
+        session_id: Optional[str] = None,
+        glossary_add: Optional[List[str]] = None,
+        glossary_remove: Optional[List[str]] = None
     ) -> Dict:
         """Update an existing memory node"""
         data = {}
@@ -151,13 +163,33 @@ class LoreClient:
             data["priority"] = priority
         if disclosure is not None:
             data["disclosure"] = disclosure
+        if session_id is not None:
+            data["session_id"] = session_id
         
         params = {"domain": domain, "path": path}
-        return self._request("PUT", "/browse/node", params=params, data=data) or {}
+        result = self._request("PUT", "/browse/node", params=params, data=data) or {}
+        
+        if (glossary_add or glossary_remove):
+            node_data = self.get_node(domain, path)
+            node_uuid = node_data.get("node", {}).get("node_uuid")
+            if node_uuid:
+                for keyword in glossary_add or []:
+                    try:
+                        self.add_glossary(keyword, node_uuid)
+                    except Exception:
+                        pass
+                for keyword in glossary_remove or []:
+                    try:
+                        self.remove_glossary(keyword, node_uuid)
+                    except Exception:
+                        pass
+        return result
     
-    def delete_node(self, domain: str, path: str) -> Dict:
+    def delete_node(self, domain: str, path: str, session_id: Optional[str] = None) -> Dict:
         """Delete a memory node"""
         params = {"domain": domain, "path": path}
+        if session_id is not None:
+            params["session_id"] = session_id
         return self._request("DELETE", "/browse/node", params=params) or {}
     
     def move_node(self, old_uri: str, new_uri: str) -> Dict:
@@ -232,6 +264,24 @@ class LoreClient:
         """Clear session read tracking"""
         params = {"session_id": session_id}
         return self._request("DELETE", "/browse/session/read", params=params) or {}
+    
+    def mark_recall_used(
+        self,
+        query_id: str,
+        session_id: str,
+        node_uris: List[str],
+        source: str = "tool:lore_get_node",
+        success: bool = True
+    ) -> Dict:
+        """Mark recalled nodes as used in answer"""
+        data = {
+            "query_id": query_id,
+            "session_id": session_id,
+            "node_uris": node_uris,
+            "source": source,
+            "success": success
+        }
+        return self._request("POST", "/browse/recall/usage", data=data) or {}
     
     # ---- URI Helpers ----
     

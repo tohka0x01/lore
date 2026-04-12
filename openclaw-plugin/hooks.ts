@@ -256,33 +256,6 @@ export function registerHooks(api: any, pluginCfg: any, GUIDANCE: string) {
     },
   );
 
-  api.registerHook(
-    "agent_end",
-    async (event: any, ctx: any) => {
-      const pending = consumePendingRecallUsage(ctx?.sessionId);
-      if (!pending || event?.success !== true) return;
-      try {
-        await fetchJson(pluginCfg, "/browse/recall/usage", {
-          method: "POST",
-          body: JSON.stringify({
-            query_id: pending.queryId,
-            session_id: ctx?.sessionId,
-            node_uris: pending.nodeUris,
-            assistant_text: extractAssistantText(event?.messages),
-            source: "agent_end",
-            success: true,
-          }),
-        });
-      } catch (error: any) {
-        api.logger.warn(`lore: recall usage update failed: ${error.message}`);
-      }
-    },
-    {
-      name: "lore.mark-recall-used-in-answer",
-      description: "Marks selected recall events as used after a successful agent reply.",
-    },
-  );
-
   api.on("before_prompt_build", async (event: any, ctx: any) => {
     const out: any = {};
 
@@ -312,7 +285,7 @@ export function registerHooks(api: any, pluginCfg: any, GUIDANCE: string) {
           const bootText = formatBootSection(bootData) || '';
 
           const blocks = recallQueries
-            .map((q, i) => formatRecallTag(recallResults[i]?.items || [], q.source, q.query))
+            .map((q, i) => formatRecallTag(recallResults[i]?.items || [], q.source, q.query, ctx?.sessionId))
             .filter(Boolean);
 
           const recallText = blocks.length > 0

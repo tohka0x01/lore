@@ -58,7 +58,7 @@ export function registerTools(api: any, pluginCfg: any) {
   api.registerTool({
     name: "lore_get_node",
     label: "Lore get node",
-    description: "Open a memory node to inspect its full content, metadata, and nearby structure. Pass session_id from the <recall session_id=\"...\"> tag to enable per-session read tracking.",
+    description: "Open a memory node to inspect its full content, metadata, and nearby structure. Pass session_id and query_id from the <recall> tag to enable per-session read tracking and recall usage marking.",
     parameters: {
       type: "object",
       additionalProperties: false,
@@ -67,6 +67,7 @@ export function registerTools(api: any, pluginCfg: any) {
         uri: { type: "string", description: "Full memory URI for the node you want to open, such as core://soul." },
         nav_only: { type: "boolean", description: "If true, skip expensive glossary processing." },
         session_id: { type: "string", description: "Session identifier from the <recall session_id=\"...\"> tag. Enables per-session read tracking and recall suppression." },
+        query_id: { type: "string", description: "Query identifier from the <recall query_id=\"...\"> tag. Enables recall usage tracking when the node is used in the answer." },
         __session_id: { type: "string", description: "Internal session tracking field." },
         __session_key: { type: "string", description: "Internal session tracking field." }
       }
@@ -75,6 +76,7 @@ export function registerTools(api: any, pluginCfg: any) {
       const navOnly = params?.nav_only === true;
       const sessionId = (typeof params?.session_id === "string" && params.session_id.trim()) || (typeof params?.__session_id === "string" && params.__session_id.trim()) || "";
       const sessionKey = typeof params?.__session_key === "string" && params.__session_key.trim() ? params.__session_key.trim() : "";
+      const queryId = typeof params?.query_id === "string" && params.query_id.trim() ? params.query_id.trim() : "";
       let domain = pluginCfg.defaultDomain;
       let path = "";
       try {
@@ -90,6 +92,22 @@ export function registerTools(api: any, pluginCfg: any) {
             nodeUuid: node.node_uuid,
             source: "tool:lore_get_node",
           });
+        }
+        if (queryId && node?.uri) {
+          try {
+            await fetchJson(pluginCfg, "/browse/recall/usage", {
+              method: "POST",
+              body: JSON.stringify({
+                query_id: queryId,
+                session_id: sessionId || "openclaw-embedded",
+                node_uris: [node.uri],
+                source: "tool:lore_get_node",
+                success: true,
+              }),
+            });
+          } catch {
+            // best effort
+          }
         }
         return textResult(formatNode(data), { ok: true, node, children: data?.children || [] });
       } catch (error: any) {
@@ -247,6 +265,7 @@ export function registerTools(api: any, pluginCfg: any) {
         content: { type: "string" },
         priority: { type: "integer", minimum: 0 },
         disclosure: { type: "string" },
+        session_id: { type: "string", description: "Session ID for policy validation (read-before-update check)." },
         glossary_add: { type: "array", items: { type: "string" } },
         glossary_remove: { type: "array", items: { type: "string" } }
       }
@@ -258,6 +277,7 @@ export function registerTools(api: any, pluginCfg: any) {
       if (typeof params?.content === "string") body.content = params.content;
       if (Number.isFinite(params?.priority)) body.priority = params.priority;
       if (typeof params?.disclosure === "string") body.disclosure = params.disclosure;
+      if (typeof params?.session_id === "string" && params.session_id.trim()) body.session_id = params.session_id.trim();
       let domain = pluginCfg.defaultDomain;
       let path = "";
       try {
@@ -291,7 +311,8 @@ export function registerTools(api: any, pluginCfg: any) {
       additionalProperties: false,
       required: ["uri"],
       properties: {
-        uri: { type: "string", description: "Full memory URI for the path you want to remove." }
+        uri: { type: "string", description: "Full memory URI for the path you want to remove." },
+        session_id: { type: "string", description: "Session ID for policy validation (read-before-delete check)." }
       }
     },
     async execute(_id: any, params: any) {
@@ -300,6 +321,9 @@ export function registerTools(api: any, pluginCfg: any) {
       try {
         ({ domain, path } = resolveMemoryLocator(params, { defaultDomain: pluginCfg.defaultDomain, pathKey: "__unused_path", allowEmptyPath: false, label: "uri" }));
         const qs = new URLSearchParams({ domain, path });
+        if (typeof params?.session_id === "string" && params.session_id.trim()) {
+          qs.set("session_id", params.session_id.trim());
+        }
         const data = await fetchJson(pluginCfg, `/browse/node?${qs.toString()}`, { method: "DELETE" });
         return textResult(`Deleted ${domain}://${path}`, { ok: true, result: data });
       } catch (error: any) {

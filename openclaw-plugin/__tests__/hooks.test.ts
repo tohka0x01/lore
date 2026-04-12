@@ -169,7 +169,6 @@ describe('registerHooks', () => {
     expect(hookNames).toContain('lore.gateway-startup-healthcheck');
     expect(hookNames).toContain('lore.inject-session-read-context');
     expect(hookNames).toContain('lore.clear-session-reads');
-    expect(hookNames).toContain('lore.mark-recall-used-in-answer');
     expect('before_prompt_build' in api.events).toBe(true);
   });
 
