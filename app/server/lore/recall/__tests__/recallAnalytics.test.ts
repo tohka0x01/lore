@@ -334,6 +334,23 @@ describe('getRecallStats', () => {
     expect(stats.node_detail).toBeDefined();
   });
 
+  it('applies active filters to aggregate queries, not just recent events', async () => {
+    const summaryRow = { total_merged: '3', total_shown: '1', total_used: '0', query_count: '2', last_event_at: '2025-01-01T00:00:00Z' };
+    mockSql.mockResolvedValue(makeResult([summaryRow]));
+
+    await getRecallStats({ queryId: 'q-test', nodeUri: 'core://test-node' });
+
+    const aggregateCalls = mockSql.mock.calls.slice(0, 6);
+    expect(aggregateCalls).toHaveLength(6);
+
+    for (const [query, params] of aggregateCalls) {
+      const sqlText = String(query);
+      expect(sqlText).toContain("metadata->>'query_id'");
+      expect(sqlText).toContain('node_uri =');
+      expect(params).toEqual(expect.arrayContaining([7, 'q-test', 'core://test-node']));
+    }
+  });
+
   it('does not include filters when no filter is active', async () => {
     mockSql.mockResolvedValue(makeResult([{ total_merged: '0', total_shown: '0', total_used: '0', query_count: '0', last_event_at: null }]));
     const stats = await getRecallStats();

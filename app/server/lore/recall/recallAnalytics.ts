@@ -341,10 +341,10 @@ export async function getRecallStats({
           COUNT(DISTINCT COALESCE(metadata->>'query_id', id::text)) AS query_count,
           MAX(created_at) AS last_event_at
         FROM recall_events
-        WHERE created_at >= NOW() - ($1::int * INTERVAL '1 day')
+        WHERE ${filterWhere}
           AND EXISTS (SELECT 1 FROM paths p WHERE (p.domain || '://' || p.path) = node_uri)
       `,
-      [safeDays],
+      filterParams,
     ),
     sql(
       `
@@ -356,12 +356,12 @@ export async function getRecallStats({
           AVG(pre_rank_score) AS avg_pre_rank_score,
           AVG(final_rank_score) AS avg_final_rank_score
         FROM recall_events
-        WHERE created_at >= NOW() - ($1::int * INTERVAL '1 day')
+        WHERE ${filterWhere}
           AND EXISTS (SELECT 1 FROM paths p WHERE (p.domain || '://' || p.path) = node_uri)
         GROUP BY retrieval_path
         ORDER BY selected DESC, total DESC, retrieval_path ASC
       `,
-      [safeDays],
+      filterParams,
     ),
     sql(
       `
@@ -373,12 +373,12 @@ export async function getRecallStats({
           AVG(pre_rank_score) AS avg_pre_rank_score,
           AVG(final_rank_score) AS avg_final_rank_score
         FROM recall_events
-        WHERE created_at >= NOW() - ($1::int * INTERVAL '1 day')
+        WHERE ${filterWhere}
           AND EXISTS (SELECT 1 FROM paths p WHERE (p.domain || '://' || p.path) = node_uri)
         GROUP BY COALESCE(view_type, 'unknown')
         ORDER BY selected DESC, total DESC, view_type ASC
       `,
-      [safeDays],
+      filterParams,
     ),
     sql(
       `
@@ -389,14 +389,14 @@ export async function getRecallStats({
           AVG(final_rank_score) AS avg_final_rank_score,
           MAX(created_at) AS last_event_at
         FROM recall_events
-        WHERE created_at >= NOW() - ($1::int * INTERVAL '1 day')
+        WHERE ${filterWhere}
           AND EXISTS (SELECT 1 FROM paths p WHERE (p.domain || '://' || p.path) = node_uri)
         GROUP BY node_uri
         HAVING COUNT(*) >= 2
         ORDER BY (COUNT(*) - COUNT(*) FILTER (WHERE selected)) DESC, COUNT(*) DESC, node_uri ASC
-        LIMIT $2
+        LIMIT $${filterParams.length + 1}
       `,
-      [safeDays, safeLimit],
+      [...filterParams, safeLimit],
     ),
     sql(
       `
@@ -408,13 +408,13 @@ export async function getRecallStats({
           COUNT(DISTINCT node_uri) FILTER (WHERE used_in_answer) AS used_count,
           MAX(created_at) AS created_at
         FROM recall_events
-        WHERE created_at >= NOW() - ($1::int * INTERVAL '1 day')
+        WHERE ${filterWhere}
           AND EXISTS (SELECT 1 FROM paths p WHERE (p.domain || '://' || p.path) = node_uri)
         GROUP BY COALESCE(metadata->>'query_id', id::text)
         ORDER BY created_at DESC
-        LIMIT $2
+        LIMIT $${filterParams.length + 1}
       `,
-      [safeDays, safeLimit],
+      [...filterParams, safeLimit],
     ),
     sql(
       `
