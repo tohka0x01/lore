@@ -6,6 +6,10 @@ import { getNodePayload, listDomains } from '../memory/browse';
 import { searchMemories } from '../search/search';
 import { createNode, updateNodeByPath, deleteNodeByPath, moveNode } from '../memory/write';
 import { addGlossaryKeyword, removeGlossaryKeyword, manageTriggers } from '../search/glossary';
+import { getRecallStats } from '../recall/recallAnalytics';
+import { getNodeWriteHistory } from '../memory/writeEvents';
+import { getPathEffectiveness } from '../recall/feedbackAnalytics';
+import { listMemoryViewsByNode } from '../view/memoryViewQueries';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -108,6 +112,12 @@ export function buildDreamTools(): ToolDefinition[] {
     { name: 'get_node', description: 'Read a memory node by URI', parameters: { type: 'object', properties: { uri: { type: 'string', description: 'Memory URI e.g. core://soul' } }, required: ['uri'] } },
     { name: 'search', description: 'Search memories by keyword', parameters: { type: 'object', properties: { query: { type: 'string' }, limit: { type: 'integer' } }, required: ['query'] } },
     { name: 'list_domains', description: 'List all memory domains', parameters: { type: 'object', properties: {} } },
+    { name: 'get_node_recall_detail', description: 'Inspect recall performance for one node: which queries/path/view types recall it, how often it is selected, and whether it is actually used', parameters: { type: 'object', properties: { uri: { type: 'string' }, days: { type: 'integer' }, limit: { type: 'integer' } }, required: ['uri'] } },
+    { name: 'get_query_recall_detail', description: 'Inspect one problematic query by query_id or query_text to see merged nodes, selected nodes, usage, and path/view breakdowns', parameters: { type: 'object', properties: { query_id: { type: 'string' }, query_text: { type: 'string' }, days: { type: 'integer' }, limit: { type: 'integer' } } } },
+    { name: 'get_node_write_history', description: 'Read a node\'s recent write history so you can see whether it was manually edited, repeatedly changed, or recently touched by dream', parameters: { type: 'object', properties: { uri: { type: 'string' }, limit: { type: 'integer' } }, required: ['uri'] } },
+    { name: 'get_path_effectiveness_detail', description: 'Inspect retrieval path effectiveness metrics before blaming a node; use this to tell node problems apart from path-weight problems', parameters: { type: 'object', properties: { days: { type: 'integer' } } } },
+    { name: 'inspect_neighbors', description: 'Inspect a node\'s parent, siblings, children, aliases, and breadcrumbs to understand structural context before editing', parameters: { type: 'object', properties: { uri: { type: 'string' } }, required: ['uri'] } },
+    { name: 'inspect_views', description: 'Inspect generated memory views for one node/path, including gist/question content, metadata, and freshness', parameters: { type: 'object', properties: { uri: { type: 'string' }, limit: { type: 'integer' } }, required: ['uri'] } },
     { name: 'create_node', description: 'Create a new memory node', parameters: { type: 'object', properties: { uri: { type: 'string' }, content: { type: 'string' }, priority: { type: 'integer' }, disclosure: { type: 'string' }, glossary: { type: 'array', items: { type: 'string' } } }, required: ['content', 'priority'] } },
     { name: 'update_node', description: 'Update an existing memory node', parameters: { type: 'object', properties: { uri: { type: 'string' }, content: { type: 'string' }, priority: { type: 'integer' }, disclosure: { type: 'string' } }, required: ['uri'] } },
     { name: 'delete_node', description: 'Delete a memory node', parameters: { type: 'object', properties: { uri: { type: 'string' } }, required: ['uri'] } },
@@ -128,12 +138,44 @@ export function parseUri(uri: string): { domain: string; path: string } {
   return { domain: 'core', path: value.replace(/^\/+|\/+$/g, '') };
 }
 
+async function inspectNeighbors(uri: string): Promise<Record<string, unknown>> {
+  const { domain, path: currentPath } = parseUri(uri);
+  const current = await getNodePayload({ domain, path: currentPath });
+  const aliases = Array.isArray(current.node?.aliases) ? current.node.aliases : [];
+  const breadcrumbs = Array.isArray(current.breadcrumbs) ? current.breadcrumbs : [];
+  const children = Array.isArray(current.children) ? current.children : [];
+
+  const segments = currentPath.split('/').filter(Boolean);
+  if (segments.length === 0) {
+    return { uri: `${domain}://${currentPath}`, parent: null, siblings: [], children, aliases, breadcrumbs };
+  }
+
+  const parentPath = segments.slice(0, -1).join('/');
+  const parent = await getNodePayload({ domain, path: parentPath });
+  const siblings = (Array.isArray(parent.children) ? parent.children : []).filter((child) => child.uri !== uri);
+
+  return {
+    uri: `${domain}://${currentPath}`,
+    parent: parent.node,
+    siblings,
+    children,
+    aliases,
+    breadcrumbs,
+  };
+}
+
 export async function executeDreamTool(name: string, args: Record<string, unknown>): Promise<unknown> {
   try {
     switch (name) {
       case 'get_node': { const { domain, path: p } = parseUri(args.uri as string); return await getNodePayload({ domain, path: p }); }
       case 'search': return await searchMemories({ query: args.query as string, limit: (args.limit as number) || 10,  });
       case 'list_domains': return await listDomains();
+      case 'get_node_recall_detail': return await getRecallStats({ nodeUri: args.uri as string, days: (args.days as number) || 7, limit: (args.limit as number) || 10 });
+      case 'get_query_recall_detail': return await getRecallStats({ queryId: args.query_id as string || '', queryText: args.query_text as string || '', days: (args.days as number) || 7, limit: (args.limit as number) || 10 });
+      case 'get_node_write_history': return await getNodeWriteHistory({ nodeUri: args.uri as string, limit: (args.limit as number) || 20 });
+      case 'get_path_effectiveness_detail': return await getPathEffectiveness({ days: (args.days as number) || 7 });
+      case 'inspect_neighbors': return await inspectNeighbors(args.uri as string);
+      case 'inspect_views': return await listMemoryViewsByNode({ uri: args.uri as string, limit: (args.limit as number) || 12 });
       case 'create_node': {
         const { domain, path: p } = args.uri ? parseUri(args.uri as string) : { domain: 'core', path: '' };
         const segments = p.split('/').filter(Boolean);
@@ -195,6 +237,17 @@ export function buildDreamSystemPrompt(healthData: HealthData, recentDiaries: Re
 
 ${guidance ? `## 记忆使用规则（完整版）\n\n${guidance}` : ''}
 
+## 诊断工具箱
+
+优先使用只读分析工具建立证据链,再决定是否修改:
+- get_node：读正文、children、aliases、views
+- get_node_recall_detail：看节点被哪些 query/path/view 召回,是否被 selected / used
+- get_query_recall_detail：追查某个烂 query 到底是节点问题、view 问题还是 retrieval path 问题
+- get_node_write_history：看节点最近是否被人工或 dream 反复修改,防止翻烧饼
+- get_path_effectiveness_detail：判断是 path 权重问题还是节点本身问题
+- inspect_neighbors：看父节点、兄弟节点、子节点、aliases,判断是否该拆/并/迁移
+- inspect_views：检查 gist/question 视图质量与新鲜度
+
 ## 工作流程（严格按顺序执行）
 
 ### Phase 1: 回顾
@@ -206,18 +259,23 @@ ${guidance ? `## 记忆使用规则（完整版）\n\n${guidance}` : ''}
 - 从健康报告中识别 **TOP 3** 最值得处理的问题
 - 不要贪多,每次做梦聚焦 3 个问题就够了
 - 优先级: noisy（噪声干扰大）→ underperforming（低效但无害）→ dead（沉睡可稍后处理）
+- 先判断问题属于哪一类: 节点内容 / glossary / disclosure / priority / view / retrieval path / 结构位置
 
-### Phase 3: 阅读
+### Phase 3: 阅读与取证
 - 对每个要处理的节点,**必须先 get_node 读完正文**再决定操作
+- 任何写操作前,至少补一条证据链: get_node_recall_detail / get_node_write_history / inspect_neighbors / inspect_views 里至少 1 个
+- 如果怀疑是 query 或 path 的问题,先用 get_query_recall_detail 或 get_path_effectiveness_detail,不要直接怪节点
 - 读的节点数量应该是改的节点数量的 **3 倍以上**——多读少改
 - 理解节点的完整上下文:它为什么存在?谁在用它?它和哪些节点有关?
 
 ### Phase 4: 执行
 - 操作要保守,见下方"操作约束"
 - 每执行一个修改,心里要清楚:如果这个改动被回滚,会造成什么影响?
+- 先改 disclosure/glossary/结构,再改 priority,最后才改 content
 
 ### Phase 5: 写日记
 - 按下方"日记格式"输出结构化日记
+- 日记里明确写出每个修改对应的证据来源（例如 node recall、write history、neighbors、views）
 
 ## 操作约束
 
@@ -227,13 +285,15 @@ ${guidance ? `## 记忆使用规则（完整版）\n\n${guidance}` : ''}
    - priority 每次最多调整 **1 级**（如 2→3 可以,2→4 不行）
    - 内容重写必须保留原文核心信息,不做超过 50% 的改写
    - 优先调 glossary/disclosure,其次调 priority,**最后才考虑改内容**
-4. **防翻烧饼**: 如果你发现自己要把某个值改回之前的状态（比如 priority 从 3 改回 2）,**停下来**——这说明之前的判断或这次的判断有一个是错的,想清楚再动手
+4. **防翻烧饼**: 如果你发现自己要把某个值改回之前的状态（比如 priority 从 3 改回 2）,**停下来**——这说明之前的判断或这次的判断有一个是错的,先查 get_node_write_history
 5. **禁止删除或脱敏凭证信息**: token、API key、密码、密钥等是用户有意存储的跨会话信息。**绝对不要**以"安全"为由删除、替换或脱敏这些内容。这是私有部署的记忆系统,不存在泄露风险
 6. **诊断优先于动手**: "被频繁召回但未使用" ≠ "该降权"。先区分原因:
    - disclosure 太宽？→ 收窄 disclosure
    - glossary 关键词太泛？→ 精简 glossary
    - priority 太高？→ 降 1 级
    - 内容太长太杂？→ 拆分或精简
+   - views 失真？→ 记录为 view 问题,谨慎改正文
+   - retrieval path 命中差？→ 记录为 path 问题,不要拿节点背锅
    对症下药,不要一律降权
 
 ## 日记格式

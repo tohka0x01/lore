@@ -26,6 +26,18 @@ vi.mock('../../search/glossary', () => ({
   removeGlossaryKeyword: vi.fn(),
   manageTriggers: vi.fn(),
 }));
+vi.mock('../../recall/recallAnalytics', () => ({
+  getRecallStats: vi.fn(),
+}));
+vi.mock('../../memory/writeEvents', () => ({
+  getNodeWriteHistory: vi.fn(),
+}));
+vi.mock('../../recall/feedbackAnalytics', () => ({
+  getPathEffectiveness: vi.fn(),
+}));
+vi.mock('../../view/memoryViewQueries', () => ({
+  listMemoryViewsByNode: vi.fn(),
+}));
 vi.mock('node:fs', () => ({
   readFileSync: vi.fn(() => '# MCP Guidance\nlore_get_node is useful'),
 }));
@@ -35,6 +47,10 @@ import { getNodePayload, listDomains } from '../../memory/browse';
 import { searchMemories } from '../../search/search';
 import { createNode, updateNodeByPath, deleteNodeByPath, moveNode } from '../../memory/write';
 import { addGlossaryKeyword, removeGlossaryKeyword, manageTriggers } from '../../search/glossary';
+import { getRecallStats } from '../../recall/recallAnalytics';
+import { getNodeWriteHistory } from '../../memory/writeEvents';
+import { getPathEffectiveness } from '../../recall/feedbackAnalytics';
+import { listMemoryViewsByNode } from '../../view/memoryViewQueries';
 import {
   loadLlmConfig,
   chatWithTools,
@@ -60,6 +76,10 @@ const mockMoveNode = vi.mocked(moveNode);
 const mockAddGlossaryKeyword = vi.mocked(addGlossaryKeyword);
 const mockRemoveGlossaryKeyword = vi.mocked(removeGlossaryKeyword);
 const mockManageTriggers = vi.mocked(manageTriggers);
+const mockGetRecallStats = vi.mocked(getRecallStats);
+const mockGetNodeWriteHistory = vi.mocked(getNodeWriteHistory);
+const mockGetPathEffectiveness = vi.mocked(getPathEffectiveness);
+const mockListMemoryViewsByNode = vi.mocked(listMemoryViewsByNode);
 
 function makeHealthData(overrides: Partial<HealthData> = {}): HealthData {
   return {
@@ -140,6 +160,12 @@ describe('buildDreamTools', () => {
     expect(names).toContain('get_node');
     expect(names).toContain('search');
     expect(names).toContain('list_domains');
+    expect(names).toContain('get_node_recall_detail');
+    expect(names).toContain('get_query_recall_detail');
+    expect(names).toContain('get_node_write_history');
+    expect(names).toContain('get_path_effectiveness_detail');
+    expect(names).toContain('inspect_neighbors');
+    expect(names).toContain('inspect_views');
     expect(names).toContain('create_node');
     expect(names).toContain('update_node');
     expect(names).toContain('delete_node');
@@ -203,6 +229,60 @@ describe('executeDreamTool', () => {
     mockListDomains.mockResolvedValue(['core'] as any);
     await executeDreamTool('list_domains', {});
     expect(mockListDomains).toHaveBeenCalled();
+  });
+
+  it('dispatches get_node_recall_detail to getRecallStats with node filter', async () => {
+    mockGetRecallStats.mockResolvedValue({ summary: { shown_count: 1 } } as any);
+    await executeDreamTool('get_node_recall_detail', { uri: 'core://test', days: 14, limit: 6 });
+    expect(mockGetRecallStats).toHaveBeenCalledWith({ nodeUri: 'core://test', days: 14, limit: 6 });
+  });
+
+  it('dispatches get_query_recall_detail to getRecallStats with query filters', async () => {
+    mockGetRecallStats.mockResolvedValue({ summary: { query_count: 1 } } as any);
+    await executeDreamTool('get_query_recall_detail', { query_id: 'q1', query_text: 'hello', days: 7, limit: 4 });
+    expect(mockGetRecallStats).toHaveBeenCalledWith({ queryId: 'q1', queryText: 'hello', days: 7, limit: 4 });
+  });
+
+  it('dispatches get_node_write_history', async () => {
+    mockGetNodeWriteHistory.mockResolvedValue({ events: [] } as any);
+    await executeDreamTool('get_node_write_history', { uri: 'core://test', limit: 8 });
+    expect(mockGetNodeWriteHistory).toHaveBeenCalledWith({ nodeUri: 'core://test', limit: 8 });
+  });
+
+  it('dispatches get_path_effectiveness_detail', async () => {
+    mockGetPathEffectiveness.mockResolvedValue({ paths: [] } as any);
+    await executeDreamTool('get_path_effectiveness_detail', { days: 5 });
+    expect(mockGetPathEffectiveness).toHaveBeenCalledWith({ days: 5 });
+  });
+
+  it('dispatches inspect_neighbors and returns parent/siblings/children context', async () => {
+    mockGetNodePayload
+      .mockResolvedValueOnce({
+        node: { uri: 'core://agent/settings', aliases: ['project://agent/settings'] },
+        children: [{ uri: 'core://agent/settings/child' }],
+        breadcrumbs: [{ path: '', label: 'root' }, { path: 'agent', label: 'agent' }, { path: 'agent/settings', label: 'settings' }],
+      } as any)
+      .mockResolvedValueOnce({
+        node: { uri: 'core://agent', content: 'parent' },
+        children: [
+          { uri: 'core://agent/settings', priority: 1 },
+          { uri: 'core://agent/profile', priority: 2 },
+        ],
+        breadcrumbs: [{ path: '', label: 'root' }, { path: 'agent', label: 'agent' }],
+      } as any);
+
+    const result = await executeDreamTool('inspect_neighbors', { uri: 'core://agent/settings' }) as Record<string, any>;
+    expect(mockGetNodePayload).toHaveBeenNthCalledWith(1, { domain: 'core', path: 'agent/settings' });
+    expect(mockGetNodePayload).toHaveBeenNthCalledWith(2, { domain: 'core', path: 'agent' });
+    expect(result.parent?.uri).toBe('core://agent');
+    expect(result.siblings).toEqual([{ uri: 'core://agent/profile', priority: 2 }]);
+    expect(result.aliases).toEqual(['project://agent/settings']);
+  });
+
+  it('dispatches inspect_views', async () => {
+    mockListMemoryViewsByNode.mockResolvedValue([{ view_type: 'gist' }] as any);
+    await executeDreamTool('inspect_views', { uri: 'core://test', limit: 5 });
+    expect(mockListMemoryViewsByNode).toHaveBeenCalledWith({ uri: 'core://test', limit: 5 });
   });
 
   it('dispatches create_node with parsed URI', async () => {
@@ -277,6 +357,14 @@ describe('buildDreamSystemPrompt', () => {
     const prompt = buildDreamSystemPrompt(makeHealthData());
     expect(prompt).toContain('健康报告');
     expect(prompt).toContain('health_summary');
+  });
+
+  it('includes read-before-write evidence rules for diagnosis tools', () => {
+    const prompt = buildDreamSystemPrompt(makeHealthData());
+    expect(prompt).toContain('诊断工具箱');
+    expect(prompt).toContain('get_node_recall_detail');
+    expect(prompt).toContain('inspect_neighbors');
+    expect(prompt).toContain('任何写操作前');
   });
 
   it('includes recent diary section when provided', () => {
