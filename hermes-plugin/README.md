@@ -13,41 +13,31 @@ Long-term memory integration for [Hermes Agent](https://github.com/hermes) using
 ## Installation
 
 ```bash
-# Clone or copy to Hermes skills directory
+# Symlink into Hermes skills directory
 cd ~/.hermes/skills/
 ln -s /path/to/lore/hermes-plugin lore
-
-# Or install as package
-cd /path/to/lore/hermes-plugin
-pip install -e .
 ```
 
 ## Quick Start
 
+Hermes loads Lore as a `MemoryProvider`. Once configured, it automatically:
+
+- Injects **boot memories** into the system prompt at session start
+- Runs **recall prefetch** before each user message
+- Registers **11 Lore tools** for the agent to use
+
 ```python
-from lore_hermes import LoreClient, RecallInjector
+from lore_memory.client import LoreClient
 
-# Initialize
+# Direct client usage (optional)
 client = LoreClient()
-injector = RecallInjector(client)
-
-# Boot at session start
-boot_data = client.boot()
-
-# Automatic recall before processing
-recall = injector.inject_recall("How does auth work?", session_id="my-session")
-
-# Search memories
-results = client.search("authentication")
-
-# Create new memory
+client.boot()
 client.create_node(
-    domain="project",
-    parent_path="myapp",
     content="JWT-based authentication with refresh tokens",
     priority=1,
-    title="auth_system",
-    disclosure="When discussing authentication or security"
+    uri="project://myapp/auth_system",
+    disclosure="When discussing authentication or security",
+    glossary=["jwt", "auth"],
 )
 ```
 
@@ -67,34 +57,29 @@ Environment variables:
 ### LoreClient
 
 - `health()` - Check server status
-- `boot()` - Load core memories
-- `get_node(domain, path)` - Read memory node
-- `create_node(...)` - Create new memory
-- `update_node(...)` - Update existing memory
-- `delete_node(domain, path)` - Delete memory
-- `search(query, ...)` - Search memories
-- `recall(query, ...)` - Semantic recall
+- `boot()` - Load boot memories
+- `get_node(uri, nav_only, session_id, query_id)` - Read memory node
+- `create_node(content, priority, glossary, uri, domain, parent_path, title, disclosure)` - Create new memory
+- `update_node(uri, content, priority, disclosure, glossary_add, glossary_remove, session_id)` - Update existing memory
+- `delete_node(uri, session_id)` - Delete memory
+- `move_node(old_uri, new_uri)` - Move or rename a memory node
+- `search(query, domain, limit, content_limit)` - Search memories
+- `recall(query, session_id, limit, max_items)` - Semantic recall
 - `list_domains()` - List all domains
-
-### RecallInjector
-
-- `inject_recall(message, session_id)` - Get relevant memories
-- `mark_read(session_id, uri)` - Mark node as read
-- `get_prompt_guidance()` - Get usage guidance
+- `list_session_reads(session_id)` - Show memories read this session
+- `clear_session_reads(session_id)` - Reset session read tracking
+- `mark_recall_used(query_id, session_id, uris)` - Mark recall events as adopted
 
 ## Project Structure
 
 ```
 hermes-plugin/
-├── lore_hermes/
-│   ├── __init__.py      # Package exports
-│   ├── client.py        # HTTP client for Lore API
-│   ├── tools.py         # Hermes tool definitions
-│   ├── formatters.py    # Output formatting
-│   └── recall.py        # Automatic recall injection
-├── SKILL.md             # Hermes skill manifest
-├── setup.py             # Package setup
-└── README.md            # This file
+└── lore_memory/
+    ├── __init__.py      # MemoryProvider + tool schemas
+    ├── client.py        # HTTP client for Lore API
+    ├── formatters.py    # Output formatting
+    ├── AGENT_RULES.md   # Agent guidance rules
+    └── plugin.yaml      # Plugin manifest
 ```
 
 ## License

@@ -1,7 +1,7 @@
 /**
  * Embedded MCP server for Lore.
  *
- * Registers the same 11 tools as the standalone lore-mcp package,
+ * Registers the same 12 tools as the standalone lore-mcp package,
  * but calls internal server functions directly instead of going through HTTP.
  */
 

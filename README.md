@@ -45,7 +45,7 @@ Core capabilities:
 │  Lore (Next.js SSR + TypeScript)     │        │
 │  ┌──────────┐  ┌──────────┐  ┌──────────▼──────┐ │
 │  │  Web UI  │  │ REST API │  │  MCP Endpoint   │ │
-│  │  7 pages │  │  /api/*  │  │  /api/mcp       │ │
+│  │  6 pages │  │  /api/*  │  │  /api/mcp       │ │
 │  └──────────┘  └──────────┘  └──────────┬──────┘ │
 │                                         │        │
 │  ┌──────────────────────────────────────▼──────┐ │
@@ -238,12 +238,32 @@ Copy or symlink `openclaw-plugin/` into your OpenClaw plugin path, then configur
 | `readNodeDisplayMode` | string | `soft` | `soft` = condensed, `hard` = full dump |
 | `excludeBootFromResults` | boolean | `false` | Exclude boot nodes from recall results |
 
+## Hermes Plugin
+
+Copy or symlink `hermes-plugin/lore_memory/` into your Hermes skills directory, then enable it in Hermes config:
+
+```bash
+# Symlink into Hermes skills
+cd ~/.hermes/skills/
+ln -s /path/to/lore/hermes-plugin/lore_memory lore
+```
+
+Environment variables:
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `LORE_BASE_URL` | `http://127.0.0.1:18901` | Lore server URL |
+| `LORE_API_TOKEN` | — | API token if auth is enabled |
+| `LORE_TIMEOUT` | `30` | Request timeout in seconds |
+| `LORE_DEFAULT_DOMAIN` | `core` | Default memory domain |
+
 ## Agent Tools
 
-The plugin exposes 11 tools to the LLM:
+The plugin exposes 12 tools to the LLM:
 
 | Tool | Purpose |
 |------|---------|
+| `lore_guidance` | Load the full Lore usage rules |
 | `lore_status` | Check connection health |
 | `lore_boot` | Load core memories for session init |
 | `lore_get_node` | Read a node by URI |
@@ -330,7 +350,7 @@ Runtime configuration is managed through the Settings UI at `/settings`, organiz
 │   │   ├── auth.ts                 #     Bearer token auth
 │   │   ├── middleware.ts           #     Shared route middleware
 │   │   ├── mcpFormatters.ts        #     MCP response formatting
-│   │   ├── mcpServer.ts            #     Embedded MCP server (11 tools)
+│   │   ├── mcpServer.ts            #     Embedded MCP server (12 tools)
 │   │   └── lore/               #     Core business logic (34 modules)
 │   │       ├── types.ts            #       Shared type definitions
 │   │       ├── constants.ts        #       Constants
@@ -387,6 +407,13 @@ Runtime configuration is managed through the Settings UI at `/settings`, organiz
 │   │   └── rules-inject.ts        #   Boot + guidance on session start
 │   └── rules/
 │       └── lore-guidance.md        #   Agent guidance rules
+├── hermes-plugin/                  # Hermes Agent integration plugin
+│   └── lore_memory/                #   MemoryProvider implementation
+│       ├── __init__.py             #   Plugin entry + tool schemas
+│       ├── client.py               #   HTTP client
+│       ├── formatters.py           #   Response formatting
+│       ├── AGENT_RULES.md          #   Agent guidance rules
+│       └── plugin.yaml             #   Plugin manifest
 ├── postgres/                       # Custom PostgreSQL image
 │   └── Dockerfile                  #   pgvector:pg16 + zhparser
 ├── docker-compose.yml
@@ -405,7 +432,7 @@ Runtime configuration is managed through the Settings UI at `/settings`, organiz
 
 **Embedded MCP.** The MCP server runs inside the web app, sharing the same database pool and server functions. No separate process — tools invoke internal functions directly.
 
-**Narrow tool surface.** 11 tools for the agent. Maintenance, review, analytics, and dream capabilities exist in the API and UI but aren't exposed to the LLM by default.
+**Narrow tool surface.** 12 tools for the agent. Maintenance, review, analytics, and dream capabilities exist in the API and UI but aren't exposed to the LLM by default.
 
 **Cue-card embeddings.** Recall embeddings are built from URI, title, glossary, and disclosure — not the full content body. This makes recall a "should I think about this?" signal rather than a fuzzy content match.
 
