@@ -180,32 +180,28 @@ export function ChannelAvatar({
       aria-label={label}
       title={label}
     >
-      {src ? (
-        isHermes ? (
-          <span className="relative flex h-[72%] w-[72%] items-center justify-center">
-            <img
-              src={src}
-              alt=""
-              aria-hidden="true"
-              className="theme-dark-asset h-full w-full object-contain select-none"
-              draggable={false}
-            />
-            <img
-              src="/channel-icons/hermes-light.svg"
-              alt=""
-              aria-hidden="true"
-              className="theme-light-asset absolute inset-0 h-full w-full object-contain select-none"
-              draggable={false}
-            />
-          </span>
-        ) : (
-          <img
-            src={src}
-            alt={label}
-            className="h-[72%] w-[72%] object-contain select-none"
-            draggable={false}
-          />
-        )
+      {isHermes ? (
+        <span
+          aria-hidden="true"
+          className="block h-[72%] w-[72%] shrink-0 bg-current select-none"
+          style={{
+            WebkitMaskImage: 'url(/channel-icons/hermes.svg)',
+            maskImage: 'url(/channel-icons/hermes.svg)',
+            WebkitMaskRepeat: 'no-repeat',
+            maskRepeat: 'no-repeat',
+            WebkitMaskPosition: 'center',
+            maskPosition: 'center',
+            WebkitMaskSize: 'contain',
+            maskSize: 'contain',
+          }}
+        />
+      ) : src ? (
+        <img
+          src={src}
+          alt={label}
+          className="h-[72%] w-[72%] object-contain select-none"
+          draggable={false}
+        />
       ) : (
         <span className="font-semibold" style={{ fontSize: Math.max(10, Math.floor(size * 0.38)) }}>
           {initials}
