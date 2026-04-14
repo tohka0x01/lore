@@ -7,7 +7,9 @@ import {
   PageCanvas, PageTitle, Card, Section, Button, Badge, Table, inputClass,
   fmt, trunc, asNumber,
 } from '../../components/ui';
-import RecallStages, { clientTypeTone, clientTypeLabel } from '../../components/RecallStages';
+import RecallStages from '../../components/RecallStages';
+import { ChannelAvatar } from '../../components/UpdaterDisplay';
+import { clientTypeLabel } from '../../components/clientTypeMeta';
 import { useT } from '../../lib/i18n';
 import { AxiosError } from 'axios';
 
@@ -22,6 +24,17 @@ interface Filters {
 const DEFAULT_FILTERS: Filters = { days: 14, limit: 12, queryText: '', queryId: '', nodeUri: '' };
 
 type RowData = Record<string, unknown>;
+
+function ClientAvatarLabel({ clientType, compact = false }: { clientType: unknown; compact?: boolean }): React.JSX.Element {
+  const label = clientTypeLabel(clientType);
+  const size = compact ? 22 : 24;
+  return (
+    <span className="inline-flex min-w-0 items-center gap-2">
+      <ChannelAvatar clientType={typeof clientType === 'string' ? clientType : null} size={size} elevated />
+      {!compact && <span className="truncate text-[12px] font-medium text-txt-secondary">{label}</span>}
+    </span>
+  );
+}
 
 export default function RecallDrilldown(): React.JSX.Element {
   const { t } = useT();
@@ -58,7 +71,7 @@ export default function RecallDrilldown(): React.JSX.Element {
     { key: 'query_text', label: t('Query'), render: (v: unknown) => (
       <div className="max-w-[32rem] text-[14px] font-medium leading-snug text-txt-primary">{trunc(v, 140)}</div>
     ) },
-    { key: 'client_type', label: t('Source'), render: (v: unknown) => <Badge tone={clientTypeTone(v)}>{clientTypeLabel(v)}</Badge> },
+    { key: 'client_type', label: t('Source'), render: (v: unknown) => <ClientAvatarLabel clientType={v} compact /> },
     { key: 'shown_count', label: t('Shown'), render: (v: unknown) => <span className="font-mono tabular-nums text-sys-blue">{String(v ?? '—')}</span> },
     { key: 'used_count', label: t('Used'), render: (v: unknown) => <span className="font-mono tabular-nums text-sys-green">{String(v ?? '—')}</span> },
     { key: 'created_at', label: t('When'), render: (v: unknown) => (
@@ -218,7 +231,7 @@ export default function RecallDrilldown(): React.JSX.Element {
             title={trunc(String(queryDetail.query_text || queryDetail.query || ''), 80)}
             subtitle={
               <span className="inline-flex items-center gap-2">
-                <Badge tone={clientTypeTone(queryDetail.client_type)}>{clientTypeLabel(queryDetail.client_type)}</Badge>
+                <ClientAvatarLabel clientType={queryDetail.client_type} />
                 <span className="text-txt-secondary">{`${queryDetail.merged_count} ${t('Merged')} · ${queryDetail.shown_count} ${t('Shown')} · ${queryDetail.used_count} ${t('Used')}`}</span>
               </span>
             }
@@ -231,7 +244,6 @@ export default function RecallDrilldown(): React.JSX.Element {
             <RecallStages
               data={queryDetail as Parameters<typeof RecallStages>[0]['data']}
               initialStage="merge"
-              showClientSource
               hideMergedBreakdownColumn
             />
           </Section>

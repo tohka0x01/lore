@@ -48,7 +48,7 @@ const GlossaryPopup = ({ keyword, nodes, position, onClose, onNavigate }: Glossa
   return createPortal(
     <div
       ref={popupRef}
-      className="animate-scale fixed z-[100] flex w-80 flex-col rounded-2xl border border-separator-thin bg-bg-elevated shadow-card shadow-2xl shadow-black/60 backdrop-blur-xl"
+      className="animate-scale fixed z-[70] flex w-80 flex-col rounded-2xl border border-separator-thin bg-bg-elevated shadow-card shadow-2xl shadow-black/60 backdrop-blur-xl"
       style={{
         left: Math.min(position.x, (typeof window !== 'undefined' ? window.innerWidth : 800) - 328),
         ...(position.isAbove

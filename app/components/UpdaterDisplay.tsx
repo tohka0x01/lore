@@ -51,9 +51,11 @@ const AVATAR_TEXT: Record<ClientTone, string> = {
   soft: 'text-txt-tertiary',
 };
 
+const MAX_VISIBLE_UPDATERS = 2;
+
 const SIZE_MAP = {
-  sm: { avatar: 24, popupAvatar: 28, fontSize: 10 },
-  md: { avatar: 32, popupAvatar: 30, fontSize: 11 },
+  sm: { avatar: 20, popupAvatar: 28, fontSize: 10, overlap: 0.46 },
+  md: { avatar: 24, popupAvatar: 30, fontSize: 11, overlap: 0.48 },
 } as const;
 
 function normalizeUpdater(updater?: UpdaterSummary | null): ResolvedUpdater | null {
@@ -118,12 +120,14 @@ function stopEvent(event: React.MouseEvent<HTMLElement>): void {
   event.stopPropagation();
 }
 
-function ChannelAvatar({
+export function ChannelAvatar({
   clientType,
   size,
+  elevated = false,
 }: {
   clientType?: string | null;
   size: number;
+  elevated?: boolean;
 }): React.JSX.Element {
   const tone = clientTypeTone(clientType);
   const label = clientTypeLabel(clientType);
@@ -137,7 +141,11 @@ function ChannelAvatar({
         AVATAR_BG[tone],
         AVATAR_TEXT[tone],
       )}
-      style={{ width: size, height: size, boxShadow: '0 0 0 2px var(--bg-elevated)' }}
+      style={{
+        width: size,
+        height: size,
+        boxShadow: elevated ? '0 0 0 2px var(--bg-elevated)' : '0 0 0 1px rgba(255,255,255,0.08)',
+      }}
       aria-label={label}
       title={label}
     >
@@ -186,8 +194,8 @@ export default function UpdaterDisplay({
 
   if (resolvedUpdaters.length === 0) return null;
 
-  const { avatar, popupAvatar, fontSize } = SIZE_MAP[size];
-  const visibleUpdaters = resolvedUpdaters.slice(0, 3);
+  const { avatar, popupAvatar, fontSize, overlap } = SIZE_MAP[size];
+  const visibleUpdaters = resolvedUpdaters.slice(0, MAX_VISIBLE_UPDATERS);
   const overflowCount = Math.max(0, resolvedUpdaters.length - visibleUpdaters.length);
   const latestUpdater = resolvedUpdaters[0];
 
@@ -219,15 +227,16 @@ export default function UpdaterDisplay({
         {visibleUpdaters.map((updater, index) => (
           <span
             key={`${updater.client_type || 'legacy'}:${updater.source || 'unknown'}:${updater.updated_at || index}`}
-            style={{ marginLeft: index === 0 ? 0 : -Math.round(avatar * 0.28) }}
+            className="relative"
+            style={{ marginLeft: index === 0 ? 0 : -Math.round(avatar * overlap), zIndex: visibleUpdaters.length - index }}
           >
-            <ChannelAvatar clientType={updater.client_type} size={avatar} />
+            <ChannelAvatar clientType={updater.client_type} size={avatar} elevated />
           </span>
         ))}
         {overflowCount > 0 && (
           <span
             className="ml-1 inline-flex items-center justify-center rounded-full border border-separator-thin bg-fill-quaternary font-medium text-txt-secondary"
-            style={{ minWidth: avatar, height: avatar, fontSize }}
+            style={{ minWidth: Math.max(avatar - 2, 18), height: Math.max(avatar - 2, 18), fontSize }}
           >
             +{overflowCount}
           </span>
@@ -240,7 +249,7 @@ export default function UpdaterDisplay({
       )}
       {open && (
         <div
-          className="animate-scale absolute left-0 top-full z-30 mt-2 w-72 max-w-[calc(100vw-2rem)] rounded-2xl border border-separator-thin bg-bg-elevated shadow-card shadow-2xl shadow-black/60 backdrop-blur-xl"
+          className="animate-scale absolute left-0 top-full z-[90] mt-2 w-72 max-w-[calc(100vw-2rem)] rounded-2xl border border-separator-thin bg-bg-elevated shadow-card shadow-2xl shadow-black/60 backdrop-blur-xl"
           onClick={stopEvent}
           onMouseDown={stopEvent}
         >
