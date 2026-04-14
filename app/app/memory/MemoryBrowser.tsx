@@ -6,7 +6,7 @@ import { Edit3, PanelLeftOpen, PanelLeftClose, Plus, ArrowRightLeft, RefreshCw, 
 import clsx from 'clsx';
 import { api } from '../../lib/api';
 import { Button, Badge } from '../../components/ui';
-import { clientTypeLabel, clientTypeTone } from '../../components/RecallStages';
+import UpdaterDisplay, { type UpdaterSummary } from '../../components/UpdaterDisplay';
 import { useT } from '../../lib/i18n';
 import PriorityBadge from './components/PriorityBadge';
 import KeywordManager from './components/KeywordManager';
@@ -25,11 +25,6 @@ interface SkeletonLineProps {
 
 function SkeletonLine({ w = '100%' }: SkeletonLineProps): React.JSX.Element {
   return <div className="h-3 rounded-md skeleton" style={{ width: w }} />;
-}
-
-function LastUpdatedBadge({ clientType }: { clientType?: string | null }): React.JSX.Element | null {
-  if (clientType == null) return <Badge tone="soft">Legacy</Badge>;
-  return <Badge tone={clientTypeTone(clientType)}>{clientTypeLabel(clientType)}</Badge>;
 }
 
 interface MemoryView {
@@ -70,6 +65,7 @@ interface MemoryNode {
   last_updated_client_type?: string | null;
   last_updated_source?: string | null;
   last_updated_at?: string | null;
+  updaters?: UpdaterSummary[];
 }
 
 interface Breadcrumb {
@@ -87,6 +83,7 @@ interface ChildItem {
   last_updated_client_type?: string | null;
   last_updated_source?: string | null;
   last_updated_at?: string | null;
+  updaters?: UpdaterSummary[];
 }
 
 interface DomainItem {
@@ -295,8 +292,14 @@ export default function MemoryBrowser(): React.JSX.Element {
         {!editing && node.last_updated_at && (
           <div className="mt-2 flex flex-wrap items-center gap-2 text-[11px] text-txt-quaternary">
             <span>{t('Last updated by')}:</span>
-            <LastUpdatedBadge clientType={node.last_updated_client_type} />
-            <span>{new Date(node.last_updated_at).toLocaleString()}</span>
+            <UpdaterDisplay
+              updaters={node.updaters}
+              fallbackClientType={node.last_updated_client_type}
+              fallbackSource={node.last_updated_source}
+              fallbackUpdatedAt={node.last_updated_at}
+              size="md"
+              showTimestamp
+            />
           </div>
         )}
       </div>

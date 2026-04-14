@@ -1,6 +1,5 @@
 import React from 'react';
-import { Badge } from '../../../components/ui';
-import { clientTypeLabel, clientTypeTone } from '../../../components/RecallStages';
+import UpdaterDisplay, { type UpdaterSummary } from '../../../components/UpdaterDisplay';
 import PriorityBadge from './PriorityBadge';
 import { useT } from '../../../lib/i18n';
 
@@ -14,6 +13,7 @@ interface ChildItem {
   last_updated_client_type?: string | null;
   last_updated_source?: string | null;
   last_updated_at?: string | null;
+  updaters?: UpdaterSummary[];
 }
 
 interface MemoryChildrenListProps {
@@ -26,11 +26,6 @@ interface MemoryChildrenListProps {
 export default function MemoryChildrenList({ childItems, domain, isRoot, navigateTo }: MemoryChildrenListProps): React.JSX.Element | null {
   const { t } = useT();
   if (!childItems?.length) return null;
-
-  const renderClientBadge = (clientType?: string | null): React.JSX.Element | null => {
-    if (clientType == null) return <Badge tone="soft">Legacy</Badge>;
-    return <Badge tone={clientTypeTone(clientType)}>{clientTypeLabel(clientType)}</Badge>;
-  };
 
   return (
     <div className="pt-4">
@@ -52,7 +47,15 @@ export default function MemoryChildrenList({ childItems, domain, isRoot, navigat
                   <span className="cross-domain-badge">{child.domain}</span>
                 )}
                 <PriorityBadge priority={child.priority} />
-                {child.last_updated_at && renderClientBadge(child.last_updated_client_type)}
+                {child.last_updated_at && (
+                  <UpdaterDisplay
+                    updaters={child.updaters}
+                    fallbackClientType={child.last_updated_client_type}
+                    fallbackSource={child.last_updated_source}
+                    fallbackUpdatedAt={child.last_updated_at}
+                    size="sm"
+                  />
+                )}
               </div>
               <p className="child-card-desc">{child.path}</p>
               {child.disclosure && (

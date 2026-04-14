@@ -181,6 +181,7 @@ describe('getNodePayload', () => {
     disclosure = null as string | null,
     alias_total = 1,
     latestWriteRows = [] as Record<string, unknown>[],
+    updaterSummaryRows = [] as Record<string, unknown>[],
   } = {}) {
     // getMemoryByPath → main SELECT
     mockSql.mockResolvedValueOnce({
@@ -212,6 +213,8 @@ describe('getNodePayload', () => {
     mockSql.mockResolvedValueOnce({ rows: [], rowCount: 0 } as any);
     // getLatestWriteMetaByNodeUuid for current node
     mockSql.mockResolvedValueOnce({ rows: latestWriteRows, rowCount: latestWriteRows.length } as any);
+    // getUpdaterSummariesByNodeUuid for current node
+    mockSql.mockResolvedValueOnce({ rows: updaterSummaryRows, rowCount: updaterSummaryRows.length } as any);
   }
 
   it('returns node with expected shape for a normal path', async () => {
@@ -248,11 +251,10 @@ describe('getNodePayload', () => {
 
   it('returns virtual root node for empty path', async () => {
     // Empty path → synthetic memory returned directly (no sql calls for path lookup)
-    // getAliases skipped for ROOT_NODE_UUID
-    // getGlossaryKeywords
-    mockSql.mockResolvedValueOnce({ rows: [], rowCount: 0 } as any);
-    // getChildren → edge query (returns empty)
-    mockSql.mockResolvedValueOnce({ rows: [], rowCount: 0 } as any);
+    mockSql
+      .mockResolvedValueOnce({ rows: [], rowCount: 0 } as any) // getChildren → edge query (returns empty)
+      .mockResolvedValueOnce({ rows: [], rowCount: 0 } as any) // getLatestWriteMetaByNodeUuid for current node
+      .mockResolvedValueOnce({ rows: [], rowCount: 0 } as any); // getUpdaterSummariesByNodeUuid for current node
 
     const result = await getNodePayload({ domain: 'core', path: '' });
     expect(result.node.is_virtual).toBe(true);
@@ -310,6 +312,8 @@ describe('getNodePayload', () => {
     mockSql.mockResolvedValueOnce({ rows: [], rowCount: 0 } as any);
     // getLatestWriteMetaByNodeUuid for current node
     mockSql.mockResolvedValueOnce({ rows: [], rowCount: 0 } as any);
+    // getUpdaterSummariesByNodeUuid for current node
+    mockSql.mockResolvedValueOnce({ rows: [], rowCount: 0 } as any);
 
     const result = await getNodePayload({ domain: 'core', path: 'cat' });
     expect(result.node.aliases).toContain('animals://feline');
@@ -337,7 +341,9 @@ describe('getNodePayload', () => {
       } as any)
       // children
       .mockResolvedValueOnce({ rows: [], rowCount: 0 } as any)
-      // latest write meta
+      // getLatestWriteMetaByNodeUuid for current node
+      .mockResolvedValueOnce({ rows: [], rowCount: 0 } as any)
+      // getUpdaterSummariesByNodeUuid for current node
       .mockResolvedValueOnce({ rows: [], rowCount: 0 } as any);
 
     const result = await getNodePayload({ domain: 'core', path: 'plants' });
@@ -357,12 +363,14 @@ describe('getNodePayload', () => {
       .mockResolvedValueOnce({ rows: [], rowCount: 0 } as any)
       // getChildren (no glossary call expected)
       .mockResolvedValueOnce({ rows: [], rowCount: 0 } as any)
-      // latest write meta
+      // getLatestWriteMetaByNodeUuid for current node
+      .mockResolvedValueOnce({ rows: [], rowCount: 0 } as any)
+      // getUpdaterSummariesByNodeUuid for current node
       .mockResolvedValueOnce({ rows: [], rowCount: 0 } as any);
 
     const result = await getNodePayload({ domain: 'core', path: 'navtest', navOnly: true });
     expect(result.node.glossary_keywords).toEqual([]);
-    expect(mockSql).toHaveBeenCalledTimes(5);
+    expect(mockSql).toHaveBeenCalledTimes(6);
   });
 
   it('skips memoryViews fetch when navOnly=true', async () => {
@@ -376,6 +384,7 @@ describe('getNodePayload', () => {
       .mockResolvedValueOnce({ rows: [{ total_paths: '1' }], rowCount: 1 } as any)
       .mockResolvedValueOnce({ rows: [], rowCount: 0 } as any)
       .mockResolvedValueOnce({ rows: [], rowCount: 0 } as any)
+      .mockResolvedValueOnce({ rows: [], rowCount: 0 } as any)
       .mockResolvedValueOnce({ rows: [], rowCount: 0 } as any);
 
     await getNodePayload({ domain: 'core', path: 'viewtest', navOnly: true });
@@ -384,10 +393,10 @@ describe('getNodePayload', () => {
 
   it('skips memoryViews fetch for ROOT node even without navOnly', async () => {
     // Empty path → ROOT_NODE_UUID virtual memory (no sql for path lookup)
-    // getGlossaryKeywords skipped for ROOT
     mockSql
-      .mockResolvedValueOnce({ rows: [], rowCount: 0 } as any) // glossary
-      .mockResolvedValueOnce({ rows: [], rowCount: 0 } as any); // children
+      .mockResolvedValueOnce({ rows: [], rowCount: 0 } as any) // getChildren → edge query
+      .mockResolvedValueOnce({ rows: [], rowCount: 0 } as any) // getLatestWriteMetaByNodeUuid for current node
+      .mockResolvedValueOnce({ rows: [], rowCount: 0 } as any); // getUpdaterSummariesByNodeUuid for current node
 
     await getNodePayload({ domain: 'core', path: '' });
     expect(mockListViews).not.toHaveBeenCalled();
@@ -416,7 +425,11 @@ describe('getNodePayload', () => {
     } as any);
     // getLatestWriteMetaByNodeUuid for current node
     mockSql.mockResolvedValueOnce({ rows: [], rowCount: 0 } as any);
+    // getUpdaterSummariesByNodeUuid for current node
+    mockSql.mockResolvedValueOnce({ rows: [], rowCount: 0 } as any);
     // getLatestWriteMetaByNodeUuid for children
+    mockSql.mockResolvedValueOnce({ rows: [], rowCount: 0 } as any);
+    // getUpdaterSummariesByNodeUuid for children
     mockSql.mockResolvedValueOnce({ rows: [], rowCount: 0 } as any);
     // getChildren → child counts query
     mockSql.mockResolvedValueOnce({
@@ -456,14 +469,18 @@ describe('getNodePayload', () => {
         rows: [{ edge_id: 200, child_uuid: 'uuid-long', priority: 1, disclosure: null, content: longContent }],
         rowCount: 1,
       } as any)
-      // latest write meta for current node
-      .mockResolvedValueOnce({ rows: [], rowCount: 0 } as any)
       // latest write meta for children
+      .mockResolvedValueOnce({ rows: [], rowCount: 0 } as any)
+      // updater summaries for children
       .mockResolvedValueOnce({ rows: [], rowCount: 0 } as any)
       // counts
       .mockResolvedValueOnce({ rows: [], rowCount: 0 } as any)
       // paths
-      .mockResolvedValueOnce({ rows: [{ edge_id: 200, domain: 'core', path: 'parent/longchild' }], rowCount: 1 } as any);
+      .mockResolvedValueOnce({ rows: [{ edge_id: 200, domain: 'core', path: 'parent/longchild' }], rowCount: 1 } as any)
+      // latest write meta for current node
+      .mockResolvedValueOnce({ rows: [], rowCount: 0 } as any)
+      // updater summaries for current node
+      .mockResolvedValueOnce({ rows: [], rowCount: 0 } as any);
 
     const result = await getNodePayload({ domain: 'core', path: 'parent' });
     expect(result.children[0].content_snippet).toBe('x'.repeat(100) + '...');
@@ -471,6 +488,7 @@ describe('getNodePayload', () => {
 
   it('returns null latest write metadata when no history exists', async () => {
     mockSql
+      .mockResolvedValueOnce({ rows: [], rowCount: 0 } as any)
       .mockResolvedValueOnce({ rows: [], rowCount: 0 } as any)
       .mockResolvedValueOnce({ rows: [], rowCount: 0 } as any);
 
@@ -525,6 +543,7 @@ describe('getNodePayload', () => {
         ],
         rowCount: 1,
       } as any)
+      .mockResolvedValueOnce({ rows: [], rowCount: 0 } as any)
       .mockResolvedValueOnce({
         rows: [
           {
@@ -537,6 +556,7 @@ describe('getNodePayload', () => {
         ],
         rowCount: 1,
       } as any)
+      .mockResolvedValueOnce({ rows: [], rowCount: 0 } as any)
       .mockResolvedValueOnce({
         rows: [{ parent_uuid: 'uuid-child1', child_count: '2' }],
         rowCount: 1,
@@ -555,25 +575,149 @@ describe('getNodePayload', () => {
     expect(result.children[0].last_updated_at).toBe(new Date('2025-01-03T00:00:00Z').toISOString());
   });
 
-  it('orders latest write lookup by created_at and id descending', async () => {
+  it('includes grouped updater summaries for node and children', async () => {
+    mockSql
+      .mockResolvedValueOnce({
+        rows: [
+          {
+            domain: 'core',
+            path: 'parent',
+            node_uuid: 'uuid-parent',
+            priority: 1,
+            disclosure: null,
+            id: 10,
+            content: 'parent content',
+            deprecated: false,
+            created_at: null,
+          },
+        ],
+        rowCount: 1,
+      } as any)
+      .mockResolvedValueOnce({ rows: [{ total_paths: '1' }], rowCount: 1 } as any)
+      .mockResolvedValueOnce({ rows: [], rowCount: 0 } as any)
+      .mockResolvedValueOnce({ rows: [], rowCount: 0 } as any)
+      .mockResolvedValueOnce({
+        rows: [
+          {
+            edge_id: 100,
+            child_uuid: 'uuid-child1',
+            priority: 1,
+            disclosure: null,
+            content: 'child content here',
+          },
+        ],
+        rowCount: 1,
+      } as any)
+      .mockResolvedValueOnce({ rows: [], rowCount: 0 } as any)
+      .mockResolvedValueOnce({
+        rows: [
+          {
+            node_uuid: 'uuid-parent',
+            client_type: 'openclaw',
+            source: 'mcp:lore_update_node',
+            updated_at: '2025-01-06T00:00:00Z',
+            event_count: '3',
+          },
+          {
+            node_uuid: 'uuid-parent',
+            client_type: 'mcp',
+            source: 'api:POST /browse/move',
+            updated_at: '2025-01-05T00:00:00Z',
+            event_count: '1',
+          },
+        ],
+        rowCount: 2,
+      } as any)
+      .mockResolvedValueOnce({ rows: [], rowCount: 0 } as any)
+      .mockResolvedValueOnce({
+        rows: [
+          {
+            node_uuid: 'uuid-child1',
+            client_type: 'hermes',
+            source: 'api:PUT /browse/node',
+            updated_at: '2025-01-04T00:00:00Z',
+            event_count: '2',
+          },
+          {
+            node_uuid: 'uuid-child1',
+            client_type: null,
+            source: 'legacy:seed',
+            updated_at: '2025-01-03T00:00:00Z',
+            event_count: '1',
+          },
+        ],
+        rowCount: 2,
+      } as any)
+      .mockResolvedValueOnce({
+        rows: [{ parent_uuid: 'uuid-child1', child_count: '2' }],
+        rowCount: 1,
+      } as any)
+      .mockResolvedValueOnce({
+        rows: [{ edge_id: 100, domain: 'core', path: 'parent/child1' }],
+        rowCount: 1,
+      } as any);
+
+    const result = await getNodePayload({ domain: 'core', path: 'parent' });
+    expect(result.node.updaters).toEqual([
+      {
+        client_type: 'openclaw',
+        source: 'mcp:lore_update_node',
+        updated_at: new Date('2025-01-06T00:00:00Z').toISOString(),
+        event_count: 3,
+      },
+      {
+        client_type: 'mcp',
+        source: 'api:POST /browse/move',
+        updated_at: new Date('2025-01-05T00:00:00Z').toISOString(),
+        event_count: 1,
+      },
+    ]);
+    expect(result.children[0].updaters).toEqual([
+      {
+        client_type: 'hermes',
+        source: 'api:PUT /browse/node',
+        updated_at: new Date('2025-01-04T00:00:00Z').toISOString(),
+        event_count: 2,
+      },
+      {
+        client_type: null,
+        source: 'legacy:seed',
+        updated_at: new Date('2025-01-03T00:00:00Z').toISOString(),
+        event_count: 1,
+      },
+    ]);
+  });
+
+  it('queries updater summaries grouped by client_type and source', async () => {
     setupNormalNode({
       path: 'animals/cat',
       node_uuid: 'uuid-cat',
-      latestWriteRows: [{
+      updaterSummaryRows: [{
         node_uuid: 'uuid-cat',
-        source: 'mcp:lore_update_node',
         client_type: 'openclaw',
-        created_at: '2025-01-04T00:00:00Z',
-        id: 12,
+        source: 'mcp:lore_update_node',
+        updated_at: '2025-01-04T00:00:00Z',
+        event_count: '2',
       }],
     });
 
     const result = await getNodePayload({ domain: 'core', path: 'animals/cat' });
-    const latestWriteQuery = mockSql.mock.calls.find((c) => String(c[0]).includes('FROM memory_events'));
-    expect(latestWriteQuery).toBeDefined();
-    expect(String(latestWriteQuery![0])).toContain('ORDER BY node_uuid ASC, created_at DESC, id DESC');
-    expect(result.node.last_updated_client_type).toBe('openclaw');
+    const updaterSummaryQuery = mockSql.mock.calls.find((c) => String(c[0]).includes('COUNT(*) AS event_count'));
+    expect(updaterSummaryQuery).toBeDefined();
+    expect(String(updaterSummaryQuery![0])).toContain('COUNT(*) AS event_count');
+    expect(String(updaterSummaryQuery![0])).toContain('GROUP BY node_uuid');
+    expect(String(updaterSummaryQuery![0])).toContain("LOWER(BTRIM(COALESCE(details->>'client_type', ''))) IN ('claudecode', 'openclaw', 'hermes', 'mcp')");
+    expect(String(updaterSummaryQuery![0])).toContain('ORDER BY node_uuid ASC, MAX(created_at) DESC, COUNT(*) DESC, source ASC');
+    expect(result.node.updaters).toEqual([
+      {
+        client_type: 'openclaw',
+        source: 'mcp:lore_update_node',
+        updated_at: new Date('2025-01-04T00:00:00Z').toISOString(),
+        event_count: 2,
+      },
+    ]);
   });
+
 
   it('returns null client_type when latest write is legacy', async () => {
     setupNormalNode({
@@ -597,8 +741,9 @@ describe('getNodePayload', () => {
   it('uses default domain=core and path="" when no options provided', async () => {
     // empty path → virtual root, no sql for path lookup
     mockSql
-      .mockResolvedValueOnce({ rows: [], rowCount: 0 } as any) // glossary
-      .mockResolvedValueOnce({ rows: [], rowCount: 0 } as any); // children
+      .mockResolvedValueOnce({ rows: [], rowCount: 0 } as any) // getChildren → edge query
+      .mockResolvedValueOnce({ rows: [], rowCount: 0 } as any) // getLatestWriteMetaByNodeUuid for current node
+      .mockResolvedValueOnce({ rows: [], rowCount: 0 } as any); // getUpdaterSummariesByNodeUuid for current node
 
     const result = await getNodePayload();
     expect(result.node.domain).toBe('core');

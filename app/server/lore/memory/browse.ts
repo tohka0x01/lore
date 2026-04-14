@@ -1,4 +1,4 @@
-import { normalizeClientType, type ClientType } from '../../auth';
+import { CLIENT_TYPES, normalizeClientType, type ClientType } from '../../auth';
 import { sql } from '../../db';
 import { listMemoryViewsByNode } from '../view/viewCrud';
 import { ROOT_NODE_UUID } from '../core/constants';
@@ -42,6 +42,13 @@ interface LatestWriteMeta {
   last_updated_at: string | null;
 }
 
+export interface UpdaterSummary {
+  client_type: ClientType | null;
+  source: string | null;
+  updated_at: string | null;
+  event_count: number;
+}
+
 export interface DomainSummary {
   domain: string;
   root_count: number;
@@ -65,6 +72,7 @@ export interface ChildNode {
   last_updated_client_type: ClientType | null;
   last_updated_source: string | null;
   last_updated_at: string | null;
+  updaters: UpdaterSummary[];
 }
 
 export interface NodeData {
@@ -84,6 +92,7 @@ export interface NodeData {
   last_updated_client_type: ClientType | null;
   last_updated_source: string | null;
   last_updated_at: string | null;
+  updaters: UpdaterSummary[];
 }
 
 export interface NodePayload {
@@ -148,6 +157,10 @@ function emptyLatestWriteMeta(): LatestWriteMeta {
   };
 }
 
+function emptyUpdaterSummaries(): UpdaterSummary[] {
+  return [];
+}
+
 function formatLatestWriteMeta(row?: Record<string, unknown> | null): LatestWriteMeta {
   if (!row) return emptyLatestWriteMeta();
   return {
@@ -156,6 +169,24 @@ function formatLatestWriteMeta(row?: Record<string, unknown> | null): LatestWrit
     last_updated_at: row.created_at ? new Date(row.created_at as string).toISOString() : null,
   };
 }
+
+function formatUpdaterSummary(row?: Record<string, unknown> | null): UpdaterSummary | null {
+  if (!row) return null;
+  return {
+    client_type: normalizeClientType(row.client_type),
+    source: typeof row.source === 'string' && row.source.trim() ? row.source : null,
+    updated_at: row.updated_at ? new Date(row.updated_at as string).toISOString() : null,
+    event_count: Math.max(1, Number(row.event_count || 1)),
+  };
+}
+
+const NORMALIZED_EVENT_CLIENT_TYPE_SQL = `
+  CASE
+    WHEN LOWER(BTRIM(COALESCE(details->>'client_type', ''))) IN (${CLIENT_TYPES.map((clientType) => `'${clientType}'`).join(', ')})
+      THEN LOWER(BTRIM(details->>'client_type'))
+    ELSE NULL
+  END
+`;
 
 // ---------------------------------------------------------------------------
 // DB queries
@@ -312,6 +343,43 @@ async function getLatestWriteMetaByNodeUuid(nodeUuids: string[]): Promise<Map<st
   return map;
 }
 
+async function getUpdaterSummariesByNodeUuid(nodeUuids: string[]): Promise<Map<string, UpdaterSummary[]>> {
+  const safeNodeUuids = [...new Set(
+    (Array.isArray(nodeUuids) ? nodeUuids : [])
+      .map((value) => String(value || '').trim())
+      .filter(Boolean),
+  )];
+  if (safeNodeUuids.length === 0) return new Map();
+
+  const result = await sql(
+    `
+      SELECT
+        node_uuid,
+        ${NORMALIZED_EVENT_CLIENT_TYPE_SQL} AS client_type,
+        source,
+        MAX(created_at) AS updated_at,
+        COUNT(*) AS event_count
+      FROM memory_events
+      WHERE node_uuid = ANY($1::text[])
+      GROUP BY node_uuid, ${NORMALIZED_EVENT_CLIENT_TYPE_SQL}, source
+      ORDER BY node_uuid ASC, MAX(created_at) DESC, COUNT(*) DESC, source ASC
+    `,
+    [safeNodeUuids],
+  );
+
+  const map = new Map<string, UpdaterSummary[]>();
+  for (const rawRow of result.rows as Record<string, unknown>[]) {
+    const nodeUuid = String(rawRow.node_uuid || '').trim();
+    if (!nodeUuid) continue;
+    const summary = formatUpdaterSummary(rawRow);
+    if (!summary) continue;
+    const existing = map.get(nodeUuid) || [];
+    existing.push(summary);
+    map.set(nodeUuid, existing);
+  }
+  return map;
+}
+
 async function getChildren(
   nodeUuid: string,
   contextDomain: string,
@@ -345,6 +413,7 @@ async function getChildren(
   const childUuids = [...new Set(childRows.map((row) => row.child_uuid))];
   const edgeIds = [...new Set(childRows.map((row) => row.edge_id))];
   const latestWriteMetaByNodeUuid = await getLatestWriteMetaByNodeUuid(childUuids);
+  const updaterSummariesByNodeUuid = await getUpdaterSummariesByNodeUuid(childUuids);
 
   const countsResult = await sql(
     `
@@ -392,6 +461,7 @@ async function getChildren(
 
     const pathObj = pickBestPath(allPaths, contextDomain, prefix);
     const latestWriteMeta = latestWriteMetaByNodeUuid.get(row.child_uuid) || emptyLatestWriteMeta();
+    const updaters = updaterSummariesByNodeUuid.get(row.child_uuid) || emptyUpdaterSummaries();
     children.push({
       node_uuid: row.child_uuid,
       edge_id: row.edge_id,
@@ -403,6 +473,7 @@ async function getChildren(
       content_snippet: toSnippet(row.content),
       approx_children_count: childCountMap.get(row.child_uuid) || 0,
       ...latestWriteMeta,
+      updaters,
     });
   }
 
@@ -427,7 +498,7 @@ export async function getNodePayload({
     throw error;
   }
 
-  const [aliases, glossaryKeywords, children, memoryViews, latestWriteMetaByNodeUuid] = await Promise.all([
+  const [aliases, glossaryKeywords, children, memoryViews, latestWriteMetaByNodeUuid, updaterSummariesByNodeUuid] = await Promise.all([
     getAliases(memory.node_uuid, domain, path),
     navOnly ? Promise.resolve([]) : getGlossaryKeywords(memory.node_uuid),
     getChildren(memory.node_uuid, domain, path),
@@ -435,8 +506,10 @@ export async function getNodePayload({
       ? Promise.resolve([])
       : listMemoryViewsByNode({ nodeUuid: memory.node_uuid, uri: `${domain}://${path}` }),
     getLatestWriteMetaByNodeUuid([memory.node_uuid]),
+    getUpdaterSummariesByNodeUuid([memory.node_uuid]),
   ]);
   const latestWriteMeta = latestWriteMetaByNodeUuid.get(memory.node_uuid) || emptyLatestWriteMeta();
+  const updaters = updaterSummariesByNodeUuid.get(memory.node_uuid) || emptyUpdaterSummaries();
 
   return {
     node: {
@@ -454,6 +527,7 @@ export async function getNodePayload({
       glossary_matches: [],
       memory_views: memoryViews,
       ...latestWriteMeta,
+      updaters,
     },
     children,
     breadcrumbs: buildBreadcrumbs(path),

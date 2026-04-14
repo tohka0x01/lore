@@ -15,6 +15,7 @@ import {
   formatRecallBlock,
 } from './ui';
 import { useT } from '../lib/i18n';
+import { clientTypeLabel, clientTypeTone } from './clientTypeMeta';
 
 interface StageSegmentProps {
   active: boolean;
@@ -147,35 +148,7 @@ interface RecallData {
   retrieval_meta?: RetrievalMeta;
 }
 
-export function clientTypeTone(clientType: unknown): 'blue' | 'purple' | 'teal' | 'orange' | 'soft' {
-  switch (String(clientType || '').trim()) {
-    case 'claudecode':
-      return 'blue';
-    case 'openclaw':
-      return 'purple';
-    case 'hermes':
-      return 'teal';
-    case 'mcp':
-      return 'orange';
-    default:
-      return 'soft';
-  }
-}
-
-export function clientTypeLabel(clientType: unknown): string {
-  switch (String(clientType || '').trim()) {
-    case 'claudecode':
-      return 'Claude Code';
-    case 'openclaw':
-      return 'OpenClaw';
-    case 'hermes':
-      return 'Hermes';
-    case 'mcp':
-      return 'MCP';
-    default:
-      return 'Legacy';
-  }
-}
+export { clientTypeLabel, clientTypeTone } from './clientTypeMeta';
 
 interface RuntimeWeights {
   w_exact?: number;
