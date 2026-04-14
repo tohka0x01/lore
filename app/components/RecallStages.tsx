@@ -84,6 +84,7 @@ function CandidateDetail({ candidate, data, exactColumns, glossarySemanticColumn
         <code className="font-mono text-[12.5px] text-txt-primary break-all">{String(uri ?? '')}</code>
         <span className="text-[28px] font-bold leading-none tabular-nums tracking-tight text-sys-blue">{fmt(candidate.score, 3)}</span>
         {candidate.priority != null && <Badge tone="default">{t('Priority')} {String(candidate.priority)}</Badge>}
+        <Badge tone={clientTypeTone(candidate.client_type)}>{clientTypeLabel(candidate.client_type)}</Badge>
         {displayed ? <Badge tone="green">{t('Shown')}</Badge> : <Badge tone="red">{t('Withheld')}</Badge>}
       </div>
       <BreakdownGrid breakdown={candidate.score_breakdown as Record<string, unknown> | null} />
@@ -147,6 +148,36 @@ interface RecallData {
   retrieval_meta?: RetrievalMeta;
 }
 
+function clientTypeTone(clientType: unknown): 'blue' | 'purple' | 'teal' | 'orange' | 'soft' {
+  switch (String(clientType || '').trim()) {
+    case 'claudecode':
+      return 'blue';
+    case 'openclaw':
+      return 'purple';
+    case 'hermes':
+      return 'teal';
+    case 'mcp':
+      return 'orange';
+    default:
+      return 'soft';
+  }
+}
+
+function clientTypeLabel(clientType: unknown): string {
+  switch (String(clientType || '').trim()) {
+    case 'claudecode':
+      return 'Claude Code';
+    case 'openclaw':
+      return 'OpenClaw';
+    case 'hermes':
+      return 'Hermes';
+    case 'mcp':
+      return 'MCP';
+    default:
+      return 'Legacy';
+  }
+}
+
 interface RuntimeWeights {
   w_exact?: number;
   w_glossary_semantic?: number;
@@ -173,6 +204,8 @@ interface RecallStagesProps {
   sessionId?: string | null;
   readNodeDisplayMode?: string | null;
   initialStage?: string;
+  showClientSource?: boolean;
+  hideMergedBreakdownColumn?: boolean;
 }
 
 export default function RecallStages({
@@ -184,6 +217,8 @@ export default function RecallStages({
   sessionId = null,
   readNodeDisplayMode = null,
   initialStage = 'merge',
+  showClientSource = false,
+  hideMergedBreakdownColumn = false,
 }: RecallStagesProps): React.JSX.Element {
   const { t } = useT();
   const [activeStage, setActiveStage] = useState(initialStage);
@@ -245,19 +280,34 @@ export default function RecallStages({
     { key: 'weighted', label: t('Weighted'), render: (_, row) => <span className="font-mono tabular-nums text-sys-blue">{fmt(lexicalWeighted(row), 3)}</span> },
   ], [t]);
 
-  const mergedColumns = useMemo((): TableColumn[] => [
-    { key: 'uri', label: t('Candidate'), render: (v, row) => (
-      <div className="min-w-0">
-        <div className="font-mono text-[12px] text-txt-primary break-all">{String(v ?? '')}</div>
-        <div className="mt-1 flex flex-wrap gap-1">
-          {safeArray<string>(row.matched_on).map((p) => <Badge key={`${String(v)}-${p}`}>{p}</Badge>)}
+  const mergedColumns = useMemo((): TableColumn[] => {
+    const columns: TableColumn[] = [
+      { key: 'uri', label: t('Candidate'), render: (v, row) => (
+        <div className="min-w-0">
+          <div className="font-mono text-[12px] text-txt-primary break-all">{String(v ?? '')}</div>
+          <div className="mt-1 flex flex-wrap gap-1">
+            {safeArray<string>(row.matched_on).map((p) => <Badge key={`${String(v)}-${p}`}>{p}</Badge>)}
+          </div>
         </div>
-      </div>
-    ) },
-    { key: 'score', label: t('Final'), render: (v) => <span className="text-[18px] font-semibold tabular-nums text-sys-blue">{fmt(v, 3)}</span> },
-    { key: 'breakdown', label: t('Breakdown'), render: (_, row) => <BreakdownGrid breakdown={row.score_breakdown as Record<string, unknown>} /> },
-    { key: 'cues', label: t('Cues'), render: (_, row) => <CueList item={row as { cues?: unknown[]; cue_terms?: unknown[] }} /> },
-  ], [t]);
+      ) },
+      { key: 'score', label: t('Final'), render: (v) => <span className="text-[18px] font-semibold tabular-nums text-sys-blue">{fmt(v, 3)}</span> },
+    ];
+
+    if (showClientSource) {
+      columns.push({
+        key: 'client_type',
+        label: t('Source'),
+        render: (v) => <Badge tone={clientTypeTone(v)}>{clientTypeLabel(v)}</Badge>,
+      });
+    }
+
+    if (!hideMergedBreakdownColumn) {
+      columns.push({ key: 'breakdown', label: t('Breakdown'), render: (_, row) => <BreakdownGrid breakdown={row.score_breakdown as Record<string, unknown>} /> });
+    }
+
+    columns.push({ key: 'cues', label: t('Cues'), render: (_, row) => <CueList item={row as { cues?: unknown[]; cue_terms?: unknown[] }} /> });
+    return columns;
+  }, [hideMergedBreakdownColumn, showClientSource, t]);
 
   const finalColumns = useMemo((): TableColumn[] => [
     { key: 'uri', label: t('Quoted'), render: (v, row) => (

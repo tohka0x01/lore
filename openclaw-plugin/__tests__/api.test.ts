@@ -89,11 +89,15 @@ describe('textResult', () => {
 
 describe('buildApiUrl', () => {
   it('prepends /api to the path', () => {
-    expect(buildApiUrl({ baseUrl: 'http://host' }, '/health')).toBe('http://host/api/health');
+    expect(buildApiUrl({ baseUrl: 'http://host' }, '/health')).toBe('http://host/api/health?client_type=openclaw');
   });
 
   it('handles path without leading slash', () => {
-    expect(buildApiUrl({ baseUrl: 'http://host' }, 'health')).toBe('http://host/api/health');
+    expect(buildApiUrl({ baseUrl: 'http://host' }, 'health')).toBe('http://host/api/health?client_type=openclaw');
+  });
+
+  it('preserves existing query params', () => {
+    expect(buildApiUrl({ baseUrl: 'http://host' }, '/health?foo=bar')).toBe('http://host/api/health?foo=bar&client_type=openclaw');
   });
 });
 

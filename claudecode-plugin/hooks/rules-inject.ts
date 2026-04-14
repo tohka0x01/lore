@@ -114,7 +114,7 @@ async function fetchRecallItems(query: string): Promise<any[]> {
   const headers: Record<string, string> = { "content-type": "application/json" };
   if (cfg.apiToken) headers.authorization = `Bearer ${cfg.apiToken}`;
 
-  const response = await fetch(`${cfg.baseUrl}/api/browse/recall`, {
+  const response = await fetch(`${cfg.baseUrl}/api/browse/recall?client_type=claudecode`, {
     method: "POST",
     headers,
     body: JSON.stringify({ query, session_id: "boot" }),
@@ -174,7 +174,7 @@ async function fetchBoot(): Promise<string> {
   const headers: Record<string, string> = {};
   if (cfg.apiToken) headers.authorization = `Bearer ${cfg.apiToken}`;
 
-  const url = `${cfg.baseUrl}/api/browse/boot`;
+  const url = `${cfg.baseUrl}/api/browse/boot?client_type=claudecode`;
   const response = await fetch(url, {
     headers,
     signal: AbortSignal.timeout(BOOT_TIMEOUT_MS),

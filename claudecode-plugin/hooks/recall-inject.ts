@@ -75,7 +75,7 @@ async function main() {
     if (cfg.apiToken) headers.authorization = `Bearer ${cfg.apiToken}`;
 
     // Only send query + session_id; all display params come from server settings
-    const response = await fetch(`${cfg.baseUrl}/api/browse/recall`, {
+    const response = await fetch(`${cfg.baseUrl}/api/browse/recall?client_type=claudecode`, {
       method: "POST",
       headers,
       body: JSON.stringify({

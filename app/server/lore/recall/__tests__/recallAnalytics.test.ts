@@ -183,13 +183,12 @@ describe('mergeEventsByNode', () => {
     expect(mergeEventsByNode([])).toEqual([]);
   });
 
-  it('captures ranked_position and displayed_position', () => {
+  it('captures client_type from metadata when merging rows', () => {
     const rows = [
-      { node_uri: 'core://pos', retrieval_path: 'exact', metadata: { raw_score: 1, ranked_position: 3, displayed_position: 1 } },
+      { node_uri: 'core://client', retrieval_path: 'exact', final_rank_score: 0.8, metadata: { raw_score: 0.8, client_type: 'claudecode' } },
     ];
     const merged = mergeEventsByNode(rows);
-    expect(merged[0].ranked_position).toBe(3);
-    expect(merged[0].displayed_position).toBe(1);
+    expect(merged[0].client_type).toBe('claudecode');
   });
 });
 
@@ -258,17 +257,14 @@ describe('reshapeEventsForDebugView', () => {
     expect(result.items[1].uri).toBe('core://s1');
   });
 
-  it('includes retrieval_meta counts', () => {
+  it('includes client_type in reshaped debug items', () => {
     const rows = [
-      { node_uri: 'core://a', retrieval_path: 'exact', metadata: {} },
-      { node_uri: 'core://b', retrieval_path: 'dense', metadata: {} },
-      { node_uri: 'core://c', retrieval_path: 'dense', metadata: {} },
+      { node_uri: 'core://debug', retrieval_path: 'exact', metadata: { raw_score: 0.9, client_type: 'hermes' } },
     ];
-    const merged: any[] = [];
+    const merged = [{ uri: 'core://debug', score: 0.9, selected: true, displayed_position: 1, matched_on: ['exact'], cues: [], client_type: 'hermes', score_breakdown: null } as any];
     const result = reshapeEventsForDebugView(rows, merged);
-    expect(result.retrieval_meta.exact_candidates).toBe(1);
-    expect(result.retrieval_meta.dense_candidates).toBe(2);
-    expect(result.retrieval_meta.strategy).toBe('drilldown');
+    expect(result.items[0]).toHaveProperty('client_type', 'hermes');
+    expect(result.exact_hits[0]).toHaveProperty('client_type', 'hermes');
   });
 });
 

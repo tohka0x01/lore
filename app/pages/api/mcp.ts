@@ -14,6 +14,7 @@ import type { NextApiRequest, NextApiResponse } from 'next';
 import { randomUUID } from 'node:crypto';
 import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/streamableHttp.js';
 import { isInitializeRequest } from '@modelcontextprotocol/sdk/types.js';
+import { normalizeClientType } from '../../server/auth';
 import { createMcpServer } from '../../server/mcpServer';
 
 // Disable Next.js body parsing — the SDK reads the raw body itself for GET/DELETE,
@@ -23,6 +24,7 @@ export const config = {
 };
 
 const transports = new Map<string, StreamableHTTPServerTransport>();
+const sessionClientTypes = new Map<string, ReturnType<typeof normalizeClientType>>();
 
 /**
  * Read and parse the request body as JSON (only for POST).
@@ -52,10 +54,12 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
   try {
     const sessionId = req.headers['mcp-session-id'] as string | undefined;
+    const requestClientType = normalizeClientType(req.query.client_type);
     let transport: StreamableHTTPServerTransport | undefined;
 
     if (sessionId && transports.has(sessionId)) {
       transport = transports.get(sessionId);
+      if (requestClientType) sessionClientTypes.set(sessionId, requestClientType);
     } else if (!sessionId && req.method === 'POST') {
       // Could be an initialize request — parse body first to check
       const body = await readJsonBody(req);
@@ -65,15 +69,19 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
           sessionIdGenerator: () => randomUUID(),
           onsessioninitialized: (sid: string) => {
             transports.set(sid, transport!);
+            sessionClientTypes.set(sid, requestClientType);
           },
         });
 
         transport.onclose = () => {
           const sid = transport!.sessionId;
-          if (sid) transports.delete(sid);
+          if (sid) {
+            transports.delete(sid);
+            sessionClientTypes.delete(sid);
+          }
         };
 
-        const server = createMcpServer();
+        const server = createMcpServer({ clientType: requestClientType });
         await server.connect(transport);
 
         // Pass the already-parsed body

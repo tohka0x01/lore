@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { requireBearerAuth } from '../../../../../server/auth';
+import { normalizeClientType, requireBearerAuth } from '../../../../../server/auth';
 import { debugRecallMemories } from '../../../../../server/lore/recall/recall';
 
 export const runtime = 'nodejs';
@@ -10,7 +10,8 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
   if (unauthorized) return unauthorized;
   try {
     const body = await request.json();
-    return NextResponse.json(await debugRecallMemories(body));
+    const clientType = normalizeClientType(request.nextUrl.searchParams.get('client_type'));
+    return NextResponse.json(await debugRecallMemories(body, { clientType }));
   } catch (error) {
     return NextResponse.json({ detail: (error as Error)?.message || 'Recall debug failed' }, { status: Number((error as { status?: number })?.status || 500) });
   }

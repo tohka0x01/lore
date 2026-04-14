@@ -82,6 +82,7 @@ export default function RecallDrilldown(): React.JSX.Element {
     { key: 'created_at', label: t('When'), render: (v: unknown) => <span className="text-[11px] text-txt-tertiary">{v ? new Date(String(v)).toLocaleString() : '—'}</span> },
     { key: 'query_text', label: t('Query'), render: (v: unknown) => <div className="max-w-[22rem] text-[12.5px] text-txt-primary">{trunc(v, 100)}</div> },
     { key: 'node_uri', label: t('Entry'), render: (v: unknown) => <div className="max-w-[18rem] break-all font-mono text-[11px] text-txt-primary">{String(v ?? '—')}</div> },
+    { key: 'client_type', label: t('Source'), render: (v: unknown) => <Badge tone={String(v || '').trim() ? 'blue' : 'soft'}>{String(v || 'Legacy')}</Badge> },
     { key: 'retrieval_path', label: t('Path'), render: (v: unknown, row: RowData) => (
       <div className="flex items-center gap-1.5 text-[11px]">
         <Badge tone="default">{String(v ?? '')}</Badge>
@@ -223,7 +224,12 @@ export default function RecallDrilldown(): React.JSX.Element {
               </Button>
             }
           >
-            <RecallStages data={queryDetail as Parameters<typeof RecallStages>[0]['data']} initialStage="merge" />
+            <RecallStages
+              data={queryDetail as Parameters<typeof RecallStages>[0]['data']}
+              initialStage="merge"
+              showClientSource
+              hideMergedBreakdownColumn
+            />
           </Section>
         ) : nodeDetail ? (
           <Section

@@ -89,6 +89,7 @@ interface MergedCandidate {
   matched_on: string[];
   cues: string[];
   view_types: string[];
+  client_type: string | null;
   score_breakdown: Record<string, unknown> | null;
   ranked_position: number | null;
   displayed_position: number | null;
@@ -119,6 +120,7 @@ export function mergeEventsByNode(rows: EventRow[]): MergedCandidate[] {
     matched_on: Set<string>;
     cues: Set<string>;
     view_types: Set<string>;
+    client_type: string | null;
     score_breakdown: Record<string, unknown> | null;
     ranked_position: number | null;
     displayed_position: number | null;
@@ -142,6 +144,7 @@ export function mergeEventsByNode(rows: EventRow[]): MergedCandidate[] {
       matched_on: new Set<string>(),
       cues: new Set<string>(),
       view_types: new Set<string>(),
+      client_type: null,
       score_breakdown: null,
       ranked_position: null,
       displayed_position: null,
@@ -160,6 +163,9 @@ export function mergeEventsByNode(rows: EventRow[]): MergedCandidate[] {
 
     if (row.selected) entry.selected = true;
     if (row.used_in_answer) entry.used_in_answer = true;
+    if (!entry.client_type && typeof meta.client_type === 'string' && meta.client_type.trim()) {
+      entry.client_type = meta.client_type.trim();
+    }
     if (row.view_type) entry.view_types.add(row.view_type);
     if (row.retrieval_path) entry.paths.push({ retrieval_path: row.retrieval_path, view_type: row.view_type || null, pre_rank_score: asNumber(row.pre_rank_score), raw_score: rawScore });
 
@@ -194,6 +200,7 @@ export function mergeEventsByNode(rows: EventRow[]): MergedCandidate[] {
       matched_on: [...e.matched_on].sort(),
       cues: [...e.cues].slice(0, 6),
       view_types: [...e.view_types],
+      client_type: e.client_type,
       score_breakdown: e.score_breakdown,
       ranked_position: e.ranked_position,
       displayed_position: e.displayed_position,
@@ -237,6 +244,7 @@ export function reshapeEventsForDebugView(rows: EventRow[], mergedCandidates: Me
         query_contains_glossary_hit: flags.query_contains_glossary_hit === true,
         glossary_fts_hit: flags.glossary_fts_hit === true,
         cue_terms: cues,
+        client_type: typeof meta.client_type === 'string' ? meta.client_type : null,
         disclosure: '',
       });
     } else if (row.retrieval_path === 'glossary_semantic') {
@@ -245,6 +253,7 @@ export function reshapeEventsForDebugView(rows: EventRow[], mergedCandidates: Me
         keyword: cues[0] || '',
         glossary_semantic_score: raw,
         cue_terms: cues,
+        client_type: typeof meta.client_type === 'string' ? meta.client_type : null,
         disclosure: '',
       });
     } else if (row.retrieval_path === 'dense') {
@@ -256,6 +265,7 @@ export function reshapeEventsForDebugView(rows: EventRow[], mergedCandidates: Me
         cue_terms: cues,
         llm_refined: meta.llm_refined === true,
         llm_model: meta.llm_model || null,
+        client_type: typeof meta.client_type === 'string' ? meta.client_type : null,
         disclosure: '',
       });
     } else if (row.retrieval_path === 'lexical') {
@@ -271,6 +281,7 @@ export function reshapeEventsForDebugView(rows: EventRow[], mergedCandidates: Me
         cue_terms: cues,
         llm_refined: meta.llm_refined === true,
         llm_model: meta.llm_model || null,
+        client_type: typeof meta.client_type === 'string' ? meta.client_type : null,
         disclosure: '',
       });
     }
@@ -286,6 +297,7 @@ export function reshapeEventsForDebugView(rows: EventRow[], mergedCandidates: Me
       score_display: c.score,
       matched_on: c.matched_on,
       cues: c.cues,
+      client_type: c.client_type,
       score_breakdown: c.score_breakdown,
       read: false,
       boot: false,
@@ -419,7 +431,8 @@ export async function getRecallStats({
     sql(
       `
         SELECT id, query_text, node_uri, retrieval_path, view_type,
-          pre_rank_score, final_rank_score, selected, used_in_answer, metadata, created_at
+          pre_rank_score, final_rank_score, selected, used_in_answer, metadata,
+          metadata->>'client_type' AS client_type, created_at
         FROM recall_events
         WHERE ${filterWhere}
         ORDER BY created_at DESC, id DESC
@@ -548,6 +561,7 @@ export async function getRecallStats({
       selected: row.selected === true,
       used_in_answer: row.used_in_answer === true,
       metadata: asObject(row.metadata),
+      client_type: typeof row.client_type === 'string' && row.client_type.trim() ? row.client_type.trim() : null,
       created_at: row.created_at ? new Date(row.created_at as string).toISOString() : null,
     })),
     ...(queryDetail ? { query_detail: queryDetail } : {}),

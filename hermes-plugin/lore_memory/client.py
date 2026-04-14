@@ -8,7 +8,7 @@ import urllib.request
 import urllib.error
 import ssl
 from typing import Any, Optional, Dict, List
-from urllib.parse import urlencode
+from urllib.parse import urlencode, urlparse, parse_qsl, urlunparse
 
 
 class LoreError(Exception):
@@ -21,10 +21,11 @@ class LoreError(Exception):
 
 class LoreClient:
     """HTTP client for Lore memory system"""
-    
+
     DEFAULT_BASE_URL = "http://127.0.0.1:18901"
     DEFAULT_TIMEOUT = 30
     DEFAULT_DOMAIN = "core"
+    CLIENT_TYPE = "hermes"
     
     def __init__(
         self,
@@ -51,7 +52,10 @@ class LoreClient:
         """Build full API URL"""
         if not path.startswith("/"):
             path = f"/{path}"
-        return f"{self.base_url}/api{path}"
+        url = urlparse(f"{self.base_url}/api{path}")
+        query = dict(parse_qsl(url.query, keep_blank_values=True))
+        query["client_type"] = self.CLIENT_TYPE
+        return urlunparse(url._replace(query=urlencode(query)))
     
     def _request(
         self,
@@ -64,7 +68,10 @@ class LoreClient:
         """Make HTTP request to Lore API"""
         url = self._build_url(path)
         if params:
-            url = f"{url}?{urlencode(params)}"
+            parsed = urlparse(url)
+            query = dict(parse_qsl(parsed.query, keep_blank_values=True))
+            query.update({key: value for key, value in params.items() if value is not None})
+            url = urlunparse(parsed._replace(query=urlencode(query)))
         
         headers = self._get_headers(include_json=(data is not None))
         

@@ -1,5 +1,6 @@
 import crypto from 'crypto';
 import { sql } from '../../db';
+import { normalizeClientType, type ClientType } from '../../auth';
 import { embedTexts, getEmbeddingRuntimeConfig, resolveEmbeddingConfig } from '../view/embeddings';
 import { ensureMemoryViewsIndex, ensureMemoryViewsReady } from '../view/viewCrud';
 import { countQueryTokens } from '../view/viewBuilders';
@@ -190,6 +191,11 @@ interface RecallRequestBody {
   read_node_display_mode?: string;
   exclude_boot_from_results?: boolean;
   log_events?: boolean;
+  client_type?: string | null;
+}
+
+interface RecallRequestContext {
+  clientType?: ClientType | null;
 }
 
 interface AggregateCandidatesOptions {
@@ -200,6 +206,10 @@ interface AggregateCandidatesOptions {
   scoringConfig?: ScoringConfig | null;
   /** @deprecated alias for scoringConfig; kept for backward compat with benchmark tests */
   normalizedConfig?: ScoringConfig | null;
+}
+
+function resolveRequestClientType(body: RecallRequestBody, context?: RecallRequestContext): ClientType | null {
+  return context?.clientType ?? normalizeClientType(body?.client_type);
 }
 
 // ─── Internal helpers ──────────────────────────────────────────────────────
@@ -527,7 +537,7 @@ export async function ensureRecallIndex(embedding: Partial<EmbeddingConfig> | nu
   };
 }
 
-export async function recallMemories(body: RecallRequestBody): Promise<RecallMemoriesResult> {
+export async function recallMemories(body: RecallRequestBody, context: RecallRequestContext = {}): Promise<RecallMemoriesResult> {
   const result = await runRecallPipeline(body);
   const eventLog = { query_id: crypto.randomUUID(), enabled: true };
   logRecallEvents({
@@ -541,6 +551,7 @@ export async function recallMemories(body: RecallRequestBody): Promise<RecallMem
     displayedItems: result.items,
     retrievalMeta: result.retrieval_meta,
     sessionId: result.session_id,
+    clientType: resolveRequestClientType(body, context),
   }).catch((error: unknown) => {
     console.error('[recall_events] failed to log recall events', error);
   });
@@ -558,7 +569,7 @@ export async function recallMemories(body: RecallRequestBody): Promise<RecallMem
   };
 }
 
-export async function debugRecallMemories(body: RecallRequestBody): Promise<DebugRecallMemoriesResult> {
+export async function debugRecallMemories(body: RecallRequestBody, context: RecallRequestContext = {}): Promise<DebugRecallMemoriesResult> {
   const result = await runRecallPipeline(body);
   const eventLog =
     body?.log_events === true ? { query_id: crypto.randomUUID(), enabled: true } : null;
@@ -574,6 +585,7 @@ export async function debugRecallMemories(body: RecallRequestBody): Promise<Debu
       displayedItems: result.items,
       retrievalMeta: result.retrieval_meta,
       sessionId: result.session_id,
+      clientType: resolveRequestClientType(body, context),
     }).catch((error: unknown) => {
       console.error('[recall_events] failed to log debug recall events', error);
     });

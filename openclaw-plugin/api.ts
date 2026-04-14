@@ -4,6 +4,7 @@ const DEFAULT_DOMAIN = "core";
 const DEFAULT_RECALL_MIN_DISPLAY_SCORE = 0.4;
 const DEFAULT_RECALL_MAX_DISPLAY_ITEMS = 3;
 const DEFAULT_RECALL_SCORE_PRECISION = 2;
+const CLIENT_TYPE = "openclaw";
 
 export function pickPluginConfig(api: any) {
   const cfg = api?.pluginConfig ?? {};
@@ -38,7 +39,9 @@ export function authHeaders(pluginCfg: any, includeJson = true) {
 export function buildApiUrl(pluginCfg: any, path: string) {
   const rawPath = String(path || "");
   const normalizedPath = `/api${rawPath.startsWith("/") ? rawPath : `/${rawPath}`}`;
-  return `${pluginCfg.baseUrl}${normalizedPath}`;
+  const url = new URL(normalizedPath, `${pluginCfg.baseUrl}/`);
+  url.searchParams.set("client_type", CLIENT_TYPE);
+  return url.toString();
 }
 
 export async function fetchJson(pluginCfg: any, path: string, options: any = {}) {

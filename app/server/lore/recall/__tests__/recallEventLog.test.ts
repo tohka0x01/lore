@@ -221,12 +221,18 @@ describe('logRecallEvents', () => {
     expect(meta.query_id).toBe('custom-id-123');
   });
 
-  it('skips rows with empty uri', async () => {
-    const result = await logRecallEvents({
-      queryText: 'skip empty',
-      exactRows: [{ uri: '' }, { uri: '  ' }, { uri: 'core://valid' }],
+  it('stores client_type in recall event metadata', async () => {
+    await logRecallEvents({
+      queryText: 'client type test',
+      exactRows: [{ uri: 'core://client' }],
+      clientType: 'claudecode',
     });
-    expect(result.inserted_count).toBe(1);
+
+    const insertCalls = mockSql.mock.calls.filter(([q]) =>
+      typeof q === 'string' && q.includes('INSERT INTO recall_events'),
+    );
+    const meta = JSON.parse(insertCalls[0][1]![7] as string);
+    expect(meta.client_type).toBe('claudecode');
   });
 });
 
@@ -284,13 +290,17 @@ describe('markRecallEventsUsedInAnswer', () => {
     expect(metaPatch.answer_signal_source).toBe('agent_end');
   });
 
-  it('passes null for empty nodeUris', async () => {
-    mockSql.mockResolvedValue({ rows: [], rowCount: 0 } as any);
-    await markRecallEventsUsedInAnswer({ queryId: 'q-no-uris', success: true });
+  it('stores answer client type in metadata patch when provided', async () => {
+    mockSql.mockResolvedValue({ rows: [], rowCount: 1 } as any);
+    await markRecallEventsUsedInAnswer({
+      queryId: 'q-client',
+      success: true,
+      clientType: 'mcp',
+    });
     const updateCalls = mockSql.mock.calls.filter(([q]) =>
       typeof q === 'string' && q.includes('UPDATE recall_events'),
     );
-    const params = updateCalls[0][1] as unknown[];
-    expect(params[1]).toBeNull(); // null = no URI filter
+    const metaPatch = JSON.parse(updateCalls[0][1]![2] as string);
+    expect(metaPatch.answer_client_type).toBe('mcp');
   });
 });

@@ -8,6 +8,7 @@
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { z } from 'zod';
 
+import type { ClientType } from './auth';
 import { sql } from './db';
 import { bootView } from './lore/memory/boot';
 import { getNodePayload, listDomains } from './lore/memory/browse';
@@ -33,7 +34,11 @@ import {
 
 // ── server factory ────────────────────────────────────────────────
 
-export function createMcpServer(): InstanceType<typeof McpServer> {
+interface McpServerContext {
+  clientType?: ClientType | null;
+}
+
+export function createMcpServer(context: McpServerContext = {}): InstanceType<typeof McpServer> {
   const guidance = loadGuidance();
   const server = new McpServer(
     {
@@ -114,7 +119,14 @@ export function createMcpServer(): InstanceType<typeof McpServer> {
                 source: 'mcp:lore_get_node',
               }),
               qid
-                ? markRecallEventsUsedInAnswer({ queryId: qid, sessionId: sid, nodeUris: [node.uri], source: 'mcp:lore_get_node', success: true })
+                ? markRecallEventsUsedInAnswer({
+                    queryId: qid,
+                    sessionId: sid,
+                    nodeUris: [node.uri],
+                    source: 'mcp:lore_get_node',
+                    success: true,
+                    clientType: context.clientType ?? null,
+                  })
                 : Promise.resolve(),
             ]);
           } catch { /* best effort */ }

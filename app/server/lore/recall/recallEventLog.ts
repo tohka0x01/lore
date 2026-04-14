@@ -1,5 +1,6 @@
 import crypto from 'crypto';
 import { sql } from '../../db';
+import type { ClientType } from '../../auth';
 import { clampLimit } from '../core/utils';
 
 // ---------------------------------------------------------------------------
@@ -75,6 +76,7 @@ interface LogRecallEventsArgs {
   displayedItems?: DisplayedItem[];
   retrievalMeta?: Record<string, unknown> | null;
   sessionId?: string | null;
+  clientType?: ClientType | null;
 }
 
 export async function logRecallEvents({
@@ -88,6 +90,7 @@ export async function logRecallEvents({
   displayedItems = [],
   retrievalMeta = null,
   sessionId = null,
+  clientType = null,
 }: LogRecallEventsArgs): Promise<{ inserted_count: number; query_id?: string }> {
   const query = String(queryText || '').trim();
   if (!query) return { inserted_count: 0 };
@@ -138,6 +141,7 @@ export async function logRecallEvents({
         ranked_position: ranked?.rank || null,
         displayed_position: (displayed as Record<string, unknown>)?.display_rank || null,
         retrieval_meta: retrievalMeta || null,
+        client_type: clientType,
         cue_terms: asObject(row?.metadata).cue_terms || [],
         glossary_terms: asObject(row?.metadata).glossary_terms || [],
         matched_on: ranked?.matched_on || ['exact'],
@@ -202,6 +206,7 @@ export async function logRecallEvents({
         ranked_position: ranked?.rank || null,
         displayed_position: (displayed as Record<string, unknown>)?.display_rank || null,
         retrieval_meta: retrievalMeta || null,
+        client_type: clientType,
         cue_terms: asObject(row?.metadata).cue_terms || [],
         llm_refined: asObject(row?.metadata).llm_refined === true,
         matched_on: ranked?.matched_on || ['dense'],
@@ -231,6 +236,7 @@ export async function logRecallEvents({
         ranked_position: ranked?.rank || null,
         displayed_position: (displayed as Record<string, unknown>)?.display_rank || null,
         retrieval_meta: retrievalMeta || null,
+        client_type: clientType,
         cue_terms: asObject(row?.metadata).cue_terms || [],
         llm_refined: asObject(row?.metadata).llm_refined === true,
         matched_on: ranked?.matched_on || ['lexical'],
@@ -289,6 +295,7 @@ interface MarkUsedArgs {
   assistantText?: string;
   source?: string;
   success?: boolean;
+  clientType?: ClientType | null;
 }
 
 export async function markRecallEventsUsedInAnswer({
@@ -298,6 +305,7 @@ export async function markRecallEventsUsedInAnswer({
   assistantText = '',
   source = 'agent_end',
   success = true,
+  clientType = null,
 }: MarkUsedArgs = {}): Promise<{ updated_count: number; query_id: string | null; node_uris?: string[] }> {
   const safeQueryId = String(queryId || '').trim();
   if (!safeQueryId || success !== true) return { updated_count: 0, query_id: safeQueryId || null };
@@ -307,6 +315,7 @@ export async function markRecallEventsUsedInAnswer({
     answer_signal_source: source,
     answer_session_id: sessionId || null,
     answer_marked_at: new Date().toISOString(),
+    answer_client_type: clientType,
   };
   const preview = truncateText(assistantText, 280);
   if (preview) metadataPatch.answer_preview = preview;

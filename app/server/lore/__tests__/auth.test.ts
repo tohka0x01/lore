@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { getApiToken, requireBearerAuth } from '../../auth';
+import { getApiToken, normalizeClientType, requireBearerAuth } from '../../auth';
 
 describe('getApiToken', () => {
   const origEnv = process.env.API_TOKEN;
@@ -15,6 +15,21 @@ describe('getApiToken', () => {
   it('returns token when set', () => {
     process.env.API_TOKEN = 'test-token';
     expect(getApiToken()).toBe('test-token');
+  });
+});
+
+describe('normalizeClientType', () => {
+  it('normalizes valid values', () => {
+    expect(normalizeClientType('ClaudeCode')).toBe('claudecode');
+    expect(normalizeClientType('openclaw')).toBe('openclaw');
+    expect(normalizeClientType(' hermes ')).toBe('hermes');
+    expect(normalizeClientType('mcp')).toBe('mcp');
+  });
+
+  it('returns null for invalid values', () => {
+    expect(normalizeClientType('api')).toBeNull();
+    expect(normalizeClientType('')).toBeNull();
+    expect(normalizeClientType(undefined)).toBeNull();
   });
 });
 
