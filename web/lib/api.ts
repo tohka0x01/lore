@@ -23,7 +23,8 @@ api.interceptors.request.use((config: InternalAxiosRequestConfig): InternalAxios
   }
 
   const url = typeof config.url === 'string' ? config.url : '';
-  if (url.startsWith('/browse/')) {
+  const shouldAttachClientType = url.startsWith('/browse/') && !url.startsWith('/browse/recall/stats');
+  if (shouldAttachClientType && !(config.params && typeof config.params === 'object' && 'client_type' in config.params)) {
     config.params = {
       ...(config.params && typeof config.params === 'object' ? config.params : {}),
       client_type: WEB_CLIENT_TYPE,
