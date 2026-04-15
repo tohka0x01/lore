@@ -24,6 +24,7 @@ describe('normalizeClientType', () => {
     expect(normalizeClientType('openclaw')).toBe('openclaw');
     expect(normalizeClientType(' hermes ')).toBe('hermes');
     expect(normalizeClientType('mcp')).toBe('mcp');
+    expect(normalizeClientType('Admin')).toBe('admin');
   });
 
   it('returns null for invalid values', () => {

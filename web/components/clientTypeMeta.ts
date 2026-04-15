@@ -32,6 +32,12 @@ const CLIENT_TYPE_META: Record<string, ClientTypeMeta> = {
     assetPath: '/channel-icons/mcp.svg',
     initials: 'M',
   },
+  admin: {
+    label: 'Admin',
+    tone: 'purple',
+    assetPath: null,
+    initials: 'A',
+  },
 };
 
 export const KNOWN_CLIENT_TYPES = Object.keys(CLIENT_TYPE_META);

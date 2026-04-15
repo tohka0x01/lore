@@ -3,6 +3,7 @@
 import axios, { AxiosInstance, InternalAxiosRequestConfig, AxiosResponse, AxiosError } from 'axios';
 
 export const AUTH_ERROR_EVENT = 'lore:auth-error';
+const WEB_CLIENT_TYPE = 'admin';
 
 export const api: AxiosInstance = axios.create({
   baseURL: '/api',
@@ -20,6 +21,15 @@ api.interceptors.request.use((config: InternalAxiosRequestConfig): InternalAxios
       config.headers.Authorization = `Bearer ${decodeURIComponent(token)}`;
     }
   }
+
+  const url = typeof config.url === 'string' ? config.url : '';
+  if (url.startsWith('/browse/')) {
+    config.params = {
+      ...(config.params && typeof config.params === 'object' ? config.params : {}),
+      client_type: WEB_CLIENT_TYPE,
+    };
+  }
+
   return config;
 });
 
