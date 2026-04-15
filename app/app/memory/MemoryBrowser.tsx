@@ -397,7 +397,7 @@ export default function MemoryBrowser(): React.JSX.Element {
                       </div>
                     )}
                     {node.disclosure && (
-                      <Notice tone="warning" icon={<span aria-hidden>⚠️</span>} className="max-w-2xl">
+                      <Notice tone="warning" className="max-w-2xl">
                         {node.disclosure}
                       </Notice>
                     )}
