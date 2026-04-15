@@ -33,11 +33,11 @@ if [[ "$(uname)" != "Darwin" ]]; then
   SED_INPLACE=(sed -i)
 fi
 
-# app/package.json
-"${SED_INPLACE[@]}" "s/\"version\": \"[^\"]*\"/\"version\": \"${VERSION}\"/" app/package.json
+# web/package.json
+"${SED_INPLACE[@]}" "s/\"version\": \"[^\"]*\"/\"version\": \"${VERSION}\"/" web/package.json
 
 # MCP server
-"${SED_INPLACE[@]}" "s/version: '[^']*'/version: '${VERSION}'/" app/server/mcpServer.ts
+"${SED_INPLACE[@]}" "s/version: '[^']*'/version: '${VERSION}'/" web/server/mcpServer.ts
 
 # Claude Code plugin
 "${SED_INPLACE[@]}" "s/\"version\": \"[^\"]*\"/\"version\": \"${VERSION}\"/" claudecode-plugin/.claude-plugin/plugin.json
@@ -50,8 +50,8 @@ fi
 # Verify
 echo ""
 echo "Updated files:"
-grep -n "\"version\"" app/package.json claudecode-plugin/.claude-plugin/plugin.json claudecode-plugin/.claude-plugin/marketplace.json openclaw-plugin/openclaw.plugin.json openclaw-plugin/package.json
-grep -n "version:" app/server/mcpServer.ts | head -1
+grep -n "\"version\"" web/package.json claudecode-plugin/.claude-plugin/plugin.json claudecode-plugin/.claude-plugin/marketplace.json openclaw-plugin/openclaw.plugin.json openclaw-plugin/package.json
+grep -n "version:" web/server/mcpServer.ts | head -1
 echo ""
 
 # Commit, tag, push

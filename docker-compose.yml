@@ -22,7 +22,7 @@ services:
   web:
     image: ${LORE_FRONTEND_IMAGE:-fffattiger/lore:ssr-20260326-1022-amd64}
     build:
-      context: ./app
+      context: ./web
     restart: unless-stopped
     depends_on:
       postgres:

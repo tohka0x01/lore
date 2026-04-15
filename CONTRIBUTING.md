@@ -10,7 +10,7 @@ Monorepo，三个 package：
 
 ```
 .
-├── app/                   # Next.js 14 应用（server + frontend + MCP endpoint）
+├── web/                   # Next.js 14 应用（server + frontend + MCP endpoint）
 │   ├── app/               #   App Router 页面 & API routes
 │   ├── server/lore/       #   核心业务逻辑（34+ modules，按功能拆分）
 │   ├── components/        #   共享 UI 组件 (TSX)
@@ -21,7 +21,7 @@ Monorepo，三个 package：
 └── docker-compose.yml
 ```
 
-`app/` 是核心。Server 代码按功能组织：`recall.ts`、`search.ts`、`dream*.ts`、`write.ts` 等，共享类型在 `types.ts`，常量在 `constants.ts`。
+`web/` 是核心。Server 代码按功能组织：`recall.ts`、`search.ts`、`dream*.ts`、`write.ts` 等，共享类型在 `types.ts`，常量在 `constants.ts`。
 
 ## 2. 开发环境搭建
 
@@ -39,7 +39,7 @@ git clone https://github.com/FFatTiger/lore.git
 cd lore
 
 # 2. 安装依赖
-cd app
+cd web
 cp .env.local.example .env.local
 # 编辑 .env.local，填写数据库连接和 embedding 配置
 npm install
@@ -104,14 +104,14 @@ import { parseUri } from './utils';
 ## 4. 版本管理
 
 - 遵循 **Semver**（MAJOR.MINOR.PATCH）
-- **唯一版本源**：`app/package.json` 的 `version` 字段（当前 `2.0.0`）
+- **唯一版本源**：`web/package.json` 的 `version` 字段（当前 `2.0.0`）
 - Plugin 版本跟随 server 版本
 - 版本号只在发布时修改，开发阶段不需要 bump
 
 ### Bump 流程
 
 ```bash
-cd app
+cd web
 # 手动修改 package.json 中的 version
 # 确保 plugin 版本同步更新
 ```
@@ -168,13 +168,13 @@ refactor: extract scoring strategies into standalone module
 
 ### 框架和约定
 
-- **Vitest**（配置在 `app/` 目录下）
+- **Vitest**（配置在 `web/` 目录下）
 - 测试文件放在对应模块的 `__tests__/` 目录中
 - 文件命名：`<模块名>.test.ts`
 
 ```
-app/server/lore/__tests__/boot.test.ts      # 测试 boot.ts
-app/server/lore/__tests__/recall.test.ts     # 测试 recall.ts
+web/server/lore/__tests__/boot.test.ts      # 测试 boot.ts
+web/server/lore/__tests__/recall.test.ts     # 测试 recall.ts
 openclaw-plugin/__tests__/hooks.test.ts      # 测试 hooks.ts
 ```
 
@@ -207,7 +207,7 @@ describe('bootView', () => {
 ### 运行测试
 
 ```bash
-cd app
+cd web
 npm test          # 运行一次
 npm run test:watch  # watch 模式
 ```
@@ -222,7 +222,7 @@ npm run test:watch  # watch 模式
 
 ### 详细步骤
 
-1. 在 `app/package.json` 中修改 `version`
+1. 在 `web/package.json` 中修改 `version`
 2. Commit（`chore: bump version to x.y.z`）
 3. Push 到 `main` 分支
 4. GitHub Actions 自动触发（`.github/workflows/docker-build.yml`）：
@@ -233,7 +233,7 @@ npm run test:watch  # watch 模式
 ### CI 触发条件
 
 Push 到 `main` 且修改了以下路径之一：
-- `app/**`
+- `web/**`
 - `claudecode-plugin/**`
 - `.github/workflows/docker-build.yml`
 

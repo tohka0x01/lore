@@ -47,4 +47,4 @@ build/
 # DB migration script (local only)
 migrate-db-rename.sql
 「纯干货」几万字都讲不明白的Memory架构与思考.pdf
-app/tsconfig.tsbuildinfo
+web/tsconfig.tsbuildinfo

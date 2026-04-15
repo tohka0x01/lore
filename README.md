@@ -153,7 +153,7 @@ Recall weights, scoring strategy, view LLM, embedding endpoint, dream schedule, 
 ### Local Development
 
 ```bash
-cd app
+cd web
 cp .env.local.example .env.local
 npm install
 npm run dev
@@ -329,7 +329,7 @@ Runtime configuration is managed through the Settings UI at `/settings`, organiz
 
 ```
 .
-├── app/                            # Next.js SSR app (TypeScript)
+├── web/                            # Next.js SSR app (TypeScript)
 │   ├── app/                        #   App Router pages & API routes
 │   │   ├── api/
 │   │   │   ├── browse/             #     Memory CRUD, search, recall, dream
