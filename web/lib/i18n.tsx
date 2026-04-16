@@ -62,8 +62,8 @@ const DICT: Record<'zh' | 'en', Record<string, string>> = {
     // ── setup
     'Setup required': '需要初始化',
     'First-run setup': '首次初始化',
-    'Initialize the three fixed startup memories before entering the normal Lore workflow.':
-      '先初始化 3 个固定启动记忆，再进入正常的 Lore 工作流。',
+    'Lore needs boot initialization before you can enter the normal workspace.':
+      '进入正常工作区之前，需要先完成 Lore 的 boot 初始化。',
     'Refresh status': '刷新状态',
     'Open settings': '打开设置',
     'Generate all drafts': '全部生成草稿',

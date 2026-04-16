@@ -74,6 +74,11 @@ export interface GenerateBootDraftsResponse {
   results: BootDraftResult[];
 }
 
+export interface BootSetupDecision {
+  kind: 'none' | 'prompt' | 'redirect';
+  target: string | null;
+}
+
 export function isSetupPath(pathname: string | null | undefined): boolean {
   const value = String(pathname || '');
   return value === '/setup' || value.startsWith('/setup/');
@@ -84,19 +89,36 @@ export function isSettingsPath(pathname: string | null | undefined): boolean {
   return value === '/settings' || value.startsWith('/settings/');
 }
 
+export function getBootSetupDecision(
+  pathname: string | null | undefined,
+  overallState: BootOverallState | null | undefined,
+  hasAcknowledgedPrompt = false,
+): BootSetupDecision {
+  if (!overallState) return { kind: 'none', target: null };
+
+  if (overallState !== 'complete') {
+    if (isSetupPath(pathname) || isSettingsPath(pathname)) {
+      return { kind: 'none', target: null };
+    }
+    if (!hasAcknowledgedPrompt) {
+      return { kind: 'prompt', target: '/setup' };
+    }
+    return { kind: 'redirect', target: '/setup' };
+  }
+
+  if (isSetupPath(pathname) || pathname === '/') {
+    return { kind: 'redirect', target: '/memory' };
+  }
+
+  return { kind: 'none', target: null };
+}
+
 export function getBootSetupRedirect(
   pathname: string | null | undefined,
   overallState: BootOverallState | null | undefined,
 ): string | null {
-  if (!overallState) return null;
-
-  if (overallState !== 'complete') {
-    if (isSetupPath(pathname) || isSettingsPath(pathname)) return null;
-    return '/setup';
-  }
-
-  if (isSetupPath(pathname) || pathname === '/') return '/memory';
-  return null;
+  const decision = getBootSetupDecision(pathname, overallState, true);
+  return decision.kind === 'redirect' ? decision.target : null;
 }
 
 export function dispatchBootStatusChanged(): void {

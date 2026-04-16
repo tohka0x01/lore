@@ -13,6 +13,8 @@ interface ConfirmOptions {
   confirmLabel?: string;
   cancelLabel?: string;
   destructive?: boolean;
+  hideCancel?: boolean;
+  dismissible?: boolean;
 }
 
 interface ConfirmContextValue {
@@ -33,14 +35,27 @@ interface DialogState extends ConfirmOptions {
 }
 
 function ConfirmModal({ dialog, onConfirm, onCancel }: { dialog: DialogState; onConfirm: () => void; onCancel: () => void }): React.JSX.Element {
+  const dismissible = dialog.dismissible !== false;
   return (
-    <Dialog.Root open onOpenChange={(open) => { if (!open) onCancel(); }}>
+    <Dialog.Root open onOpenChange={(open) => { if (!open && dismissible) onCancel(); }}>
       <Dialog.Portal>
         <Dialog.Overlay className="fixed inset-0 z-[90] bg-black/50 backdrop-blur-sm animate-in" />
         <Dialog.Content
           className="animate-in fixed left-1/2 top-1/2 z-[91] w-[calc(100vw-2rem)] max-w-[400px] -translate-x-1/2 -translate-y-1/2 rounded-2xl border border-separator-thin bg-bg-elevated p-6 shadow-xl outline-none"
-          onEscapeKeyDown={onCancel}
-          onPointerDownOutside={onCancel}
+          onEscapeKeyDown={(event) => {
+            if (!dismissible) {
+              event.preventDefault();
+              return;
+            }
+            onCancel();
+          }}
+          onPointerDownOutside={(event) => {
+            if (!dismissible) {
+              event.preventDefault();
+              return;
+            }
+            onCancel();
+          }}
         >
           {dialog.title ? (
             <Dialog.Title className="mb-2 text-[17px] font-semibold tracking-tight text-txt-primary">
@@ -51,11 +66,13 @@ function ConfirmModal({ dialog, onConfirm, onCancel }: { dialog: DialogState; on
             {dialog.message}
           </Dialog.Description>
           <div className="flex justify-end gap-2">
-            <Dialog.Close asChild>
-              <Button variant="ghost" size="sm" onClick={onCancel}>
-                {dialog.cancelLabel || 'Cancel'}
-              </Button>
-            </Dialog.Close>
+            {!dialog.hideCancel ? (
+              <Dialog.Close asChild>
+                <Button variant="ghost" size="sm" onClick={onCancel}>
+                  {dialog.cancelLabel || 'Cancel'}
+                </Button>
+              </Dialog.Close>
+            ) : null}
             <Button
               variant={dialog.destructive ? 'destructive' : 'primary'}
               size="sm"

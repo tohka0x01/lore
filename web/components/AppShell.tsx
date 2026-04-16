@@ -2,15 +2,17 @@
 
 import React, { useState, useEffect, useCallback, useRef, useMemo, ReactNode } from 'react';
 import { useRouter, usePathname } from 'next/navigation';
-import { Sun, Moon, HardDrive } from 'lucide-react';
+import { Sun, Moon } from 'lucide-react';
 import clsx from 'clsx';
 import { getDomains, getBootStatus, AUTH_ERROR_EVENT } from '../lib/api';
-import { getBootSetupRedirect, BOOT_STATUS_CHANGED_EVENT, type BootOverallState } from '@/lib/bootSetup';
+import { getBootSetupDecision, BOOT_STATUS_CHANGED_EVENT, type BootOverallState } from '@/lib/bootSetup';
 import { LanguageProvider, useT } from '../lib/i18n';
 import { ThemeProvider, useTheme } from '../lib/theme';
 import TokenAuth from './TokenAuth';
-import { ConfirmProvider } from './ConfirmDialog';
+import { ConfirmProvider, useConfirm } from './ConfirmDialog';
 import { AxiosError } from 'axios';
+
+const BOOT_SETUP_ACK_KEY = 'lore-boot-setup-confirmed';
 
 interface Tab {
   href: string;
@@ -199,28 +201,51 @@ interface AppShellInnerProps {
 function AppShellInner({ children }: AppShellInnerProps): React.JSX.Element {
   const router = useRouter();
   const pathname = usePathname() || '';
+  const { confirm } = useConfirm();
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [isCheckingAuth, setIsCheckingAuth] = useState(true);
   const [backendError, setBackendError] = useState(false);
   const [bootOverallState, setBootOverallState] = useState<BootOverallState | null>(null);
   const [hasCheckedBoot, setHasCheckedBoot] = useState(false);
   const [bootRefreshToken, setBootRefreshToken] = useState(0);
+  const [hasAcknowledgedBootPrompt, setHasAcknowledgedBootPrompt] = useState(false);
+  const promptingBootSetupRef = useRef(false);
   const { t } = useT();
 
   const handleAuthError = useCallback(() => {
     setIsAuthenticated(false);
     setBootOverallState(null);
     setHasCheckedBoot(false);
+    setHasAcknowledgedBootPrompt(false);
+    promptingBootSetupRef.current = false;
+    try {
+      window.sessionStorage.removeItem(BOOT_SETUP_ACK_KEY);
+    } catch {}
   }, []);
   const handleAuthenticated = useCallback(() => {
     setIsAuthenticated(true);
     setBackendError(false);
     setBootOverallState(null);
     setHasCheckedBoot(false);
+    promptingBootSetupRef.current = false;
+    try {
+      setHasAcknowledgedBootPrompt(window.sessionStorage.getItem(BOOT_SETUP_ACK_KEY) === '1');
+    } catch {
+      setHasAcknowledgedBootPrompt(false);
+    }
   }, []);
   const handleBootStatusChanged = useCallback(() => {
     setBootRefreshToken((prev) => prev + 1);
   }, []);
+
+  useEffect(() => {
+    window.addEventListener(AUTH_ERROR_EVENT, handleAuthError);
+    window.addEventListener(BOOT_STATUS_CHANGED_EVENT, handleBootStatusChanged);
+    return () => {
+      window.removeEventListener(AUTH_ERROR_EVENT, handleAuthError);
+      window.removeEventListener(BOOT_STATUS_CHANGED_EVENT, handleBootStatusChanged);
+    };
+  }, [handleAuthError, handleBootStatusChanged]);
 
   useEffect(() => {
     let mounted = true;
@@ -276,30 +301,62 @@ function AppShellInner({ children }: AppShellInnerProps): React.JSX.Element {
   }, [bootRefreshToken, isAuthenticated]);
 
   useEffect(() => {
-    window.addEventListener(AUTH_ERROR_EVENT, handleAuthError);
-    return () => window.removeEventListener(AUTH_ERROR_EVENT, handleAuthError);
-  }, [handleAuthError]);
+    if (!isAuthenticated) return;
+    try {
+      setHasAcknowledgedBootPrompt(window.sessionStorage.getItem(BOOT_SETUP_ACK_KEY) === '1');
+    } catch {
+      setHasAcknowledgedBootPrompt(false);
+    }
+  }, [isAuthenticated]);
 
   useEffect(() => {
-    window.addEventListener(BOOT_STATUS_CHANGED_EVENT, handleBootStatusChanged);
-    return () => window.removeEventListener(BOOT_STATUS_CHANGED_EVENT, handleBootStatusChanged);
-  }, [handleBootStatusChanged]);
+    if (!hasCheckedBoot) return;
+    if (bootOverallState !== 'complete') return;
+    setHasAcknowledgedBootPrompt(false);
+    promptingBootSetupRef.current = false;
+    try {
+      window.sessionStorage.removeItem(BOOT_SETUP_ACK_KEY);
+    } catch {}
+  }, [bootOverallState, hasCheckedBoot]);
 
-  const bootRedirect = useMemo(() => {
-    if (!isAuthenticated || !hasCheckedBoot) return null;
-    return getBootSetupRedirect(pathname, bootOverallState);
-  }, [bootOverallState, hasCheckedBoot, isAuthenticated, pathname]);
+  const bootSetupDecision = useMemo(() => {
+    if (!isAuthenticated || !hasCheckedBoot) return { kind: 'none', target: null };
+    return getBootSetupDecision(pathname, bootOverallState, hasAcknowledgedBootPrompt);
+  }, [bootOverallState, hasAcknowledgedBootPrompt, hasCheckedBoot, isAuthenticated, pathname]);
+
+  const bootRedirect = bootSetupDecision.kind === 'redirect' ? bootSetupDecision.target : null;
+  const shouldPromptBootSetup = bootSetupDecision.kind === 'prompt';
 
   const homeFallbackRedirect = useMemo(() => {
     if (!isAuthenticated || !hasCheckedBoot) return null;
-    if (bootRedirect) return null;
+    if (bootSetupDecision.kind !== 'none') return null;
     return pathname === '/' ? '/memory' : null;
-  }, [bootRedirect, hasCheckedBoot, isAuthenticated, pathname]);
+  }, [bootSetupDecision.kind, hasCheckedBoot, isAuthenticated, pathname]);
 
   useEffect(() => {
     if (!bootRedirect || bootRedirect === pathname) return;
     router.replace(bootRedirect);
   }, [bootRedirect, pathname, router]);
+
+  useEffect(() => {
+    if (!shouldPromptBootSetup || promptingBootSetupRef.current) return;
+    promptingBootSetupRef.current = true;
+    void confirm({
+      title: t('Setup required'),
+      message: t('Lore needs boot initialization before you can enter the normal workspace.'),
+      confirmLabel: t('Continue'),
+      hideCancel: true,
+      dismissible: false,
+    }).then((accepted) => {
+      promptingBootSetupRef.current = false;
+      if (!accepted) return;
+      try {
+        window.sessionStorage.setItem(BOOT_SETUP_ACK_KEY, '1');
+      } catch {}
+      setHasAcknowledgedBootPrompt(true);
+      router.replace('/setup');
+    });
+  }, [confirm, router, shouldPromptBootSetup, t]);
 
   useEffect(() => {
     if (!homeFallbackRedirect || homeFallbackRedirect === pathname) return;
@@ -322,7 +379,7 @@ function AppShellInner({ children }: AppShellInnerProps): React.JSX.Element {
     );
   }
 
-  if (homeFallbackRedirect && homeFallbackRedirect !== pathname) {
+  if (shouldPromptBootSetup) {
     return (
       <div className="flex h-screen items-center justify-center bg-bg-system">
         <div className="h-6 w-6 animate-spin rounded-full border-2 border-fill-tertiary border-t-sys-blue" />

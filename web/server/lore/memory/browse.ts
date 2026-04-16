@@ -29,7 +29,7 @@ interface MemoryRow {
 }
 
 interface ChildRow {
-  edge_id: number;
+  edge_id: number | string;
   child_uuid: string;
   priority: number;
   disclosure: string | null;
@@ -380,6 +380,12 @@ async function getUpdaterSummariesByNodeUuid(nodeUuids: string[]): Promise<Map<s
   return map;
 }
 
+function normalizeEdgeId(value: unknown): number | null {
+  const edgeId = Number(value);
+  if (!Number.isFinite(edgeId)) return null;
+  return edgeId;
+}
+
 async function getChildren(
   nodeUuid: string,
   contextDomain: string,
@@ -410,8 +416,20 @@ async function getChildren(
   const childRows: ChildRow[] = childResult.rows;
   if (childRows.length === 0) return [];
 
-  const childUuids = [...new Set(childRows.map((row) => row.child_uuid))];
-  const edgeIds = [...new Set(childRows.map((row) => row.edge_id))];
+  const normalizedChildRows = childRows
+    .map((row) => {
+      const edgeId = normalizeEdgeId(row.edge_id);
+      if (edgeId == null) return null;
+      return {
+        ...row,
+        edge_id: edgeId,
+      };
+    })
+    .filter((row): row is ChildRow & { edge_id: number } => row !== null);
+  if (normalizedChildRows.length === 0) return [];
+
+  const childUuids = [...new Set(normalizedChildRows.map((row) => row.child_uuid))];
+  const edgeIds = [...new Set(normalizedChildRows.map((row) => row.edge_id))];
   const latestWriteMetaByNodeUuid = await getLatestWriteMetaByNodeUuid(childUuids);
   const updaterSummariesByNodeUuid = await getUpdaterSummariesByNodeUuid(childUuids);
 
@@ -439,17 +457,19 @@ async function getChildren(
   );
 
   const pathsByEdgeId = new Map<number, PathEntry[]>();
-  for (const row of pathResult.rows) {
-    const list = pathsByEdgeId.get(row.edge_id) || [];
-    list.push({ domain: row.domain, path: row.path });
-    pathsByEdgeId.set(row.edge_id, list);
+  for (const rawRow of pathResult.rows as Record<string, unknown>[]) {
+    const edgeId = normalizeEdgeId(rawRow.edge_id);
+    if (edgeId == null) continue;
+    const list = pathsByEdgeId.get(edgeId) || [];
+    list.push({ domain: String(rawRow.domain || ''), path: String(rawRow.path || '') });
+    pathsByEdgeId.set(edgeId, list);
   }
 
   const prefix = contextPath ? `${contextPath}/` : null;
   const children: ChildNode[] = [];
   const seen = new Set<string>();
 
-  for (const row of childRows) {
+  for (const row of normalizedChildRows) {
     if (seen.has(row.child_uuid)) continue;
     seen.add(row.child_uuid);
 

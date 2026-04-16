@@ -738,6 +738,35 @@ describe('getNodePayload', () => {
     expect(result.node.last_updated_at).toBe(new Date('2025-01-05T00:00:00Z').toISOString());
   });
 
+  it('returns top-level root children when edge ids come back as strings', async () => {
+    mockSql
+      .mockResolvedValueOnce({
+        rows: [
+          { edge_id: '100', child_uuid: 'uuid-agent', priority: 0, disclosure: null, content: 'agent content' },
+          { edge_id: '101', child_uuid: 'uuid-soul', priority: 0, disclosure: null, content: 'soul content' },
+        ],
+        rowCount: 2,
+      } as any)
+      .mockResolvedValueOnce({ rows: [], rowCount: 0 } as any)
+      .mockResolvedValueOnce({ rows: [], rowCount: 0 } as any)
+      .mockResolvedValueOnce({ rows: [], rowCount: 0 } as any)
+      .mockResolvedValueOnce({ rows: [], rowCount: 0 } as any)
+      .mockResolvedValueOnce({ rows: [], rowCount: 0 } as any)
+      .mockResolvedValueOnce({
+        rows: [
+          { edge_id: 100, domain: 'core', path: 'agent' },
+          { edge_id: 101, domain: 'core', path: 'soul' },
+        ],
+        rowCount: 2,
+      } as any);
+
+    const result = await getNodePayload({ domain: 'core', path: '' });
+    expect(result.children).toEqual([
+      expect.objectContaining({ uri: 'core://agent', path: 'agent', node_uuid: 'uuid-agent' }),
+      expect.objectContaining({ uri: 'core://soul', path: 'soul', node_uuid: 'uuid-soul' }),
+    ]);
+  });
+
   it('uses default domain=core and path="" when no options provided', async () => {
     // empty path → virtual root, no sql for path lookup
     mockSql
