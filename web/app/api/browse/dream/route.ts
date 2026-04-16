@@ -1,7 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { requireBearerAuth } from '../../../../server/auth';
+import { requireApiAuth, requireBearerAuth } from '../../../../server/auth';
 import { runDream, getDreamDiary, getDreamEntry, getDreamConfig, updateDreamConfig, rollbackDream } from '../../../../server/lore/dream/dreamDiary';
 import { initDreamScheduler } from '../../../../server/lore/dream/dreamScheduler';
+import {
+  isDreamWorkflowTerminalEvent,
+  listDreamWorkflowEvents,
+  subscribeDreamWorkflow,
+} from '../../../../server/lore/dream/dreamWorkflow';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -10,12 +15,73 @@ export const maxDuration = 300;
 // Start scheduler on first module load (idempotent)
 initDreamScheduler();
 
-export async function GET(request: NextRequest): Promise<NextResponse> {
-  const unauthorized = requireBearerAuth(request);
-  if (unauthorized) return unauthorized;
+function sseEvent(event: string, data: unknown): string {
+  return `event: ${event}\ndata: ${JSON.stringify(data)}\n\n`;
+}
 
+export async function GET(request: NextRequest): Promise<Response> {
   const { searchParams } = new URL(request.url);
   const action = searchParams.get('action') || '';
+
+  if (action === 'workflow_stream') {
+    const unauthorized = requireApiAuth(request);
+    if (unauthorized) return unauthorized;
+
+    const id = Number(searchParams.get('id') || 0);
+    const sinceId = Number(searchParams.get('since_id') || 0);
+    const entry = await getDreamEntry(id);
+    if (!entry) return NextResponse.json({ detail: 'Entry not found' }, { status: 404 });
+
+    const encoder = new TextEncoder();
+    let unsubscribe: (() => void) | null = null;
+
+    const stream = new ReadableStream<Uint8Array>({
+      async start(controller) {
+        const send = (event: string, data: unknown) => controller.enqueue(encoder.encode(sseEvent(event, data)));
+
+        try {
+          const existing = await listDreamWorkflowEvents(id, sinceId);
+          for (const workflowEvent of existing) {
+            send('workflow_event', workflowEvent);
+          }
+
+          if (entry.status !== 'running') {
+            send('done', { id, status: entry.status });
+            controller.close();
+            return;
+          }
+
+          unsubscribe = subscribeDreamWorkflow(id, (workflowEvent) => {
+            send('workflow_event', workflowEvent);
+            if (isDreamWorkflowTerminalEvent(workflowEvent.event_type)) {
+              send('done', { id, status: workflowEvent.event_type === 'run_completed' ? 'completed' : 'error' });
+              unsubscribe?.();
+              unsubscribe = null;
+              controller.close();
+            }
+          });
+        } catch (error) {
+          send('error', { detail: (error as Error).message || 'Workflow stream failed' });
+          controller.close();
+        }
+      },
+      cancel() {
+        unsubscribe?.();
+        unsubscribe = null;
+      },
+    });
+
+    return new Response(stream, {
+      headers: {
+        'Content-Type': 'text/event-stream; charset=utf-8',
+        'Cache-Control': 'no-cache, no-transform',
+        Connection: 'keep-alive',
+      },
+    });
+  }
+
+  const unauthorized = requireBearerAuth(request);
+  if (unauthorized) return unauthorized;
 
   try {
     if (action === 'entry') {

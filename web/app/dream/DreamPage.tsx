@@ -1,12 +1,14 @@
 'use client';
 
 import React, { useEffect, useState, useCallback, useMemo } from 'react';
+import { useRouter, useSearchParams } from 'next/navigation';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { api } from '../../lib/api';
 import { useT } from '../../lib/i18n';
 import DiffViewer from '../../components/DiffViewer';
 import { PageCanvas, PageTitle, Section, Button, Badge, StatCard, Table, EmptyState, Notice, inputClass, AppSelect } from '../../components/ui';
+import { buildUrlWithSearchParams, readStringParam } from '../../lib/url-state';
 import { useConfirm } from '../../components/ConfirmDialog';
 
 function fmtDuration(ms: number | null | undefined): string {
@@ -25,6 +27,117 @@ function fmtDuration(ms: number | null | undefined): string {
 function fmtDate(iso: string | null | undefined): string {
   if (!iso) return '—';
   try { return new Date(iso).toLocaleString(); } catch { return iso; }
+}
+
+function mergeWorkflowEvents(existing: DreamWorkflowEvent[] | undefined, incoming: DreamWorkflowEvent[]): DreamWorkflowEvent[] {
+  const byId = new Map<number, DreamWorkflowEvent>();
+  for (const event of existing || []) byId.set(event.id, event);
+  for (const event of incoming) byId.set(event.id, event);
+  return Array.from(byId.values()).sort((a, b) => a.id - b.id);
+}
+
+function pickWorkflowArgs(payload: Record<string, unknown> | undefined): string {
+  if (!payload) return '';
+  const preferredKeys = ['uri', 'old_uri', 'new_uri', 'query', 'keyword', 'node_uuid', 'days', 'limit', 'priority'];
+  const compact: Record<string, unknown> = {};
+  for (const key of preferredKeys) {
+    if (payload[key] !== undefined) compact[key] = payload[key];
+  }
+  if (payload.tool && Object.keys(compact).length === 0) {
+    for (const [key, value] of Object.entries(payload)) {
+      if (key === 'tool' || key === 'turn' || key === 'ok' || key === 'result_preview') continue;
+      compact[key] = value;
+    }
+  }
+  const text = JSON.stringify(compact);
+  return text && text !== '{}' ? text : '';
+}
+
+function buildWorkflowRows(workflowEvents: DreamWorkflowEvent[]): Array<{ key: string; label: string; tone: 'green' | 'red' | 'orange' | 'blue' | 'default'; detail: string; time: string | null; }> {
+  const rows: Array<{ key: string; label: string; tone: 'green' | 'red' | 'orange' | 'blue' | 'default'; detail: string; time: string | null; }> = [];
+  const pendingTools = new Map<string, DreamWorkflowEvent>();
+
+  for (const event of workflowEvents) {
+    if (event.event_type === 'tool_call_started') {
+      const tool = String(event.payload?.tool || 'tool');
+      const turn = String(event.payload?.turn || '');
+      pendingTools.set(`${turn}:${tool}`, event);
+      continue;
+    }
+
+    if (event.event_type === 'tool_call_finished') {
+      const tool = String(event.payload?.tool || 'tool');
+      const turn = String(event.payload?.turn || '');
+      const key = `${turn}:${tool}`;
+      const started = pendingTools.get(key);
+      pendingTools.delete(key);
+      rows.push({
+        key: `${event.id}`,
+        label: tool,
+        tone: event.payload?.ok === false ? 'red' : 'blue',
+        detail: pickWorkflowArgs((started?.payload as Record<string, unknown> | undefined) || event.payload),
+        time: event.created_at || started?.created_at || null,
+      });
+      continue;
+    }
+
+    if (event.event_type === 'tool_call_started') continue;
+    if (event.event_type === 'llm_turn_started') continue;
+
+    if (event.event_type === 'phase_started' || event.event_type === 'phase_completed') {
+      rows.push({
+        key: `${event.id}`,
+        label: String(event.payload?.label || workflowEventLabel(event.event_type)),
+        tone: workflowEventTone(event.event_type),
+        detail: '',
+        time: event.created_at || null,
+      });
+      continue;
+    }
+
+    rows.push({
+      key: `${event.id}`,
+      label: workflowEventLabel(event.event_type),
+      tone: workflowEventTone(event.event_type),
+      detail: event.event_type === 'assistant_note' ? String(event.payload?.message || '') : '',
+      time: event.created_at || null,
+    });
+  }
+
+  for (const event of pendingTools.values()) {
+    rows.push({
+      key: `pending-${event.id}`,
+      label: String(event.payload?.tool || 'tool'),
+      tone: 'blue',
+      detail: pickWorkflowArgs(event.payload),
+      time: event.created_at || null,
+    });
+  }
+
+  return rows;
+}
+
+function workflowEventLabel(eventType: string): string {
+  switch (eventType) {
+    case 'run_started': return 'Run started';
+    case 'phase_started': return 'Phase started';
+    case 'phase_completed': return 'Phase completed';
+    case 'llm_turn_started': return 'LLM turn';
+    case 'tool_call_started': return 'Tool started';
+    case 'tool_call_finished': return 'Tool finished';
+    case 'assistant_note': return 'Assistant note';
+    case 'run_completed': return 'Run completed';
+    case 'run_failed': return 'Run failed';
+    default: return eventType.replace(/_/g, ' ');
+  }
+}
+
+function workflowEventTone(eventType: string): 'green' | 'red' | 'orange' | 'blue' | 'default' {
+  if (eventType === 'run_completed') return 'green';
+  if (eventType === 'run_failed') return 'red';
+  if (eventType === 'phase_completed' || eventType === 'tool_call_finished') return 'green';
+  if (eventType === 'assistant_note') return 'orange';
+  return 'blue';
 }
 
 type BadgeStatusTone = 'green' | 'red' | 'soft' | 'blue';
@@ -47,6 +160,14 @@ function statusStatTone(s: string): StatStatusTone {
 interface ToolCall {
   tool: string;
   args?: unknown;
+}
+
+interface DreamWorkflowEvent {
+  id: number;
+  diary_id: number;
+  event_type: string;
+  payload?: Record<string, unknown>;
+  created_at?: string | null;
 }
 
 interface MemoryChangeBefore {
@@ -89,6 +210,7 @@ interface DreamEntry {
   summary?: DreamSummary;
   narrative?: string;
   tool_calls?: ToolCall[];
+  workflow_events?: DreamWorkflowEvent[];
   memory_changes?: MemoryChange[];
   error?: string;
 }
@@ -98,32 +220,53 @@ interface DreamConfig {
   schedule_hour: number;
 }
 
+interface DreamDiaryListResponse {
+  entries?: DreamEntry[];
+  total?: number;
+}
+
 // ─── Main Component ──────────────────────────────────────────────────
 
 export default function DreamPage(): React.JSX.Element {
   const { t } = useT();
   const { confirm: confirmDialog } = useConfirm();
+  const router = useRouter();
+  const searchParams = useSearchParams();
+  const selectedId = readStringParam(searchParams, 'entry');
   const [entries, setEntries] = useState<DreamEntry[]>([]);
   const [total, setTotal] = useState(0);
   const [loading, setLoading] = useState(true);
   const [running, setRunning] = useState(false);
   const [rollingBack, setRollingBack] = useState(false);
   const [config, setConfig] = useState<DreamConfig>({ enabled: true, schedule_hour: 3 });
-  const [selectedId, setSelectedId] = useState<string | number | null>(null);
   const [detail, setDetail] = useState<DreamEntry | null>(null);
   const [detailLoading, setDetailLoading] = useState(false);
 
+  const loadEntry = useCallback(async (id: string | number): Promise<DreamEntry> => {
+    return api.get('/browse/dream', { params: { action: 'entry', id } }).then((r) => r.data);
+  }, []);
+
+  const fetchDiaryPage = useCallback(async (): Promise<DreamDiaryListResponse> => {
+    return api.get('/browse/dream', { params: { limit: 20, offset: 0 } }).then((r) => r.data as DreamDiaryListResponse);
+  }, []);
+
+  const applyDiaryPage = useCallback((data: DreamDiaryListResponse) => {
+    setEntries(data.entries || []);
+    setTotal(data.total || 0);
+  }, []);
+
   const loadDiary = useCallback(async () => {
     try {
-      const data = await api.get('/browse/dream', { params: { limit: 20, offset: 0 } }).then((r) => r.data);
-      setEntries(data.entries || []);
-      setTotal(data.total || 0);
+      const data = await fetchDiaryPage();
+      applyDiaryPage(data);
+      return data;
     } catch (err) {
       console.error('Failed to load dream diary', err);
+      return { entries: [], total: 0 } satisfies DreamDiaryListResponse;
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [applyDiaryPage, fetchDiaryPage]);
 
   const loadConfig = useCallback(async () => {
     try {
@@ -132,12 +275,75 @@ export default function DreamPage(): React.JSX.Element {
     } catch {}
   }, []);
 
+  const navigateToDiary = useCallback((mode: 'push' | 'replace' = 'push') => {
+    const href = buildUrlWithSearchParams('/dream', searchParams, { entry: '' }, { entry: '' });
+    if (mode === 'replace') router.replace(href);
+    else router.push(href);
+  }, [router, searchParams]);
+
+  const navigateToEntry = useCallback((id: string | number, mode: 'push' | 'replace' = 'push') => {
+    const href = buildUrlWithSearchParams('/dream', searchParams, { entry: id }, { entry: '' });
+    if (mode === 'replace') router.replace(href);
+    else router.push(href);
+  }, [router, searchParams]);
+
   useEffect(() => { loadDiary(); loadConfig(); }, [loadDiary, loadConfig]);
 
+  useEffect(() => {
+    if (!selectedId) {
+      setDetail(null);
+      setDetailLoading(false);
+      return;
+    }
+
+    let cancelled = false;
+    setDetail(null);
+    setDetailLoading(true);
+    loadEntry(selectedId)
+      .then((entry) => {
+        if (!cancelled) setDetail(entry);
+      })
+      .catch(() => {
+        if (!cancelled) setDetail(null);
+      })
+      .finally(() => {
+        if (!cancelled) setDetailLoading(false);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [loadEntry, selectedId]);
+
+  const waitForNewRunningEntry = useCallback(async (knownIds: Set<string>): Promise<DreamEntry | null> => {
+    const deadline = Date.now() + 15_000;
+    while (Date.now() < deadline) {
+      try {
+        const data = await fetchDiaryPage();
+        applyDiaryPage(data);
+        const nextRunningEntry = (data.entries || []).find((entry) => entry.status === 'running' && !knownIds.has(String(entry.id)));
+        if (nextRunningEntry) return nextRunningEntry;
+      } catch {}
+      await new Promise((resolve) => window.setTimeout(resolve, 250));
+    }
+    return null;
+  }, [applyDiaryPage, fetchDiaryPage]);
+
   const handleRun = async () => {
+    const knownIds = new Set(entries.map((entry) => String(entry.id)));
     setRunning(true);
     try {
-      await api.post('/browse/dream', { action: 'run' }).then((r) => r.data);
+      const runRequest = api.post('/browse/dream', { action: 'run' }).then((r) => r.data as DreamEntry);
+      let openedEntryId: string | number | null = null;
+      const nextRunningEntry = await waitForNewRunningEntry(knownIds);
+      if (nextRunningEntry) {
+        openedEntryId = nextRunningEntry.id;
+        navigateToEntry(nextRunningEntry.id);
+      }
+      const result = await runRequest;
+      if (openedEntryId == null && result?.id != null) {
+        navigateToEntry(result.id);
+      }
       await loadDiary();
     } catch (err) {
       console.error('Dream failed', err);
@@ -153,19 +359,13 @@ export default function DreamPage(): React.JSX.Element {
     } catch {}
   };
 
-  const handleSelect = async (row: Record<string, unknown>) => {
-    setSelectedId(row.id as string | number);
-    setDetail(null);
-    setDetailLoading(true);
-    try {
-      const entry = await api.get('/browse/dream', { params: { action: 'entry', id: row.id } }).then((r) => r.data);
-      setDetail(entry);
-    } catch {} finally {
-      setDetailLoading(false);
-    }
+  const handleSelect = (row: Record<string, unknown>) => {
+    const id = String(row.id || '').trim();
+    if (!id) return;
+    navigateToEntry(id);
   };
 
-  const handleBack = () => { setSelectedId(null); setDetail(null); };
+  const handleBack = () => { navigateToDiary('replace'); };
 
   const handleRollback = async (id: string | number) => {
     const ok = await confirmDialog({ message: t('Confirm rollback? This will reverse all changes from this dream.'), destructive: true, confirmLabel: t('Rollback') });
@@ -174,7 +374,7 @@ export default function DreamPage(): React.JSX.Element {
     try {
       await api.post('/browse/dream', { action: 'rollback', id }).then((r) => r.data);
       await loadDiary();
-      handleBack();
+      navigateToDiary('replace');
     } catch (err) {
       console.error('Rollback failed', err);
     } finally {
@@ -182,7 +382,7 @@ export default function DreamPage(): React.JSX.Element {
     }
   };
 
-  const latestRollbackId = entries.find((e) => e.status === 'completed' || e.status === 'error')?.id || null;
+  const latestRollbackId = String(entries.find((e) => e.status === 'completed' || e.status === 'error')?.id || '');
 
   // ─── Detail View ─────────────────────────────────
 
@@ -196,6 +396,8 @@ export default function DreamPage(): React.JSX.Element {
           rollingBack={rollingBack}
           onBack={handleBack}
           onRollback={() => handleRollback(selectedId)}
+          onRefreshEntry={loadEntry}
+          onEntryChange={setDetail}
           t={t}
         />
       </PageCanvas>
@@ -272,6 +474,7 @@ export default function DreamPage(): React.JSX.Element {
             rows={entries as unknown as Record<string, unknown>[]}
             empty={t('No diary entries yet. Run your first dream!')}
             onRowClick={handleSelect}
+            activeRowKey={selectedId}
           />
         )}
       </Section>
@@ -288,10 +491,75 @@ interface DetailViewProps {
   rollingBack: boolean;
   onBack: () => void;
   onRollback: () => void;
+  onRefreshEntry: (id: string | number) => Promise<DreamEntry>;
+  onEntryChange: React.Dispatch<React.SetStateAction<DreamEntry | null>>;
   t: (key: string) => string;
 }
 
-function DetailView({ entry, loading, canRollback, rollingBack, onBack, onRollback, t }: DetailViewProps): React.JSX.Element {
+function DetailView({ entry, loading, canRollback, rollingBack, onBack, onRollback, onRefreshEntry, onEntryChange, t }: DetailViewProps): React.JSX.Element {
+  useEffect(() => {
+    if (!entry || entry.status !== 'running') return;
+
+    let closed = false;
+    let source: EventSource | null = null;
+    const lastEventId = entry.workflow_events?.at(-1)?.id || 0;
+    const params = new URLSearchParams({
+      action: 'workflow_stream',
+      id: String(entry.id),
+    });
+    if (lastEventId > 0) params.set('since_id', String(lastEventId));
+    source = new EventSource(`/api/browse/dream?${params.toString()}`);
+
+    const handleWorkflowEvent = (ev: MessageEvent<string>) => {
+      if (closed) return;
+      try {
+        const workflowEvent = JSON.parse(ev.data) as DreamWorkflowEvent;
+        onEntryChange((prev) => {
+          if (!prev || String(prev.id) !== String(entry.id)) return prev;
+          return {
+            ...prev,
+            workflow_events: mergeWorkflowEvents(prev.workflow_events, [workflowEvent]),
+          };
+        });
+      } catch {}
+    };
+
+    const handleDone = async () => {
+      if (closed) return;
+      source?.close();
+      source = null;
+      try {
+        const refreshed = await onRefreshEntry(entry.id);
+        if (!closed) onEntryChange(refreshed);
+      } catch {}
+    };
+
+    const handleError = () => {
+      source?.close();
+      source = null;
+    };
+
+    source.addEventListener('workflow_event', handleWorkflowEvent as EventListener);
+    source.addEventListener('done', handleDone as EventListener);
+    source.addEventListener('error', handleError as EventListener);
+    source.onerror = handleError;
+
+    return () => {
+      closed = true;
+      source?.close();
+    };
+  }, [entry, onEntryChange, onRefreshEntry]);
+
+  const stats = useMemo(() => {
+    const tc = entry?.tool_calls || [];
+    return {
+      viewed: tc.filter((c) => c.tool === 'get_node').length,
+      modified: tc.filter((c) => c.tool === 'update_node').length,
+      created: tc.filter((c) => c.tool === 'create_node').length,
+      deleted: tc.filter((c) => c.tool === 'delete_node').length,
+    };
+  }, [entry]);
+
   if (loading || !entry) {
     return (
       <>
@@ -302,16 +570,6 @@ function DetailView({ entry, loading, canRollback, rollingBack, onBack, onRollba
       </>
     );
   }
-
-  const stats = useMemo(() => {
-    const tc = entry.tool_calls || [];
-    return {
-      viewed: tc.filter((c) => c.tool === 'get_node').length,
-      modified: tc.filter((c) => c.tool === 'update_node').length,
-      created: tc.filter((c) => c.tool === 'create_node').length,
-      deleted: tc.filter((c) => c.tool === 'delete_node').length,
-    };
-  }, [entry]);
 
   return (
     <>
@@ -344,6 +602,15 @@ function DetailView({ entry, loading, canRollback, rollingBack, onBack, onRollba
             <ReactMarkdown remarkPlugins={[remarkGfm]}>{entry.narrative}</ReactMarkdown>
           </div>
         </Section>
+      )}
+
+      {/* Workflow */}
+      {(entry.status === 'running' || (entry.workflow_events && entry.workflow_events.length > 0)) && (
+        <AgentWorkflowSection
+          workflowEvents={entry.workflow_events || []}
+          defaultExpanded={entry.status === 'running'}
+          t={t}
+        />
       )}
 
       {/* Memory changes diff */}
@@ -386,6 +653,52 @@ function DetailView({ entry, loading, canRollback, rollingBack, onBack, onRollba
 interface ToolCallsSectionProps {
   toolCalls: ToolCall[];
   t: (key: string) => string;
+}
+
+interface AgentWorkflowSectionProps {
+  workflowEvents: DreamWorkflowEvent[];
+  defaultExpanded: boolean;
+  t: (key: string) => string;
+}
+
+function AgentWorkflowSection({ workflowEvents, defaultExpanded, t }: AgentWorkflowSectionProps): React.JSX.Element {
+  const [expanded, setExpanded] = useState(defaultExpanded);
+  const rows = useMemo(() => buildWorkflowRows(workflowEvents), [workflowEvents]);
+
+  useEffect(() => {
+    setExpanded(defaultExpanded);
+  }, [defaultExpanded]);
+
+  return (
+    <Section
+      title={t('Agent Workflow')}
+      subtitle={`${rows.length}`}
+      right={
+        <Button variant="ghost" size="sm" onClick={() => setExpanded(!expanded)}>
+          {expanded ? '▲' : '▼'}
+        </Button>
+      }
+      className="mb-5"
+    >
+      {expanded && (
+        rows.length > 0 ? (
+          <div className="space-y-2 max-h-[360px] sm:max-h-[560px] overflow-y-auto">
+            {rows.map((row) => (
+              <div key={row.key} className="flex items-start gap-2 rounded-xl border border-[var(--separator-thin)] bg-[var(--bg-primary)] px-3 py-3">
+                <Badge tone={row.tone}>{t(row.label)}</Badge>
+                <div className="min-w-0 flex-1">
+                  {row.detail && <div className="truncate text-xs font-mono text-txt-secondary">{row.detail}</div>}
+                </div>
+                <span className="shrink-0 text-xs text-txt-tertiary">{fmtDate(row.time)}</span>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <div className="text-sm text-txt-tertiary">{t('Waiting for workflow events…')}</div>
+        )
+      )}
+    </Section>
+  );
 }
 
 function ToolCallsSection({ toolCalls, t }: ToolCallsSectionProps): React.JSX.Element {

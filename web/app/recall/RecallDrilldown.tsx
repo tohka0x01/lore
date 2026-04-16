@@ -1,6 +1,7 @@
 'use client';
 
-import React, { useEffect, useMemo, useState, ReactNode } from 'react';
+import React, { useEffect, useMemo, useState, ReactNode, useCallback } from 'react';
+import { useRouter, useSearchParams } from 'next/navigation';
 import clsx from 'clsx';
 import { api } from '../../lib/api';
 import {
@@ -12,6 +13,7 @@ import { ChannelAvatar } from '../../components/UpdaterDisplay';
 import { clientTypeLabel, KNOWN_CLIENT_TYPES } from '../../components/clientTypeMeta';
 import { useT } from '../../lib/i18n';
 import { AxiosError } from 'axios';
+import { buildUrlWithSearchParams, readNumberParam, readStringParam } from '../../lib/url-state';
 
 interface Filters {
   days: number | string;
@@ -63,13 +65,59 @@ function formatRangeLabel(offset: number, count: number, total: number): string 
 
 export default function RecallDrilldown(): React.JSX.Element {
   const { t } = useT();
+  const router = useRouter();
+  const searchParams = useSearchParams();
   const [stats, setStats] = useState<Record<string, unknown> | null>(null);
-  const [filters, setFilters] = useState<Filters>(DEFAULT_FILTERS);
+  const filters = useMemo<Filters>(() => ({
+    days: readNumberParam(searchParams, 'days', 14, { min: 1 }),
+    limit: readNumberParam(searchParams, 'limit', 12, { min: 1 }),
+    recentQueriesLimit: readNumberParam(searchParams, 'recent_queries_limit', 20, { min: 1 }),
+    recentQueriesOffset: readNumberParam(searchParams, 'recent_queries_offset', 0, { min: 0 }),
+    queryText: readStringParam(searchParams, 'query_text'),
+    queryId: readStringParam(searchParams, 'query_id'),
+    nodeUri: readStringParam(searchParams, 'node_uri'),
+    clientType: readStringParam(searchParams, 'client_type'),
+  }), [searchParams]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [filterOpen, setFilterOpen] = useState(false);
   const [aggTab, setAggTab] = useState('path');
   const [auxOpen, setAuxOpen] = useState(false);
+
+  const applyFilters = useCallback((patch: Partial<Filters>, mode: 'push' | 'replace' = 'replace') => {
+    const next: Filters = { ...filters, ...patch };
+    if (
+      patch.days !== undefined
+      || patch.queryText !== undefined
+      || patch.queryId !== undefined
+      || patch.nodeUri !== undefined
+      || patch.clientType !== undefined
+      || patch.recentQueriesLimit !== undefined
+    ) {
+      next.recentQueriesOffset = patch.recentQueriesOffset !== undefined ? Number(patch.recentQueriesOffset) || 0 : 0;
+    }
+    const href = buildUrlWithSearchParams('/recall/drilldown', searchParams, {
+      days: next.days,
+      limit: next.limit,
+      recent_queries_limit: next.recentQueriesLimit,
+      recent_queries_offset: next.recentQueriesOffset,
+      query_id: next.queryId,
+      query_text: next.queryText,
+      node_uri: next.nodeUri,
+      client_type: next.clientType,
+    }, {
+      days: DEFAULT_FILTERS.days,
+      limit: DEFAULT_FILTERS.limit,
+      recent_queries_limit: DEFAULT_FILTERS.recentQueriesLimit,
+      recent_queries_offset: DEFAULT_FILTERS.recentQueriesOffset,
+      query_id: DEFAULT_FILTERS.queryId,
+      query_text: DEFAULT_FILTERS.queryText,
+      node_uri: DEFAULT_FILTERS.nodeUri,
+      client_type: DEFAULT_FILTERS.clientType,
+    });
+    if (mode === 'push') router.push(href);
+    else router.replace(href);
+  }, [filters, router, searchParams]);
 
   async function loadStats(f: Filters = filters) {
     setLoading(true); setError('');
@@ -98,21 +146,6 @@ export default function RecallDrilldown(): React.JSX.Element {
     loadStats(filters);
   }, [filters.days, filters.limit, filters.recentQueriesLimit, filters.recentQueriesOffset, filters.queryId, filters.queryText, filters.nodeUri, filters.clientType]);
 
-  const patch = (p: Partial<Filters>) => setFilters((prev) => {
-    const next = { ...prev, ...p };
-    if (
-      ('days' in p)
-      || ('queryText' in p)
-      || ('queryId' in p)
-      || ('nodeUri' in p)
-      || ('clientType' in p)
-      || ('recentQueriesLimit' in p)
-    ) {
-      next.recentQueriesOffset = 'recentQueriesOffset' in p ? Number(p.recentQueriesOffset) || 0 : 0;
-    }
-    return next;
-  });
-
   const queryDetail = (stats?.query_detail as Record<string, unknown>) || null;
   const nodeDetail = (stats?.node_detail as Record<string, unknown>) || null;
 
@@ -135,10 +168,10 @@ export default function RecallDrilldown(): React.JSX.Element {
     { key: 'used_in_answer', label: t('Used'), className: 'text-right', render: (v: unknown) => <span className="block font-mono tabular-nums text-sys-green text-right">{String(v ?? '—')}</span> },
     { key: 'avg_final_rank_score', label: t('Avg'), className: 'text-right', render: (v: unknown) => <span className="block font-mono tabular-nums text-txt-secondary text-right">{fmt(v)}</span> },
     { key: '_drill', label: '', className: 'text-right', render: (_: unknown, row: RowData) => (
-      <button onClick={(e) => { e.stopPropagation(); patch({ queryId: String(row.query_id || ''), queryText: '', nodeUri: '' }); }}
+      <button onClick={(e) => { e.stopPropagation(); applyFilters({ queryId: String(row.query_id || ''), queryText: '', nodeUri: '' }, 'push'); }}
         className="text-[11px] text-sys-blue hover:opacity-80">{t('Open')} →</button>
     ) },
-  ], [t]);
+  ], [applyFilters, t]);
 
   const eventCols = useMemo(() => [
     { key: 'created_at', label: t('When'), className: 'w-[8rem] text-right', render: (v: unknown) => <span className="block whitespace-nowrap text-[11px] text-right text-txt-tertiary">{v ? new Date(String(v)).toLocaleString() : '—'}</span> },
@@ -161,10 +194,10 @@ export default function RecallDrilldown(): React.JSX.Element {
     { key: 'selected', label: t('Shown'), className: 'text-right', render: (v: unknown) => <span className="block font-mono tabular-nums text-sys-blue text-right">{String(v ?? '—')}</span> },
     { key: 'avg_final_rank_score', label: t('Avg'), className: 'text-right', render: (v: unknown) => <span className="block font-mono tabular-nums text-txt-secondary text-right">{fmt(v)}</span> },
     { key: '_drill', label: '', className: 'text-right', render: (_: unknown, row: RowData) => (
-      <button onClick={(e) => { e.stopPropagation(); patch({ queryId: '', queryText: '', nodeUri: String(row.node_uri || '') }); }}
+      <button onClick={(e) => { e.stopPropagation(); applyFilters({ queryId: '', queryText: '', nodeUri: String(row.node_uri || '') }, 'push'); }}
         className="text-[11px] text-sys-blue hover:opacity-80">{t('Open')} →</button>
     ) },
-  ], [t]);
+  ], [applyFilters, t]);
 
   const recentQueriesBlock = (stats?.recent_queries as RecentQueriesBlock) || { items: [], total: 0, limit: asNumber(filters.recentQueriesLimit, 20), offset: filters.recentQueriesOffset, has_more: false };
   const recentQueries = recentQueriesBlock.items || [];
@@ -192,7 +225,7 @@ export default function RecallDrilldown(): React.JSX.Element {
           ]} rows={stats?.by_view_type as RowData[]} empty={t('No view statistics.')} />
         );
       case 'noisy':
-        return <Table columns={noisyNodeCols} rows={stats?.noisy_nodes as RowData[]} empty={t('No noisy nodes.')} />;
+        return <Table columns={noisyNodeCols} rows={stats?.noisy_nodes as RowData[]} empty={t('No noisy nodes.')} activeRowKey={filters.nodeUri} />;
       default:
         return null;
     }
@@ -242,32 +275,32 @@ export default function RecallDrilldown(): React.JSX.Element {
             <div className="p-5 grid gap-x-6 gap-y-4 md:grid-cols-5">
               <label className="block">
                 <span className="block mb-1 text-[11px] font-medium text-txt-tertiary">{t('Days')}</span>
-                <input type="number" value={String(filters.days)} onChange={(e) => patch({ days: e.target.value })} className={inputClass + ' tabular-nums'} />
+                <input type="number" value={String(filters.days)} onChange={(e) => applyFilters({ days: e.target.value }, 'replace')} className={inputClass + ' tabular-nums'} />
               </label>
               <label className="block">
                 <span className="block mb-1 text-[11px] font-medium text-txt-tertiary">{t('Limit')}</span>
-                <input type="number" value={String(filters.limit)} onChange={(e) => patch({ limit: e.target.value })} className={inputClass + ' tabular-nums'} />
+                <input type="number" value={String(filters.limit)} onChange={(e) => applyFilters({ limit: e.target.value }, 'replace')} className={inputClass + ' tabular-nums'} />
               </label>
               <label className="block">
                 <span className="block mb-1 text-[11px] font-medium text-txt-tertiary">{t('Source')}</span>
                 <AppSelect
                   value={filters.clientType}
-                  onValueChange={(value) => patch({ clientType: value })}
+                  onValueChange={(value) => applyFilters({ clientType: value }, 'replace')}
                   options={[{ value: '', label: t('All sources') }, ...sourceOptions]}
                   className="font-sans"
                 />
               </label>
               <label className="block">
                 <span className="block mb-1 text-[11px] font-medium text-txt-tertiary">{t('Query text')}</span>
-                <input value={filters.queryText} onChange={(e) => patch({ queryText: e.target.value, queryId: '' })} placeholder={t('Fragment…')} className={inputClass} />
+                <input value={filters.queryText} onChange={(e) => applyFilters({ queryText: e.target.value, queryId: '' }, 'replace')} placeholder={t('Fragment…')} className={inputClass} />
               </label>
               <label className="block">
                 <span className="block mb-1 text-[11px] font-medium text-txt-tertiary">{t('Node URI')}</span>
-                <input value={filters.nodeUri} onChange={(e) => patch({ nodeUri: e.target.value })} placeholder={t('uri…')} className={inputClass} />
+                <input value={filters.nodeUri} onChange={(e) => applyFilters({ nodeUri: e.target.value, queryId: '' }, 'replace')} placeholder={t('uri…')} className={inputClass} />
               </label>
             </div>
             <div className="px-5 pb-4 flex justify-end">
-              <button onClick={() => setFilters(DEFAULT_FILTERS)} className="text-[12px] text-sys-blue hover:opacity-80">{t('Reset filters')}</button>
+              <button onClick={() => applyFilters(DEFAULT_FILTERS, 'replace')} className="text-[12px] text-sys-blue hover:opacity-80">{t('Reset filters')}</button>
             </div>
           </Card>
         </Disclosure>
@@ -291,7 +324,7 @@ export default function RecallDrilldown(): React.JSX.Element {
               </span>
             }
             right={
-              <Button variant="ghost" onClick={() => patch({ queryId: '', queryText: '', nodeUri: '' })}>
+              <Button variant="ghost" onClick={() => applyFilters({ queryId: '', queryText: '', nodeUri: '' }, 'replace')}>
                 ← {t('Back')}
               </Button>
             }
@@ -307,12 +340,12 @@ export default function RecallDrilldown(): React.JSX.Element {
             title={<code className="block max-w-full overflow-hidden text-ellipsis whitespace-nowrap font-mono text-[15px] text-txt-primary" title={String(nodeDetail.node_uri ?? '')}>{String(nodeDetail.node_uri ?? '')}</code>}
             subtitle={`${nodeDetail.merged_count} ${t('Merged')} · ${nodeDetail.shown_count} ${t('Shown')}`}
             right={
-              <Button variant="ghost" onClick={() => patch({ queryId: '', queryText: '', nodeUri: '' })}>
+              <Button variant="ghost" onClick={() => applyFilters({ queryId: '', queryText: '', nodeUri: '' }, 'replace')}>
                 ← {t('Back')}
               </Button>
             }
           >
-            <Table columns={nodeQueryCols} rows={(nodeDetail.queries as RowData[]) || []} empty={t('No queries for this node.')} />
+            <Table columns={nodeQueryCols} rows={(nodeDetail.queries as RowData[]) || []} empty={t('No queries for this node.')} activeRowKey={filters.queryId} />
           </Section>
         ) : (
           <Section
@@ -323,7 +356,8 @@ export default function RecallDrilldown(): React.JSX.Element {
               columns={recentQueryCols}
               rows={recentQueries}
               empty={t('No queries recorded yet.')}
-              onRowClick={(row) => patch({ queryId: String(row.query_id || ''), queryText: '', nodeUri: '' })}
+              onRowClick={(row) => applyFilters({ queryId: String(row.query_id || ''), queryText: '', nodeUri: '' }, 'push')}
+              activeRowKey={filters.queryId}
             />
             <div className="mt-4 flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
               <div className="text-[12px] text-txt-secondary">
@@ -334,7 +368,7 @@ export default function RecallDrilldown(): React.JSX.Element {
                   size="sm"
                   variant="ghost"
                   disabled={recentQueriesBlock.offset <= 0}
-                  onClick={() => patch({ recentQueriesOffset: Math.max(0, recentQueriesBlock.offset - recentQueriesBlock.limit) })}
+                  onClick={() => applyFilters({ recentQueriesOffset: Math.max(0, recentQueriesBlock.offset - recentQueriesBlock.limit) }, 'push')}
                 >
                   {t('Previous')}
                 </Button>
@@ -342,7 +376,7 @@ export default function RecallDrilldown(): React.JSX.Element {
                   size="sm"
                   variant="ghost"
                   disabled={!recentQueriesBlock.has_more}
-                  onClick={() => patch({ recentQueriesOffset: recentQueriesBlock.offset + recentQueriesBlock.limit })}
+                  onClick={() => applyFilters({ recentQueriesOffset: recentQueriesBlock.offset + recentQueriesBlock.limit }, 'push')}
                 >
                   {t('Next')}
                 </Button>

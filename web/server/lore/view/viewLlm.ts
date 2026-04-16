@@ -1,40 +1,15 @@
-import { getSettings as getSettingsBatch } from '../config/settings';
 import { truncate } from '../core/utils';
 import { normalizeList } from './viewBuilders';
 import type { EmbeddingConfig } from '../core/types';
+import { resolveViewLlmConfig, type ResolvedViewLlmConfig } from '../llm/config';
+import { generateText, type ProviderMessage } from '../llm/provider';
 
 // ---------------------------------------------------------------------------
 // LLM config resolution
 // ---------------------------------------------------------------------------
 
-export interface ViewLlmConfig {
-  base_url: string;
-  api_key: string;
-  model: string;
-  timeout_ms: number;
-  temperature: number;
-}
-
-export async function resolveViewLlmConfig(embedding?: EmbeddingConfig | null): Promise<ViewLlmConfig | null> {
-  const s = await getSettingsBatch([
-    'view_llm.base_url',
-    'view_llm.model',
-    'view_llm.temperature',
-    'view_llm.timeout_ms',
-  ]);
-  const base_url = String(s['view_llm.base_url'] || embedding?.base_url || '').trim().replace(/\/$/, '');
-  const api_key = String(process.env.LORE_VIEW_LLM_API_KEY || embedding?.api_key || '').trim();
-  const model = String(s['view_llm.model'] || '').trim();
-  // Leaving view_llm.base_url blank disables LLM view refinement entirely.
-  if (!base_url || !api_key || !model) return null;
-  return {
-    base_url,
-    api_key,
-    model,
-    timeout_ms: Number(s['view_llm.timeout_ms']) || 30000,
-    temperature: Number(s['view_llm.temperature']) || 0.2,
-  };
-}
+export { resolveViewLlmConfig };
+export type ViewLlmConfig = ResolvedViewLlmConfig;
 
 // ---------------------------------------------------------------------------
 // JSON extraction helper
@@ -65,34 +40,10 @@ export function extractJsonObject(text: unknown): Record<string, unknown> | null
 
 export async function chatCompletion(
   config: ViewLlmConfig,
-  messages: Array<{ role: string; content: string }>,
+  messages: ProviderMessage[],
 ): Promise<string> {
-  const response = await fetch(`${config.base_url}/chat/completions`, {
-    method: 'POST',
-    headers: {
-      Authorization: `Bearer ${config.api_key}`,
-      Accept: 'application/json',
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify({
-      model: config.model,
-      temperature: config.temperature,
-      messages,
-    }),
-    signal: AbortSignal.timeout(config.timeout_ms),
-  });
-
-  if (!response.ok) {
-    throw new Error(`View LLM request failed: ${response.status}`);
-  }
-
-  const data = await response.json();
-  const content = data?.choices?.[0]?.message?.content;
-  if (typeof content === 'string') return content;
-  if (Array.isArray(content)) {
-    return content.map((part: { text?: string }) => (typeof part?.text === 'string' ? part.text : '')).join('\n').trim();
-  }
-  throw new Error('View LLM response missing content');
+  const response = await generateText(config, messages);
+  return response.content;
 }
 
 // ---------------------------------------------------------------------------

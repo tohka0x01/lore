@@ -320,7 +320,7 @@ export async function getMemoryViewRuntimeConfig(
       base_url: baseUrl || null,
       model: String(s['view_llm.model'] || '').trim() || null,
       max_docs_per_run: Math.max(0, Number(s['view_llm.max_docs_per_run'] || 0)),
-      timeout_ms: Number(s['view_llm.timeout_ms']) || 30000,
+      timeout_ms: Number(s['view_llm.timeout_ms']) || 1800000,
       temperature: Number(s['view_llm.temperature']) || 0.2,
     },
   };

@@ -150,6 +150,20 @@ Open `http://127.0.0.1:18901` for the Web UI.
 
 Recall weights, scoring strategy, view LLM, embedding endpoint, dream schedule, backup config, and policy settings are managed at runtime via the **Settings UI** (`/settings`), stored in the `app_settings` table.
 
+For LLM/embedding transport, Lore now supports:
+- `LORE_VIEW_LLM_PROVIDER=openai_compatible` → Vercel AI SDK + OpenAI-compatible `/chat/completions`
+- `LORE_VIEW_LLM_PROVIDER=openai_responses` → Vercel AI SDK + OpenAI `/responses`
+- `LORE_VIEW_LLM_PROVIDER=anthropic` → Vercel AI SDK + Anthropic `/messages`
+- `LORE_EMBEDDING_PROVIDER=openai_compatible` → `/embeddings`
+
+Dream tool calling and View refinement now run through the Vercel AI SDK. Embedding calls stay on the existing OpenAI-compatible `/embeddings` transport for now.
+
+Optional provider-specific env:
+- `LORE_VIEW_LLM_TIMEOUT_MS`
+- `LORE_VIEW_LLM_API_VERSION` (mainly for Anthropic)
+
+If you leave provider unset, Lore keeps the old behavior and defaults to `openai_compatible`.
+
 ### Local Development
 
 ```bash

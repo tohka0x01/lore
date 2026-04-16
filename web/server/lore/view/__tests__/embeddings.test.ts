@@ -42,6 +42,7 @@ describe('resolveEmbeddingConfig', () => {
     process.env.LORE_EMBEDDING_API_KEY = 'test-key';
     const config = await resolveEmbeddingConfig();
     expect(config).toEqual({
+      provider: 'openai_compatible',
       base_url: 'http://embeddings.local',
       api_key: 'test-key',
       model: 'text-embedding-3-small',
@@ -115,6 +116,7 @@ describe('getEmbeddingRuntimeConfig', () => {
     process.env.LORE_EMBEDDING_API_KEY = 'key';
     const config = await getEmbeddingRuntimeConfig();
     expect(config).toEqual({
+      provider: 'openai_compatible',
       base_url: 'http://embeddings.local',
       model: 'text-embedding-3-small',
     });

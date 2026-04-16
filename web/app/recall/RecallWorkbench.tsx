@@ -1,6 +1,7 @@
 'use client';
 
-import React, { useState, useCallback, KeyboardEvent, ChangeEvent } from 'react';
+import React, { useState, useCallback, KeyboardEvent, ChangeEvent, useMemo, useEffect } from 'react';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { api } from '../../lib/api';
 import {
   PageCanvas, PageTitle, Section, Button, EmptyState, inputClass,
@@ -9,6 +10,7 @@ import {
 import RecallStages from '../../components/RecallStages';
 import { useT } from '../../lib/i18n';
 import { AxiosError } from 'axios';
+import { buildUrlWithSearchParams, readBooleanParam, readNumberParam, readStringParam } from '../../lib/url-state';
 
 interface DebugForm {
   query: string;
@@ -55,32 +57,76 @@ const STRATEGY_OPTIONS: StrategyOption[] = [
 
 export default function RecallWorkbench(): React.JSX.Element {
   const { t } = useT();
-  const [debugForm, setDebugForm] = useState<DebugForm>(DEFAULT_DEBUG);
+  const router = useRouter();
+  const searchParams = useSearchParams();
+  const initialForm = useMemo<DebugForm>(() => ({
+    query: readStringParam(searchParams, 'query'),
+    sessionId: readStringParam(searchParams, 'session_id', DEFAULT_DEBUG.sessionId),
+    limit: readNumberParam(searchParams, 'limit', Number(DEFAULT_DEBUG.limit), { min: 1 }),
+    minScore: readNumberParam(searchParams, 'min_score', Number(DEFAULT_DEBUG.minScore)),
+    maxDisplayItems: readNumberParam(searchParams, 'max_display_items', Number(DEFAULT_DEBUG.maxDisplayItems), { min: 1 }),
+    minDisplayScore: Number(readStringParam(searchParams, 'min_display_score', String(DEFAULT_DEBUG.minDisplayScore))) || Number(DEFAULT_DEBUG.minDisplayScore),
+    scorePrecision: readNumberParam(searchParams, 'score_precision', Number(DEFAULT_DEBUG.scorePrecision), { min: 0 }),
+    readNodeDisplayMode: readStringParam(searchParams, 'read_node_display_mode', DEFAULT_DEBUG.readNodeDisplayMode),
+    excludeBootFromResults: readBooleanParam(searchParams, 'exclude_boot_from_results', DEFAULT_DEBUG.excludeBootFromResults),
+    strategy: readStringParam(searchParams, 'strategy'),
+  }), [searchParams]);
+  const [debugForm, setDebugForm] = useState<DebugForm>(initialForm);
   const [debugData, setDebugData] = useState<Record<string, unknown> | null>(null);
   const [debugLoading, setDebugLoading] = useState(false);
   const [debugError, setDebugError] = useState('');
   const [showAdvanced, setShowAdvanced] = useState(false);
   const [focused, setFocused] = useState(false);
 
+  useEffect(() => {
+    setDebugForm(initialForm);
+  }, [initialForm]);
+
+  const buildDebugUrl = useCallback((form: DebugForm) => {
+    return buildUrlWithSearchParams('/recall', searchParams, {
+      query: form.query,
+      session_id: form.sessionId,
+      limit: form.limit,
+      min_score: form.minScore,
+      max_display_items: form.maxDisplayItems,
+      min_display_score: form.minDisplayScore,
+      score_precision: form.scorePrecision,
+      read_node_display_mode: form.readNodeDisplayMode,
+      exclude_boot_from_results: form.excludeBootFromResults,
+      strategy: form.strategy,
+    }, {
+      query: DEFAULT_DEBUG.query,
+      session_id: DEFAULT_DEBUG.sessionId,
+      limit: DEFAULT_DEBUG.limit,
+      min_score: DEFAULT_DEBUG.minScore,
+      max_display_items: DEFAULT_DEBUG.maxDisplayItems,
+      min_display_score: DEFAULT_DEBUG.minDisplayScore,
+      score_precision: DEFAULT_DEBUG.scorePrecision,
+      read_node_display_mode: DEFAULT_DEBUG.readNodeDisplayMode,
+      exclude_boot_from_results: DEFAULT_DEBUG.excludeBootFromResults,
+      strategy: DEFAULT_DEBUG.strategy,
+    });
+  }, [searchParams]);
+
   const patchForm = useCallback((p: Partial<DebugForm>) => setDebugForm((prev) => ({ ...prev, ...p })), []);
 
-  async function runDebug() {
+  const runDebug = useCallback(async (form: DebugForm) => {
     setDebugLoading(true);
     setDebugError('');
     try {
       const body: Record<string, unknown> = {
-        query: debugForm.query,
-        session_id: debugForm.sessionId || undefined,
-        limit: asNumber(debugForm.limit, 12),
-        min_score: asNumber(debugForm.minScore, 0),
-        max_display_items: asNumber(debugForm.maxDisplayItems, 3),
-        min_display_score: asNumber(debugForm.minDisplayScore, 0.60),
-        score_precision: asNumber(debugForm.scorePrecision, 2),
-        read_node_display_mode: debugForm.readNodeDisplayMode,
-        exclude_boot_from_results: debugForm.excludeBootFromResults,
+        query: form.query,
+        session_id: form.sessionId || undefined,
+        limit: asNumber(form.limit, 12),
+        min_score: asNumber(form.minScore, 0),
+        max_display_items: asNumber(form.maxDisplayItems, 3),
+        min_display_score: asNumber(form.minDisplayScore, 0.60),
+        score_precision: asNumber(form.scorePrecision, 2),
+        read_node_display_mode: form.readNodeDisplayMode,
+        exclude_boot_from_results: form.excludeBootFromResults,
         log_events: true,
       };
-      if (debugForm.strategy) body.strategy = debugForm.strategy;
+      if (form.strategy) body.strategy = form.strategy;
       const { data } = await api.post('/browse/recall/debug', body);
       setDebugData(data);
     } catch (error) {
@@ -89,7 +135,28 @@ export default function RecallWorkbench(): React.JSX.Element {
     } finally {
       setDebugLoading(false);
     }
-  }
+  }, []);
+
+  useEffect(() => {
+    if (!initialForm.query.trim()) {
+      setDebugData(null);
+      setDebugError('');
+      return;
+    }
+    void runDebug(initialForm);
+  }, [initialForm, runDebug]);
+
+  const submitDebug = useCallback(() => {
+    const nextForm: DebugForm = {
+      ...debugForm,
+      query: debugForm.query.trim(),
+      sessionId: debugForm.sessionId.trim() || DEFAULT_DEBUG.sessionId,
+      readNodeDisplayMode: debugForm.readNodeDisplayMode || DEFAULT_DEBUG.readNodeDisplayMode,
+      strategy: debugForm.strategy,
+    };
+    setDebugForm(nextForm);
+    router.push(buildDebugUrl(nextForm));
+  }, [buildDebugUrl, debugForm, router]);
 
   const runtime = (debugData?.runtime as Record<string, unknown>) || null;
 
@@ -118,7 +185,7 @@ export default function RecallWorkbench(): React.JSX.Element {
               onBlur={() => setFocused(false)}
               className="w-full resize-none bg-transparent text-[16px] md:text-[18px] font-medium leading-snug text-txt-primary placeholder:text-txt-quaternary focus:outline-none focus-visible:shadow-none"
               placeholder={t('Ask the archive…')}
-              onKeyDown={(e: KeyboardEvent<HTMLTextAreaElement>) => { if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) runDebug(); }}
+              onKeyDown={(e: KeyboardEvent<HTMLTextAreaElement>) => { if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) submitDebug(); }}
               autoFocus
             />
 
@@ -140,7 +207,7 @@ export default function RecallWorkbench(): React.JSX.Element {
                   {showAdvanced ? t('Hide options') : t('More options')}
                 </button>
               </div>
-              <Button variant="primary" onClick={runDebug} disabled={debugLoading || !debugForm.query.trim()}>
+              <Button variant="primary" onClick={submitDebug} disabled={debugLoading || !debugForm.query.trim()}>
                 {debugLoading ? t('Running…') : t('Run')}
               </Button>
             </div>

@@ -16,6 +16,7 @@ import {
   type HealthData,
   type ToolCallLogEntry,
 } from './dreamAgent';
+import { appendDreamWorkflowEvent, listDreamWorkflowEvents, type DreamWorkflowEvent } from './dreamWorkflow';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -32,6 +33,7 @@ interface DiaryEntry {
   error: string | null;
   tool_calls?: Array<Record<string, unknown>>;
   details?: Record<string, unknown>;
+  workflow_events?: DreamWorkflowEvent[];
   memory_changes?: Array<{
     type: string;
     uri: string;
@@ -76,14 +78,22 @@ export async function runDream(): Promise<DreamResult> {
     `INSERT INTO dream_diary (started_at, status) VALUES (NOW(), 'running') RETURNING id`,
   );
   const diaryId = Number(insertResult.rows[0].id);
+  await appendDreamWorkflowEvent(diaryId, 'run_started', { diary_id: diaryId });
 
   try {
     // Step 1: Index refresh
     console.log('[dream] step 1: index refresh');
+    await appendDreamWorkflowEvent(diaryId, 'phase_started', { phase: 'index_refresh', label: 'Index refresh' });
     const indexResult = await ensureRecallIndex();
+    await appendDreamWorkflowEvent(diaryId, 'phase_completed', {
+      phase: 'index_refresh',
+      label: 'Index refresh',
+      summary: indexResult as Record<string, unknown>,
+    });
 
     // Step 2: Data collection
     console.log('[dream] step 2: data collection');
+    await appendDreamWorkflowEvent(diaryId, 'phase_started', { phase: 'data_collection', label: 'Data collection' });
     const [health, deadWrites, pathEffectiveness, recallStats, writeStats] = await Promise.all([
       getMemoryHealthReport({ days: 7, limit: 50 }),
       getDeadWrites({ days: 30, limit: 50 }),
@@ -93,6 +103,15 @@ export async function runDream(): Promise<DreamResult> {
     ]);
     let orphanCount = 0;
     try { orphanCount = (await listOrphans()).length; } catch {}
+    await appendDreamWorkflowEvent(diaryId, 'phase_completed', {
+      phase: 'data_collection',
+      label: 'Data collection',
+      summary: {
+        orphan_count: orphanCount,
+        recall_queries: ((recallStats as Record<string, unknown>).summary as Record<string, unknown>)?.query_count || 0,
+        write_events: ((writeStats as unknown as Record<string, unknown>).summary as Record<string, unknown>)?.total_events || 0,
+      },
+    });
 
     const healthData: HealthData = { health: health as unknown as Record<string, unknown>, deadWrites: deadWrites as unknown as Record<string, unknown>, pathEffectiveness: pathEffectiveness as unknown as Record<string, unknown>, recallStats: recallStats as unknown as Record<string, unknown>, writeStats: writeStats as unknown as Record<string, unknown>, orphanCount };
 
@@ -112,6 +131,7 @@ export async function runDream(): Promise<DreamResult> {
 
     // Step 3: LLM agent loop
     console.log('[dream] step 3: agent loop');
+    await appendDreamWorkflowEvent(diaryId, 'phase_started', { phase: 'agent_loop', label: 'Agent loop' });
     const llmConfig = await loadLlmConfig();
     let agentResult: { narrative: string; toolCalls: ToolCallLogEntry[]; turns: number } = {
       narrative: '(LLM not configured — skipped agent loop)',
@@ -119,8 +139,19 @@ export async function runDream(): Promise<DreamResult> {
       turns: 0,
     };
     if (llmConfig) {
-      agentResult = await runDreamAgentLoop(llmConfig, healthData, recentDiaries);
+      agentResult = await runDreamAgentLoop(llmConfig, healthData, recentDiaries, {
+        onEvent: async (eventType, payload) => {
+          await appendDreamWorkflowEvent(diaryId, eventType, payload || {});
+        },
+      });
+    } else {
+      await appendDreamWorkflowEvent(diaryId, 'assistant_note', { message: 'LLM not configured — skipped agent loop' });
     }
+    await appendDreamWorkflowEvent(diaryId, 'phase_completed', {
+      phase: 'agent_loop',
+      label: 'Agent loop',
+      summary: { turns: agentResult.turns, tool_calls: agentResult.toolCalls.length },
+    });
 
     // Step 4: Save diary
     const indexResultTyped = indexResult as Record<string, unknown>;
@@ -145,6 +176,12 @@ export async function runDream(): Promise<DreamResult> {
        WHERE id = $1`,
       [diaryId, durationMs, JSON.stringify(summary), agentResult.narrative, JSON.stringify(agentResult.toolCalls), JSON.stringify({ index: indexResult, health, deadWrites, pathEffectiveness })],
     );
+    await appendDreamWorkflowEvent(diaryId, 'run_completed', {
+      duration_ms: durationMs,
+      summary,
+      tool_calls: agentResult.toolCalls.length,
+      turns: agentResult.turns,
+    });
 
     console.log(`[dream] completed in ${(durationMs / 1000).toFixed(1)}s, ${agentResult.toolCalls.length} tool calls`);
     return { id: diaryId, status: 'completed', duration_ms: durationMs, summary, narrative: agentResult.narrative };
@@ -154,6 +191,10 @@ export async function runDream(): Promise<DreamResult> {
       `UPDATE dream_diary SET status = 'error', completed_at = NOW(), duration_ms = $2, error = $3 WHERE id = $1`,
       [diaryId, durationMs, (err as Error).message],
     ).catch(() => {});
+    await appendDreamWorkflowEvent(diaryId, 'run_failed', {
+      duration_ms: durationMs,
+      error: (err as Error).message,
+    }).catch(() => {});
     console.error('[dream] failed', err);
     throw err;
   } finally {
@@ -189,6 +230,7 @@ export async function getDreamEntry(id: number | string): Promise<DiaryEntry | n
   const result = await sql(`SELECT * FROM dream_diary WHERE id = $1`, [Number(id)]);
   if (!result.rows[0]) return null;
   const entry = formatDiaryRow(result.rows[0] as Record<string, unknown>, true);
+  entry.workflow_events = await listDreamWorkflowEvents(entry.id);
 
   // Fetch memory changes made during this dream
   if (entry.started_at) {

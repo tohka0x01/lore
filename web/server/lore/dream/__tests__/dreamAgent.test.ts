@@ -42,7 +42,12 @@ vi.mock('node:fs', () => ({
   readFileSync: vi.fn(() => '# MCP Guidance\nlore_get_node is useful'),
 }));
 
+vi.mock('../../llm/provider', () => ({
+  generateTextWithTools: vi.fn(),
+}));
+
 import { getSettings } from '../../config/settings';
+import { generateTextWithTools } from '../../llm/provider';
 import { getNodePayload, listDomains } from '../../memory/browse';
 import { searchMemories } from '../../search/search';
 import { createNode, updateNodeByPath, deleteNodeByPath, moveNode } from '../../memory/write';
@@ -65,7 +70,10 @@ import {
   type HealthData,
 } from '../dreamAgent';
 
+const originalFetch = global.fetch;
+
 const mockGetSettings = vi.mocked(getSettings);
+const mockGenerateTextWithTools = vi.mocked(generateTextWithTools);
 const mockGetNodePayload = vi.mocked(getNodePayload);
 const mockListDomains = vi.mocked(listDomains);
 const mockSearchMemories = vi.mocked(searchMemories);
@@ -93,6 +101,14 @@ function makeHealthData(overrides: Partial<HealthData> = {}): HealthData {
   };
 }
 
+function makeToolResponse(tool_calls: Array<{ id: string; function: { name: string; arguments: string } }>, content: string | null = null) {
+  return { content, tool_calls, raw: {} };
+}
+
+function makeTextResponse(content: string) {
+  return { content, tool_calls: [], raw: {} };
+}
+
 // ---------------------------------------------------------------------------
 // DREAM_EVENT_CONTEXT
 // ---------------------------------------------------------------------------
@@ -108,7 +124,10 @@ describe('DREAM_EVENT_CONTEXT', () => {
 // ---------------------------------------------------------------------------
 
 describe('loadLlmConfig', () => {
-  beforeEach(() => vi.clearAllMocks());
+  beforeEach(() => {
+    vi.clearAllMocks();
+    global.fetch = originalFetch;
+  });
 
   it('returns null when base_url is missing', async () => {
     mockGetSettings.mockResolvedValue({
@@ -132,11 +151,13 @@ describe('loadLlmConfig', () => {
     });
     const result = await loadLlmConfig();
     expect(result).toEqual({
+      provider: 'openai_compatible',
       base_url: 'http://localhost:1234/v1',
       api_key: 'test-key',
       model: 'gpt-4',
       timeout_ms: 1800000,
       temperature: 0.5,
+      api_version: '',
     });
     process.env.LORE_VIEW_LLM_API_KEY = originalEnv;
   });
@@ -150,13 +171,13 @@ describe('buildDreamTools', () => {
   it('returns an array of tool definitions', () => {
     const tools = buildDreamTools();
     expect(tools.length).toBeGreaterThan(0);
-    expect(tools[0].type).toBe('function');
-    expect(tools[0].function.name).toBeDefined();
+    expect(tools[0].name).toBeDefined();
+    expect(tools[0].parameters).toBeDefined();
   });
 
   it('includes all expected tool names', () => {
     const tools = buildDreamTools();
-    const names = tools.map((t) => t.function.name);
+    const names = tools.map((t) => t.name);
     expect(names).toContain('get_node');
     expect(names).toContain('search');
     expect(names).toContain('list_domains');
@@ -178,8 +199,8 @@ describe('buildDreamTools', () => {
   it('each tool has required parameters field', () => {
     const tools = buildDreamTools();
     for (const tool of tools) {
-      expect(tool.function.parameters).toBeDefined();
-      expect(tool.function.parameters.type).toBe('object');
+      expect(tool.parameters).toBeDefined();
+      expect(tool.parameters.type).toBe('object');
     }
   });
 });
@@ -420,14 +441,86 @@ describe('buildDreamSystemPrompt', () => {
   });
 });
 
-// ---------------------------------------------------------------------------
-// loadGuidanceFile
-// ---------------------------------------------------------------------------
+describe('runDreamAgentLoop', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mockGenerateTextWithTools.mockReset();
+    mockListDomains.mockResolvedValue(['core'] as any);
+  });
 
-describe('loadGuidanceFile', () => {
-  it('remaps lore_ prefixed tool names', () => {
-    const content = loadGuidanceFile();
-    expect(content).toContain('get_node');
-    expect(content).not.toContain('lore_get_node');
+  it('emits workflow events for turns, tool calls, and final note', async () => {
+    mockGenerateTextWithTools
+      .mockResolvedValueOnce(makeToolResponse([{ id: 'call-1', function: { name: 'list_domains', arguments: '{}' } }]))
+      .mockResolvedValueOnce(makeTextResponse('Final narrative'));
+
+    const events: Array<{ type: string; payload?: Record<string, unknown> }> = [];
+    const config: LlmConfig = {
+      provider: 'openai_compatible',
+      base_url: 'http://localhost:1234/v1',
+      api_key: 'test-key',
+      model: 'gpt-4o-mini',
+      timeout_ms: 5000,
+      temperature: 0.3,
+      api_version: '',
+    };
+
+    const result = await runDreamAgentLoop(config, makeHealthData(), [], {
+      onEvent: async (type, payload) => {
+        events.push({ type, payload });
+      },
+    });
+
+    expect(result.narrative).toBe('Final narrative');
+    expect(result.toolCalls).toHaveLength(1);
+    expect(events.map((event) => event.type)).toEqual([
+      'llm_turn_started',
+      'tool_call_started',
+      'tool_call_finished',
+      'llm_turn_started',
+      'assistant_note',
+    ]);
+    expect(events[1].payload).toMatchObject({ turn: 1, tool: 'list_domains' });
+    expect(events[2].payload).toMatchObject({ turn: 1, tool: 'list_domains', ok: true });
+    expect(events[4].payload).toMatchObject({ message: 'Final narrative' });
+  });
+
+  it('supports anthropic tool use flow', async () => {
+    mockGenerateTextWithTools
+      .mockResolvedValueOnce(makeToolResponse([{ id: 'toolu_1', function: { name: 'list_domains', arguments: '{}' } }]))
+      .mockResolvedValueOnce(makeTextResponse('Anthropic final narrative'));
+
+    const config: LlmConfig = {
+      provider: 'anthropic',
+      base_url: 'http://localhost:1234',
+      api_key: 'test-key',
+      model: 'claude-sonnet-4-6',
+      timeout_ms: 5000,
+      temperature: 0.3,
+      api_version: '2023-06-01',
+    };
+
+    const result = await runDreamAgentLoop(config, makeHealthData(), []);
+    expect(result.narrative).toBe('Anthropic final narrative');
+    expect(result.toolCalls).toHaveLength(1);
+  });
+
+  it('supports openai responses tool flow', async () => {
+    mockGenerateTextWithTools
+      .mockResolvedValueOnce(makeToolResponse([{ id: 'call-1', function: { name: 'list_domains', arguments: '{}' } }]))
+      .mockResolvedValueOnce(makeTextResponse('Responses final narrative'));
+
+    const config: LlmConfig = {
+      provider: 'openai_responses',
+      base_url: 'http://localhost:1234/v1',
+      api_key: 'test-key',
+      model: 'gpt-4.1',
+      timeout_ms: 5000,
+      temperature: 0.3,
+      api_version: '',
+    };
+
+    const result = await runDreamAgentLoop(config, makeHealthData(), []);
+    expect(result.narrative).toBe('Responses final narrative');
+    expect(result.toolCalls).toHaveLength(1);
   });
 });

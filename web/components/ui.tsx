@@ -453,8 +453,16 @@ interface TableColumn<T extends RowData = RowData> {
   render?: (value: T[string], row: T) => ReactNode;
 }
 
+function resolveRowIdentity(row: RowData): string {
+  for (const value of [row.uri, row.node_uri, row.query_id, row.id]) {
+    const normalized = String(value || '').trim();
+    if (normalized) return normalized;
+  }
+  return '';
+}
+
 function rowKey(row: RowData, index: number): string {
-  const primary = String(row.uri || row.node_uri || row.query_id || row.id || '');
+  const primary = resolveRowIdentity(row);
   const suffix = String(row.view_type || row.keyword || row.retrieval_path || '');
   return `${index}-${primary}-${suffix}`;
 }
@@ -496,7 +504,7 @@ export function Table<T extends RowData = RowData>({ columns, rows, empty = '暂
           {table.getRowModel().rows.map((row, i) => {
             const original = row.original as T & RowData;
             const key = rowKey(original, i);
-            const active = activeRowKey && activeRowKey === (original.uri || original.node_uri);
+            const active = Boolean(activeRowKey) && activeRowKey === resolveRowIdentity(original);
             return (
               <tr
                 key={key}

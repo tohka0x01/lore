@@ -10,18 +10,14 @@ import { getRecallStats } from '../recall/recallAnalytics';
 import { getNodeWriteHistory } from '../memory/writeEvents';
 import { getPathEffectiveness } from '../recall/feedbackAnalytics';
 import { listMemoryViewsByNode } from '../view/memoryViewQueries';
+import { resolveViewLlmConfig, type ResolvedViewLlmConfig } from '../llm/config';
+import { generateTextWithTools, type ProviderMessage, type ProviderToolDefinition } from '../llm/provider';
 
 // ---------------------------------------------------------------------------
 // Types
 // ---------------------------------------------------------------------------
 
-export interface LlmConfig {
-  base_url: string;
-  api_key: string;
-  model: string;
-  timeout_ms: number;
-  temperature: number;
-}
+export type LlmConfig = ResolvedViewLlmConfig;
 
 export interface ToolCallLogEntry {
   tool: string;
@@ -35,24 +31,17 @@ export interface DreamAgentResult {
   turns: number;
 }
 
-interface ChatMessage {
-  role: string;
-  content?: string | null;
-  tool_calls?: Array<{
-    id: string;
-    function: { name: string; arguments: string };
-  }>;
-  tool_call_id?: string;
+export interface DreamAgentEventCallback {
+  (eventType: string, payload?: Record<string, unknown>): void | Promise<void>;
 }
 
-interface ToolDefinition {
-  type: 'function';
-  function: {
-    name: string;
-    description: string;
-    parameters: Record<string, unknown>;
-  };
+export interface DreamAgentRunOptions {
+  onEvent?: DreamAgentEventCallback;
 }
+
+interface ChatMessage extends ProviderMessage {}
+
+interface ToolDefinition extends ProviderToolDefinition {}
 
 export interface HealthData {
   health: Record<string, unknown>;
@@ -77,12 +66,7 @@ interface RecentDiary {
 export const DREAM_EVENT_CONTEXT = { source: 'dream:auto' };
 
 export async function loadLlmConfig(): Promise<LlmConfig | null> {
-  const s = await getSettingsBatch(['view_llm.base_url', 'view_llm.model', 'view_llm.temperature', 'view_llm.timeout_ms']);
-  const base_url = String(s['view_llm.base_url'] || '').trim().replace(/\/$/, '');
-  const api_key = String(process.env.LORE_VIEW_LLM_API_KEY || '').trim();
-  const model = String(s['view_llm.model'] || '').trim();
-  if (!base_url || !api_key || !model) return null;
-  return { base_url, api_key, model, timeout_ms: 1800000, temperature: Number(s['view_llm.temperature']) || 0.3 };
+  return resolveViewLlmConfig();
 }
 
 export async function chatWithTools(
@@ -90,17 +74,11 @@ export async function chatWithTools(
   messages: ChatMessage[],
   tools: ToolDefinition[],
 ): Promise<Record<string, unknown>> {
-  const body: Record<string, unknown> = { model: config.model, temperature: config.temperature, messages };
-  if (tools && tools.length > 0) body.tools = tools;
-  const response = await fetch(`${config.base_url}/chat/completions`, {
-    method: 'POST',
-    headers: { Authorization: `Bearer ${config.api_key}`, Accept: 'application/json', 'Content-Type': 'application/json' },
-    body: JSON.stringify(body),
-    signal: AbortSignal.timeout(config.timeout_ms),
-  });
-  if (!response.ok) throw new Error(`Dream LLM request failed: ${response.status}`);
-  const data = await response.json();
-  return data?.choices?.[0]?.message || {};
+  const response = await generateTextWithTools(config, messages, tools);
+  return {
+    content: response.content,
+    tool_calls: response.tool_calls,
+  };
 }
 
 // ---------------------------------------------------------------------------
@@ -108,7 +86,7 @@ export async function chatWithTools(
 // ---------------------------------------------------------------------------
 
 export function buildDreamTools(): ToolDefinition[] {
-  const tools = [
+  return [
     { name: 'get_node', description: 'Read a memory node by URI', parameters: { type: 'object', properties: { uri: { type: 'string', description: 'Memory URI e.g. core://soul' } }, required: ['uri'] } },
     { name: 'search', description: 'Search memories by keyword', parameters: { type: 'object', properties: { query: { type: 'string' }, limit: { type: 'integer' } }, required: ['query'] } },
     { name: 'list_domains', description: 'List all memory domains', parameters: { type: 'object', properties: {} } },
@@ -126,7 +104,6 @@ export function buildDreamTools(): ToolDefinition[] {
     { name: 'remove_glossary', description: 'Remove a glossary keyword from a node', parameters: { type: 'object', properties: { keyword: { type: 'string' }, node_uuid: { type: 'string' } }, required: ['keyword', 'node_uuid'] } },
     { name: 'manage_triggers', description: 'Batch add/remove glossary keywords', parameters: { type: 'object', properties: { uri: { type: 'string' }, add: { type: 'array', items: { type: 'string' } }, remove: { type: 'array', items: { type: 'string' } } }, required: ['uri'] } },
   ];
-  return tools.map((t) => ({ type: 'function' as const, function: t }));
 }
 
 export function parseUri(uri: string): { domain: string; path: string } {
@@ -375,6 +352,7 @@ export async function runDreamAgentLoop(
   llmConfig: LlmConfig,
   healthData: HealthData,
   recentDiaries: RecentDiary[] = [],
+  options: DreamAgentRunOptions = {},
 ): Promise<DreamAgentResult> {
   const tools = buildDreamTools();
   const systemPrompt = buildDreamSystemPrompt(healthData, recentDiaries);
@@ -387,30 +365,40 @@ export async function runDreamAgentLoop(
 
   for (;;) {
     turn++;
+    await options.onEvent?.('llm_turn_started', { turn });
     const response = await chatWithTools(llmConfig, messages, tools) as Record<string, unknown>;
 
-    // If no tool_calls, this is the final response (narrative)
-    const responseTc = response.tool_calls as Array<Record<string, unknown>> | undefined;
+    const responseContent = typeof response.content === 'string' ? response.content : null;
+    const responseTc = Array.isArray(response.tool_calls) ? response.tool_calls as ChatMessage['tool_calls'] : [];
     if (!responseTc || responseTc.length === 0) {
-      const narrative = typeof response.content === 'string' ? response.content : '';
+      const narrative = responseContent || '';
+      if (narrative) {
+        await options.onEvent?.('assistant_note', { turn, message: narrative.slice(0, 1000) });
+      }
       return { narrative, toolCalls: toolCallLog, turns: turn };
     }
 
-    // Process tool calls
-    messages.push({ role: 'assistant', content: (response.content as string) || null, tool_calls: responseTc as ChatMessage['tool_calls'] });
+    messages.push({ role: 'assistant', content: responseContent, tool_calls: responseTc });
 
     for (const tc of responseTc) {
-      const fn = tc.function as { name: string; arguments: string } | undefined;
-      const fnName = fn?.name || '';
+      const fnName = tc.function?.name || '';
       let args: Record<string, unknown> = {};
-      try { args = JSON.parse(fn?.arguments || '{}'); } catch {}
+      try { args = JSON.parse(tc.function?.arguments || '{}'); } catch {}
 
+      await options.onEvent?.('tool_call_started', { turn, tool: fnName, args });
       console.log(`[dream] tool_call: ${fnName}`, JSON.stringify(args).slice(0, 200));
       const result = await executeDreamTool(fnName, args);
       const resultStr = JSON.stringify(result).slice(0, 4000);
 
       toolCallLog.push({ tool: fnName, args, result_preview: resultStr.slice(0, 500) });
-      messages.push({ role: 'tool', tool_call_id: tc.id as string, content: resultStr });
+      await options.onEvent?.('tool_call_finished', {
+        turn,
+        tool: fnName,
+        args,
+        result_preview: resultStr.slice(0, 500),
+        ok: !(result && typeof result === 'object' && 'error' in (result as Record<string, unknown>)),
+      });
+      messages.push({ role: 'tool', tool_call_id: tc.id, content: resultStr });
     }
   }
 }

@@ -1,12 +1,14 @@
 'use client';
 
 import React, { useEffect, useState, useCallback, MouseEvent } from 'react';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { format } from 'date-fns';
 import clsx from 'clsx';
 import DiffViewer from '../../components/DiffViewer';
 import { api } from '../../lib/api';
 import { PageCanvas, PageTitle, Button, Badge, EmptyState } from '../../components/ui';
 import { useT } from '../../lib/i18n';
+import { buildUrlWithSearchParams, readStringParam } from '../../lib/url-state';
 import { AxiosError } from 'axios';
 import { useConfirm } from '../../components/ConfirmDialog';
 
@@ -33,10 +35,12 @@ interface OrphanDetail {
 export default function MaintenancePage(): React.JSX.Element {
   const { t } = useT();
   const { confirm: confirmDialog } = useConfirm();
+  const router = useRouter();
+  const searchParams = useSearchParams();
+  const expandedId = readStringParam(searchParams, 'orphan');
   const [orphans, setOrphans] = useState<OrphanItem[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [expandedId, setExpandedId] = useState<string | number | null>(null);
   const [detailData, setDetailData] = useState<Record<string | number, OrphanDetail>>({});
   const [detailLoading, setDetailLoading] = useState<string | number | null>(null);
   const [selectedIds, setSelectedIds] = useState<Set<string | number>>(new Set());
@@ -44,9 +48,19 @@ export default function MaintenancePage(): React.JSX.Element {
 
   useEffect(() => { loadOrphans(); }, []);
 
+  const navigateToMaintenance = useCallback((orphanId: string | number | null, mode: 'push' | 'replace' = 'push') => {
+    const href = buildUrlWithSearchParams('/maintenance', searchParams, { orphan: orphanId }, { orphan: '' });
+    if (mode === 'replace') router.replace(href);
+    else router.push(href);
+  }, [router, searchParams]);
+
   const loadOrphans = async () => {
     setLoading(true); setError(null); setSelectedIds(new Set());
-    try { setOrphans((await api.get('/maintenance/orphans')).data); }
+    try {
+      const data = (await api.get('/maintenance/orphans')).data as OrphanItem[];
+      setOrphans(data);
+      if (expandedId && !data.some((item) => String(item.id) === expandedId)) navigateToMaintenance(null, 'replace');
+    }
     catch (err) {
       const axiosErr = err as AxiosError<{ detail?: string }>;
       setError(axiosErr.response?.data?.detail || axiosErr.message);
@@ -66,32 +80,49 @@ export default function MaintenancePage(): React.JSX.Element {
     setBatchDeleting(true);
     const toDelete = [...selectedIds], failed: Array<string | number> = [];
     for (const id of toDelete) { try { await api.delete(`/maintenance/orphans/${id}`); } catch { failed.push(id); } }
-    const fs = new Set(failed);
-    setOrphans(prev => prev.filter(i => !toDelete.includes(i.id) || fs.has(i.id)));
+    const fs = new Set(failed.map((id) => String(id)));
+    setOrphans(prev => prev.filter(i => !toDelete.includes(i.id) || fs.has(String(i.id))));
     setSelectedIds(new Set(failed));
-    if (expandedId && toDelete.includes(expandedId) && !fs.has(expandedId)) setExpandedId(null);
+    if (expandedId && toDelete.some((id) => String(id) === expandedId) && !fs.has(expandedId)) navigateToMaintenance(null, 'replace');
     setBatchDeleting(false);
   };
 
-  const handleExpand = async (id: string | number) => {
-    if (expandedId === id) { setExpandedId(null); return; }
-    setExpandedId(id);
-    if (!detailData[id]) {
-      setDetailLoading(id);
-      try { const res = await api.get(`/maintenance/orphans/${id}`); setDetailData(p => ({ ...p, [id]: res.data })); }
-      catch (err) {
+  useEffect(() => {
+    if (!expandedId) return;
+    if (detailData[expandedId]) return;
+
+    let cancelled = false;
+    setDetailLoading(expandedId);
+    api.get(`/maintenance/orphans/${expandedId}`)
+      .then((res) => {
+        if (!cancelled) setDetailData((p) => ({ ...p, [expandedId]: res.data }));
+      })
+      .catch((err) => {
         const axiosErr = err as AxiosError;
-        setDetailData(p => ({ ...p, [id]: { error: axiosErr.message } }));
-      }
-      finally { setDetailLoading(null); }
+        if (!cancelled) setDetailData((p) => ({ ...p, [expandedId]: { error: axiosErr.message } }));
+      })
+      .finally(() => {
+        if (!cancelled) setDetailLoading(null);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [detailData, expandedId]);
+
+  const handleExpand = (id: string | number) => {
+    if (expandedId === String(id)) {
+      navigateToMaintenance(null, 'replace');
+      return;
     }
+    navigateToMaintenance(id);
   };
 
   const deprecated = orphans.filter(o => o.category === 'deprecated');
   const orphaned = orphans.filter(o => o.category === 'orphaned');
 
   const renderEntry = (item: OrphanItem) => {
-    const isExpanded = expandedId === item.id;
+    const isExpanded = expandedId === String(item.id);
     const detail = detailData[item.id];
     const isChecked = selectedIds.has(item.id);
     const cat = item.category === 'deprecated' ? { tone: 'orange' as const, label: t('Deprecated') } : { tone: 'red' as const, label: t('Orphaned') };

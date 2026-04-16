@@ -5,7 +5,12 @@ vi.mock('../../config/settings', () => ({
   getSettings: vi.fn().mockResolvedValue({}),
 }));
 
+vi.mock('../../llm/provider', () => ({
+  generateText: vi.fn(),
+}));
+
 import { getSettings } from '../../config/settings';
+import { generateText } from '../../llm/provider';
 import {
   resolveViewLlmConfig,
   extractJsonObject,
@@ -16,6 +21,7 @@ import {
 } from '../viewLlm';
 
 const mockGetSettings = vi.mocked(getSettings);
+const mockGenerateText = vi.mocked(generateText);
 
 // ---------------------------------------------------------------------------
 // extractJsonObject
@@ -82,11 +88,13 @@ describe('resolveViewLlmConfig', () => {
     });
     const config = await resolveViewLlmConfig();
     expect(config).toEqual({
+      provider: 'openai_compatible',
       base_url: 'http://llm:8080',
       api_key: 'test-key',
       model: 'test-model',
       temperature: 0.3,
       timeout_ms: 15000,
+      api_version: '',
     });
   });
 
@@ -130,15 +138,17 @@ describe('resolveViewLlmConfig', () => {
       model: 'embed-model',
     });
     expect(config).toEqual({
+      provider: 'openai_compatible',
       base_url: 'http://embed',
       api_key: 'embed-key',
       model: 'model',
       temperature: 0.2,
-      timeout_ms: 30000,
+      timeout_ms: 1800000,
+      api_version: '',
     });
   });
 
-  it('uses default temperature and timeout', async () => {
+  it('preserves zero temperature and defaults timeout when zero', async () => {
     mockGetSettings.mockResolvedValueOnce({
       'view_llm.base_url': 'http://llm',
       'view_llm.model': 'model',
@@ -146,8 +156,20 @@ describe('resolveViewLlmConfig', () => {
       'view_llm.timeout_ms': 0,
     });
     const config = await resolveViewLlmConfig();
-    expect(config!.temperature).toBe(0.2);
-    expect(config!.timeout_ms).toBe(30000);
+    expect(config!.temperature).toBe(0);
+    expect(config!.timeout_ms).toBe(1800000);
+  });
+
+  it('uses configured provider and api version when present', async () => {
+    mockGetSettings.mockResolvedValueOnce({
+      'view_llm.provider': 'anthropic',
+      'view_llm.base_url': 'http://llm',
+      'view_llm.model': 'model',
+      'view_llm.api_version': '2023-06-01',
+    });
+    const config = await resolveViewLlmConfig();
+    expect(config!.provider).toBe('anthropic');
+    expect(config!.api_version).toBe('2023-06-01');
   });
 });
 
@@ -156,56 +178,81 @@ describe('resolveViewLlmConfig', () => {
 // ---------------------------------------------------------------------------
 
 describe('chatCompletion', () => {
-  beforeEach(() => vi.clearAllMocks());
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mockGenerateText.mockReset();
+  });
 
-  const config = {
-    base_url: 'http://llm:8080',
-    api_key: 'key',
-    model: 'test',
-    timeout_ms: 5000,
-    temperature: 0.2,
-  };
-
-  it('returns content from successful response', async () => {
-    const mockFetch = vi.fn().mockResolvedValue({
-      ok: true,
-      json: () => Promise.resolve({
-        choices: [{ message: { content: '{"gist":"test"}' } }],
-      }),
+  it('returns content from successful openai-compatible response', async () => {
+    const config = {
+      provider: 'openai_compatible' as const,
+      base_url: 'http://llm:8080',
+      api_key: 'key',
+      model: 'test',
+      timeout_ms: 5000,
+      temperature: 0.2,
+      api_version: '',
+    };
+    mockGenerateText.mockResolvedValueOnce({
+      content: '{"gist":"test"}',
+      raw: { choices: [{ message: { content: '{"gist":"test"}' } }] },
     });
-    vi.stubGlobal('fetch', mockFetch);
 
     const result = await chatCompletion(config, [{ role: 'user', content: 'hello' }]);
     expect(result).toBe('{"gist":"test"}');
+  });
 
-    vi.unstubAllGlobals();
+  it('returns content from anthropic response blocks', async () => {
+    const config = {
+      provider: 'anthropic' as const,
+      base_url: 'http://llm:8080',
+      api_key: 'key',
+      model: 'claude-sonnet-4-6',
+      timeout_ms: 5000,
+      temperature: 0.2,
+      api_version: '2023-06-01',
+    };
+    mockGenerateText.mockResolvedValueOnce({
+      content: '{"gist":"anthropic"}',
+      raw: { content: [{ type: 'text', text: '{"gist":"anthropic"}' }] },
+    });
+
+    const result = await chatCompletion(config, [{ role: 'user', content: 'hello' }]);
+    expect(result).toBe('{"gist":"anthropic"}');
+  });
+
+  it('returns content from openai responses output text', async () => {
+    const config = {
+      provider: 'openai_responses' as const,
+      base_url: 'http://llm:8080',
+      api_key: 'key',
+      model: 'gpt-4.1',
+      timeout_ms: 5000,
+      temperature: 0.2,
+      api_version: '',
+    };
+    mockGenerateText.mockResolvedValueOnce({
+      content: '{"gist":"responses"}',
+      raw: { output: [{ type: 'message', content: [{ type: 'output_text', text: '{"gist":"responses"}' }] }] },
+    });
+
+    const result = await chatCompletion(config, [{ role: 'user', content: 'hello' }]);
+    expect(result).toBe('{"gist":"responses"}');
   });
 
   it('throws on non-ok response', async () => {
-    const mockFetch = vi.fn().mockResolvedValue({
-      ok: false,
-      status: 500,
-    });
-    vi.stubGlobal('fetch', mockFetch);
+    const config = {
+      provider: 'openai_compatible' as const,
+      base_url: 'http://llm:8080',
+      api_key: 'key',
+      model: 'test',
+      timeout_ms: 5000,
+      temperature: 0.2,
+      api_version: '',
+    };
+    mockGenerateText.mockRejectedValueOnce(new Error('View LLM request failed: 500'));
 
-    await expect(chatCompletion(config, [])).rejects.toThrow('View LLM request failed: 500');
-
-    vi.unstubAllGlobals();
-  });
-
-  it('handles array content format', async () => {
-    const mockFetch = vi.fn().mockResolvedValue({
-      ok: true,
-      json: () => Promise.resolve({
-        choices: [{ message: { content: [{ text: 'part1' }, { text: 'part2' }] } }],
-      }),
-    });
-    vi.stubGlobal('fetch', mockFetch);
-
-    const result = await chatCompletion(config, []);
-    expect(result).toBe('part1\npart2');
-
-    vi.unstubAllGlobals();
+    await expect(chatCompletion(config, [{ role: 'user', content: 'hello' }])).rejects.toThrow('View LLM request failed: 500');
   });
 });
 

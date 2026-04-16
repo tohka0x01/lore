@@ -21,7 +21,7 @@ vi.mock('../../config/settings', () => ({
     'view_llm.base_url': 'http://localhost:11434',
     'view_llm.model': 'llama3',
     'view_llm.temperature': 0.2,
-    'view_llm.timeout_ms': 30000,
+    'view_llm.timeout_ms': 1800000,
     'view_llm.max_docs_per_run': 10,
   }),
 }));
@@ -172,7 +172,7 @@ describe('getMemoryViewRuntimeConfig', () => {
       'view_llm.base_url': '',
       'view_llm.model': '',
       'view_llm.temperature': 0.2,
-      'view_llm.timeout_ms': 30000,
+      'view_llm.timeout_ms': 1800000,
       'view_llm.max_docs_per_run': 5,
     });
     const config = await getMemoryViewRuntimeConfig();
@@ -190,7 +190,7 @@ describe('getMemoryViewRuntimeConfig', () => {
       'view_llm.base_url': 'http://localhost:11434/',
       'view_llm.model': 'llama3',
       'view_llm.temperature': 0.2,
-      'view_llm.timeout_ms': 30000,
+      'view_llm.timeout_ms': 1800000,
       'view_llm.max_docs_per_run': 5,
     });
     const config = await getMemoryViewRuntimeConfig();
@@ -200,7 +200,7 @@ describe('getMemoryViewRuntimeConfig', () => {
   it('normalizes numeric settings correctly', async () => {
     const config = await getMemoryViewRuntimeConfig();
     expect(config.llm.max_docs_per_run).toBe(10);
-    expect(config.llm.timeout_ms).toBe(30000);
+    expect(config.llm.timeout_ms).toBe(1800000);
     expect(config.llm.temperature).toBe(0.2);
   });
 
@@ -214,7 +214,7 @@ describe('getMemoryViewRuntimeConfig', () => {
       'view_llm.base_url': 'http://localhost:11434',
       'view_llm.model': '   ',
       'view_llm.temperature': 0.2,
-      'view_llm.timeout_ms': 30000,
+      'view_llm.timeout_ms': 1800000,
       'view_llm.max_docs_per_run': 0,
     });
     const config = await getMemoryViewRuntimeConfig();

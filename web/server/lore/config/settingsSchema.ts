@@ -227,11 +227,22 @@ export const SETTINGS_SCHEMA: SettingDef[] = [
 
   // -- Embedding service ----------------------------------------------------
   {
+    key: 'embedding.provider',
+    section: 'embedding',
+    label: 'Embedding Provider',
+    type: 'enum', default: 'openai_compatible', env: 'LORE_EMBEDDING_PROVIDER',
+    options: ['openai_compatible'],
+    option_labels: {
+      openai_compatible: 'OpenAI-compatible',
+    },
+    description: 'Embedding API 协议类型。当前支持 OpenAI-compatible /embeddings。',
+  },
+  {
     key: 'embedding.base_url',
     section: 'embedding',
     label: 'Embedding Base URL',
     type: 'string', default: '', env: 'LORE_EMBEDDING_BASE_URL',
-    description: 'OpenAI 兼容的 embedding 服务 URL',
+    description: 'Embedding 服务基础 URL（当前使用 OpenAI-compatible /embeddings）',
   },
   {
     key: 'embedding.model',
@@ -243,11 +254,24 @@ export const SETTINGS_SCHEMA: SettingDef[] = [
 
   // -- View LLM -------------------------------------------------------------
   {
+    key: 'view_llm.provider',
+    section: 'view_llm',
+    label: 'View LLM Provider',
+    type: 'enum', default: 'openai_compatible', env: 'LORE_VIEW_LLM_PROVIDER',
+    options: ['openai_compatible', 'openai_responses', 'anthropic'],
+    option_labels: {
+      openai_compatible: 'OpenAI-compatible Chat',
+      openai_responses: 'OpenAI Responses',
+      anthropic: 'Anthropic Messages',
+    },
+    description: 'View/Dream 使用的 LLM API 协议类型。默认兼容现有 OpenAI-style /chat/completions。',
+  },
+  {
     key: 'view_llm.base_url',
     section: 'view_llm',
     label: 'View LLM Base URL',
     type: 'string', default: '', env: 'LORE_VIEW_LLM_BASE_URL',
-    description: '生成视图的 chat completion 端点，留空则禁用 LLM 精炼',
+    description: '生成视图与 Dream 的 LLM 基础 URL；留空则禁用 LLM 精炼与 Dream 运行',
   },
   {
     key: 'view_llm.model',
@@ -276,9 +300,16 @@ export const SETTINGS_SCHEMA: SettingDef[] = [
     key: 'view_llm.timeout_ms',
     section: 'view_llm',
     label: 'View LLM 超时 (ms)',
-    type: 'integer', default: 30000, min: 1000, max: 120000, step: 1000,
+    type: 'integer', default: 1800000, min: 1000, max: 1800000, step: 1000,
     env: 'LORE_VIEW_LLM_TIMEOUT_MS',
-    description: 'LLM 请求超时时间',
+    description: 'View/Dream LLM 请求超时时间',
+  },
+  {
+    key: 'view_llm.api_version',
+    section: 'view_llm',
+    label: 'View LLM API Version',
+    type: 'string', default: '', env: 'LORE_VIEW_LLM_API_VERSION',
+    description: '可选 API 版本头；Anthropic 原生端点通常使用该字段。',
   },
 
   // -- Write policy ---------------------------------------------------------

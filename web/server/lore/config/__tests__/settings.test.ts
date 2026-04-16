@@ -40,8 +40,8 @@ beforeEach(() => {
 // ---------------------------------------------------------------------------
 
 describe('settingsSchema', () => {
-  it('exports SETTINGS_SCHEMA with 47 entries', () => {
-    expect(SETTINGS_SCHEMA.length).toBe(47);
+  it('exports SETTINGS_SCHEMA with 50 entries', () => {
+    expect(SETTINGS_SCHEMA.length).toBe(50);
   });
 
   it('SCHEMA_BY_KEY has an entry for every schema item', () => {
@@ -162,6 +162,7 @@ describe('resolveValue', () => {
 
   afterEach(() => {
     delete process.env[ENV_KEY];
+    delete process.env.LORE_VIEW_LLM_PROVIDER;
   });
 
   it('returns db value when present (JSONB wrapped)', () => {
@@ -183,6 +184,12 @@ describe('resolveValue', () => {
     const dbValues = new Map<string, unknown>();
     expect(resolveValue('embedding.base_url', dbValues)).toBe('http://from-env');
     delete process.env.LORE_EMBEDDING_BASE_URL;
+  });
+
+  it('resolves new provider keys from env', () => {
+    process.env.LORE_VIEW_LLM_PROVIDER = 'anthropic';
+    const dbValues = new Map<string, unknown>();
+    expect(resolveValue('view_llm.provider', dbValues)).toBe('anthropic');
   });
 
   it('falls back to schema default when db and env are absent', () => {

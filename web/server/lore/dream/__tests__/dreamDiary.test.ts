@@ -41,10 +41,16 @@ vi.mock('../dreamAgent', () => ({
   DREAM_EVENT_CONTEXT: { source: 'dream:auto' },
 }));
 
+vi.mock('../dreamWorkflow', () => ({
+  appendDreamWorkflowEvent: vi.fn(),
+  listDreamWorkflowEvents: vi.fn(),
+}));
+
 import { sql } from '../../../db';
 import { getSettings, updateSettings } from '../../config/settings';
 import { deleteNodeByPath, updateNodeByPath, createNode } from '../../memory/write';
 import { addGlossaryKeyword, removeGlossaryKeyword } from '../../search/glossary';
+import { listDreamWorkflowEvents } from '../dreamWorkflow';
 import {
   getDreamDiary,
   getDreamEntry,
@@ -61,6 +67,7 @@ const mockUpdateNodeByPath = vi.mocked(updateNodeByPath);
 const mockCreateNode = vi.mocked(createNode);
 const mockAddGlossaryKeyword = vi.mocked(addGlossaryKeyword);
 const mockRemoveGlossaryKeyword = vi.mocked(removeGlossaryKeyword);
+const mockListDreamWorkflowEvents = vi.mocked(listDreamWorkflowEvents);
 
 function makeResult(rows: Record<string, unknown>[] = [], rowCount = rows.length) {
   return { rows, rowCount } as any;
@@ -104,7 +111,10 @@ describe('getDreamDiary', () => {
 // ---------------------------------------------------------------------------
 
 describe('getDreamEntry', () => {
-  beforeEach(() => vi.clearAllMocks());
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mockListDreamWorkflowEvents.mockResolvedValue([] as any);
+  });
 
   it('returns null when entry not found', async () => {
     mockSql.mockReset();
@@ -123,6 +133,7 @@ describe('getDreamEntry', () => {
     const eventRows = [
       { event_type: 'update', node_uri: 'core://test', before_snapshot: { content: 'old' }, after_snapshot: { content: 'new' }, created_at: '2024-01-01T00:00:30Z' },
     ];
+    mockListDreamWorkflowEvents.mockResolvedValue([{ id: 7, diary_id: 1, event_type: 'run_started', payload: {}, created_at: '2024-01-01T00:00:01Z' }] as any);
     mockSql
       .mockResolvedValueOnce(makeResult([diaryRow])) // SELECT * FROM dream_diary
       .mockResolvedValueOnce(makeResult(eventRows)); // memory_events
@@ -132,6 +143,7 @@ describe('getDreamEntry', () => {
     expect(result!.id).toBe(1);
     expect(result!.narrative).toBe('Diary text');
     expect(result!.tool_calls).toHaveLength(1);
+    expect(result!.workflow_events).toHaveLength(1);
     expect(result!.memory_changes).toHaveLength(1);
     expect(result!.memory_changes![0].type).toBe('update');
   });
