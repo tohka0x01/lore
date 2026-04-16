@@ -1,6 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
-// Mock fs/promises
 vi.mock('node:fs/promises', () => ({
   default: {
     mkdir: vi.fn().mockResolvedValue(undefined),
@@ -28,7 +27,6 @@ vi.mock('../../config/settings', () => ({
   getSettings: vi.fn(),
 }));
 
-// Mock global fetch
 const mockFetch = vi.fn();
 vi.stubGlobal('fetch', mockFetch);
 
@@ -78,18 +76,15 @@ function makeValidBackup(overrides: Record<string, unknown> = {}) {
   };
 }
 
-function getClientMock() {
-  const pool = mockGetPool();
-  return pool.connect() as unknown as Promise<{ query: ReturnType<typeof vi.fn>; release: ReturnType<typeof vi.fn> }>;
-}
-
-// ---------------------------------------------------------------------------
-// exportDatabase
-// ---------------------------------------------------------------------------
+beforeEach(() => {
+  vi.clearAllMocks();
+  mockGetSettings.mockResolvedValue({
+    'backup.local.path': '/tmp/lore-backups',
+  } as any);
+});
 
 describe('exportDatabase', () => {
   beforeEach(() => {
-    vi.clearAllMocks();
     mockSql.mockResolvedValue(makeResult([]));
   });
 
@@ -105,26 +100,26 @@ describe('exportDatabase', () => {
 
   it('queries all CORE_TABLES', async () => {
     await exportDatabase();
-    // 10 core tables
     expect(mockSql.mock.calls.length).toBe(10);
   });
 
   it('does not query recall_events by default', async () => {
     await exportDatabase();
-    const recallCalls = mockSql.mock.calls.filter(([q]) => (q as string).includes('recall_events'));
+    const recallCalls = mockSql.mock.calls.filter(([query]) => (query as string).includes('recall_events'));
     expect(recallCalls).toHaveLength(0);
   });
 
   it('queries recall_events when includeRecallEvents=true', async () => {
     await exportDatabase({ includeRecallEvents: true });
-    const recallCalls = mockSql.mock.calls.filter(([q]) => (q as string).includes('recall_events'));
+    const recallCalls = mockSql.mock.calls.filter(([query]) => (query as string).includes('recall_events'));
     expect(recallCalls).toHaveLength(1);
   });
 
   it('includes stats with row counts for each table', async () => {
     mockSql
-      .mockResolvedValueOnce(makeResult([{ uuid: 'u1' }]))     // nodes: 1 row
-      .mockResolvedValue(makeResult([]));                       // rest: 0 rows
+      .mockResolvedValueOnce(makeResult([{ uuid: 'u1' }]))
+      .mockResolvedValue(makeResult([]));
+
     const result = await exportDatabase();
     expect(result.stats.nodes).toBe(1);
     expect(result.stats.memories).toBe(0);
@@ -134,15 +129,12 @@ describe('exportDatabase', () => {
     mockSql
       .mockResolvedValueOnce(makeResult([{ uuid: 'abc', created_at: '2025-01-01' }]))
       .mockResolvedValue(makeResult([]));
+
     const result = await exportDatabase();
     expect(result.tables.nodes).toHaveLength(1);
     expect(result.tables.nodes[0].uuid).toBe('abc');
   });
 });
-
-// ---------------------------------------------------------------------------
-// validateBackup
-// ---------------------------------------------------------------------------
 
 describe('validateBackup', () => {
   it('returns valid=true for a well-formed backup', () => {
@@ -168,7 +160,7 @@ describe('validateBackup', () => {
     delete (data.tables as any).nodes;
     const result = validateBackup(data);
     expect(result.valid).toBe(false);
-    expect(result.errors.some((e) => e.includes('nodes'))).toBe(true);
+    expect(result.errors.some((error) => error.includes('nodes'))).toBe(true);
   });
 
   it('returns error if tables value is not an array', () => {
@@ -176,7 +168,7 @@ describe('validateBackup', () => {
     (data.tables as any).memories = 'not-an-array';
     const result = validateBackup(data);
     expect(result.valid).toBe(false);
-    expect(result.errors.some((e) => e.includes('memories'))).toBe(true);
+    expect(result.errors.some((error) => error.includes('memories'))).toBe(true);
   });
 
   it('returns stats from backup data', () => {
@@ -190,15 +182,10 @@ describe('validateBackup', () => {
   });
 });
 
-// ---------------------------------------------------------------------------
-// restoreDatabase
-// ---------------------------------------------------------------------------
-
 describe('restoreDatabase', () => {
   let mockClient: { query: ReturnType<typeof vi.fn>; release: ReturnType<typeof vi.fn> };
 
   beforeEach(() => {
-    vi.clearAllMocks();
     mockClient = { query: vi.fn().mockResolvedValue({ rows: [{ count: '0' }] }), release: vi.fn() };
     (mockGetPool().connect as ReturnType<typeof vi.fn>).mockResolvedValue(mockClient);
   });
@@ -212,34 +199,32 @@ describe('restoreDatabase', () => {
   });
 
   it('begins and commits a transaction for valid backup', async () => {
-    const data = makeValidBackup();
-    await restoreDatabase(data);
-    const calls = mockClient.query.mock.calls.map(([q]: [string]) => q);
+    await restoreDatabase(makeValidBackup());
+    const calls = mockClient.query.mock.calls.map(([query]: [string]) => query);
     expect(calls[0]).toBe('BEGIN');
     expect(calls.at(-1)).toBe('COMMIT');
   });
 
   it('truncates tables before inserting', async () => {
     await restoreDatabase(makeValidBackup());
-    const calls = mockClient.query.mock.calls.map(([q]: [string]) => q);
-    const truncateCalls = calls.filter((q) => q.includes('TRUNCATE'));
+    const calls = mockClient.query.mock.calls.map(([query]: [string]) => query);
+    const truncateCalls = calls.filter((query) => query.includes('TRUNCATE'));
     expect(truncateCalls.length).toBeGreaterThan(0);
     expect(truncateCalls[0]).toContain('CASCADE');
   });
 
   it('inserts rows from backup tables', async () => {
     await restoreDatabase(makeValidBackup());
-    const calls = mockClient.query.mock.calls.map(([q]: [string]) => q);
-    const insertCalls = calls.filter((q) => q.startsWith('INSERT INTO'));
-    // nodes and memories have rows
-    expect(insertCalls.some((q) => q.includes('nodes'))).toBe(true);
-    expect(insertCalls.some((q) => q.includes('memories'))).toBe(true);
+    const calls = mockClient.query.mock.calls.map(([query]: [string]) => query);
+    const insertCalls = calls.filter((query) => query.startsWith('INSERT INTO'));
+    expect(insertCalls.some((query) => query.includes('nodes'))).toBe(true);
+    expect(insertCalls.some((query) => query.includes('memories'))).toBe(true);
   });
 
   it('resets sequences after restore', async () => {
     await restoreDatabase(makeValidBackup());
-    const calls = mockClient.query.mock.calls.map(([q]: [string]) => q);
-    const seqCalls = calls.filter((q) => q.includes('setval'));
+    const calls = mockClient.query.mock.calls.map(([query]: [string]) => query);
+    const seqCalls = calls.filter((query) => query.includes('setval'));
     expect(seqCalls.length).toBeGreaterThan(0);
   });
 
@@ -253,37 +238,29 @@ describe('restoreDatabase', () => {
   });
 
   it('rolls back and rethrows on query error', async () => {
-    // The TRUNCATE calls are wrapped in try/catch in the source, so they won't propagate.
-    // Use a query that injects an error into the INSERT step which is NOT wrapped.
-    // Approach: make every TRUNCATE succeed, but fail on COMMIT which is the final unwrapped call.
-    mockClient.query.mockImplementation(async (q: string) => {
-      if (q === 'COMMIT') throw new Error('DB error at commit');
+    mockClient.query.mockImplementation(async (query: string) => {
+      if (query === 'COMMIT') throw new Error('DB error at commit');
       return { rows: [{ count: '0' }] };
     });
 
     await expect(restoreDatabase(makeValidBackup())).rejects.toThrow('DB error at commit');
-    const calls = mockClient.query.mock.calls.map(([q]: [string]) => q);
+    const calls = mockClient.query.mock.calls.map(([query]: [string]) => query);
     expect(calls).toContain('ROLLBACK');
     expect(mockClient.release).toHaveBeenCalled();
   });
 });
 
-// ---------------------------------------------------------------------------
-// Local file operations
-// ---------------------------------------------------------------------------
-
 describe('exportToLocal', () => {
   beforeEach(() => {
-    vi.clearAllMocks();
     mockSql.mockResolvedValue(makeResult([]));
     mockFs.mkdir.mockResolvedValue(undefined);
     mockFs.writeFile.mockResolvedValue(undefined);
     mockFs.stat.mockResolvedValue({ size: 2048, mtime: new Date() } as any);
   });
 
-  it('creates backup directory', async () => {
+  it('creates the configured backup directory', async () => {
     await exportToLocal();
-    expect(mockFs.mkdir).toHaveBeenCalledWith(expect.stringContaining('backups'), { recursive: true });
+    expect(mockFs.mkdir).toHaveBeenCalledWith('/tmp/lore-backups', { recursive: true });
   });
 
   it('writes JSON file and returns metadata', async () => {
@@ -297,14 +274,12 @@ describe('exportToLocal', () => {
 
 describe('listLocalBackups', () => {
   beforeEach(() => {
-    vi.clearAllMocks();
     mockFs.mkdir.mockResolvedValue(undefined);
   });
 
   it('returns empty array when no backup files exist', async () => {
     mockFs.readdir.mockResolvedValue([] as any);
-    const result = await listLocalBackups();
-    expect(result).toEqual([]);
+    await expect(listLocalBackups()).resolves.toEqual([]);
   });
 
   it('filters to only lore-backup-*.json files', async () => {
@@ -314,9 +289,10 @@ describe('listLocalBackups', () => {
       'lore-backup-2025-01-02-12-00-00.json',
     ] as any);
     mockFs.stat.mockResolvedValue({ size: 500, mtime: new Date('2025-01-02T12:00:00Z') } as any);
+
     const result = await listLocalBackups();
     expect(result).toHaveLength(2);
-    expect(result.every((b) => b.filename.startsWith('lore-backup-'))).toBe(true);
+    expect(result.every((entry) => entry.filename.startsWith('lore-backup-'))).toBe(true);
   });
 
   it('sorts backups newest first', async () => {
@@ -325,11 +301,10 @@ describe('listLocalBackups', () => {
       'lore-backup-2025-01-03-00-00-00.json',
       'lore-backup-2025-01-02-00-00-00.json',
     ] as any);
-    const dateMock = vi.fn()
-      .mockResolvedValueOnce({ size: 100, mtime: new Date('2025-01-01T00:00:00Z') })
-      .mockResolvedValueOnce({ size: 100, mtime: new Date('2025-01-03T00:00:00Z') })
-      .mockResolvedValueOnce({ size: 100, mtime: new Date('2025-01-02T00:00:00Z') });
-    mockFs.stat.mockImplementation(dateMock as any);
+    mockFs.stat
+      .mockResolvedValueOnce({ size: 100, mtime: new Date('2025-01-01T00:00:00Z') } as any)
+      .mockResolvedValueOnce({ size: 100, mtime: new Date('2025-01-03T00:00:00Z') } as any)
+      .mockResolvedValueOnce({ size: 100, mtime: new Date('2025-01-02T00:00:00Z') } as any);
 
     const result = await listLocalBackups();
     expect(result[0].created_at > result[1].created_at).toBe(true);
@@ -338,17 +313,16 @@ describe('listLocalBackups', () => {
 
   it('returns empty array on readdir error', async () => {
     mockFs.readdir.mockRejectedValue(new Error('ENOENT'));
-    const result = await listLocalBackups();
-    expect(result).toEqual([]);
+    await expect(listLocalBackups()).resolves.toEqual([]);
   });
 });
 
 describe('readLocalBackup', () => {
-  it('reads from the backup directory with sanitized filename', async () => {
+  it('reads from the configured backup directory with sanitized filename', async () => {
     mockFs.readFile.mockResolvedValue('{"format":"lore-backup-v1"}' as any);
     const result = await readLocalBackup('lore-backup-2025-01-01-00-00-00.json');
     expect(mockFs.readFile).toHaveBeenCalledWith(
-      expect.stringContaining('lore-backup-2025-01-01-00-00-00.json'),
+      '/tmp/lore-backups/lore-backup-2025-01-01-00-00-00.json',
       'utf-8',
     );
     expect(result).toContain('lore-backup-v1');
@@ -357,8 +331,6 @@ describe('readLocalBackup', () => {
   it('sanitizes path traversal attempts using basename', async () => {
     mockFs.readFile.mockResolvedValue('{}' as any);
     await readLocalBackup('../../etc/passwd');
-    // path.basename('../../etc/passwd') = 'passwd', so the call uses BACKUP_DIR + 'passwd'
-    // The final path must not contain '..' and must contain the basename 'passwd'
     const calls = (mockFs.readFile as ReturnType<typeof vi.fn>).mock.calls;
     const lastCall = calls[calls.length - 1];
     const calledPath = lastCall[0] as string;
@@ -367,20 +339,24 @@ describe('readLocalBackup', () => {
   });
 });
 
+describe('deleteLocalBackup', () => {
+  it('deletes from the configured backup directory with sanitized filename', async () => {
+    await deleteLocalBackup('lore-backup-2025-01-01-00-00-00.json');
+    expect(mockFs.unlink).toHaveBeenCalledWith('/tmp/lore-backups/lore-backup-2025-01-01-00-00-00.json');
+  });
+});
+
 describe('cleanupLocalBackups', () => {
   beforeEach(() => {
-    vi.clearAllMocks();
     mockFs.mkdir.mockResolvedValue(undefined);
     mockFs.unlink.mockResolvedValue(undefined);
   });
 
   it('returns 0 when backups count is within retention', async () => {
-    mockFs.readdir.mockResolvedValue([
-      'lore-backup-2025-01-01-00-00-00.json',
-    ] as any);
+    mockFs.readdir.mockResolvedValue(['lore-backup-2025-01-01-00-00-00.json'] as any);
     mockFs.stat.mockResolvedValue({ size: 100, mtime: new Date() } as any);
-    const deleted = await cleanupLocalBackups(3);
-    expect(deleted).toBe(0);
+
+    await expect(cleanupLocalBackups(3)).resolves.toBe(0);
   });
 
   it('deletes oldest backups beyond retentionCount', async () => {
@@ -389,11 +365,10 @@ describe('cleanupLocalBackups', () => {
       'lore-backup-2025-01-02-00-00-00.json',
       'lore-backup-2025-01-03-00-00-00.json',
     ] as any);
-    const statMock = vi.fn()
-      .mockResolvedValueOnce({ size: 100, mtime: new Date('2025-01-01T00:00:00Z') })
-      .mockResolvedValueOnce({ size: 100, mtime: new Date('2025-01-02T00:00:00Z') })
-      .mockResolvedValueOnce({ size: 100, mtime: new Date('2025-01-03T00:00:00Z') });
-    mockFs.stat.mockImplementation(statMock as any);
+    mockFs.stat
+      .mockResolvedValueOnce({ size: 100, mtime: new Date('2025-01-01T00:00:00Z') } as any)
+      .mockResolvedValueOnce({ size: 100, mtime: new Date('2025-01-02T00:00:00Z') } as any)
+      .mockResolvedValueOnce({ size: 100, mtime: new Date('2025-01-03T00:00:00Z') } as any);
 
     const deleted = await cleanupLocalBackups(2);
     expect(deleted).toBe(1);
@@ -401,13 +376,8 @@ describe('cleanupLocalBackups', () => {
   });
 });
 
-// ---------------------------------------------------------------------------
-// WebDAV operations
-// ---------------------------------------------------------------------------
-
 describe('exportToWebDAV', () => {
   beforeEach(() => {
-    vi.clearAllMocks();
     mockSql.mockResolvedValue(makeResult([]));
     mockGetSettings.mockResolvedValue({
       'backup.webdav.url': 'https://dav.example.com/backups',
@@ -424,16 +394,17 @@ describe('exportToWebDAV', () => {
       'backup.webdav.username': '',
       'backup.webdav.password': '',
     } as any);
+
     await expect(exportToWebDAV()).rejects.toThrow('WebDAV URL not configured');
   });
 
   it('calls fetch PUT with authorization header', async () => {
     await exportToWebDAV();
     expect(mockFetch).toHaveBeenCalledOnce();
-    const [url, opts] = mockFetch.mock.calls[0];
+    const [url, options] = mockFetch.mock.calls[0];
     expect(url).toContain('dav.example.com');
-    expect(opts.method).toBe('PUT');
-    expect(opts.headers.Authorization).toContain('Basic ');
+    expect(options.method).toBe('PUT');
+    expect(options.headers.Authorization).toContain('Basic ');
   });
 
   it('returns filename, url, size, stats on success', async () => {
@@ -452,7 +423,6 @@ describe('exportToWebDAV', () => {
 
 describe('listWebDAVBackups', () => {
   beforeEach(() => {
-    vi.clearAllMocks();
     mockGetSettings.mockResolvedValue({
       'backup.webdav.url': 'https://dav.example.com/backups',
       'backup.webdav.username': 'user',
@@ -466,8 +436,8 @@ describe('listWebDAVBackups', () => {
       'backup.webdav.username': '',
       'backup.webdav.password': '',
     } as any);
-    const result = await listWebDAVBackups();
-    expect(result).toEqual([]);
+
+    await expect(listWebDAVBackups()).resolves.toEqual([]);
   });
 
   it('parses backup filenames from PROPFIND XML response', async () => {
@@ -477,10 +447,10 @@ describe('listWebDAVBackups', () => {
         <d:response><d:href>/backups/lore-backup-2025-01-02-12-00-00.json</d:href></d:response>
       </d:multistatus>`;
     mockFetch.mockResolvedValue({ ok: true, status: 207, text: vi.fn().mockResolvedValue(xml) });
+
     const result = await listWebDAVBackups();
     expect(result).toHaveLength(2);
     expect(result[0]).toMatch(/^lore-backup-/);
-    // sorted newest first
     expect(result[0] > result[1]).toBe(true);
   });
 
@@ -492,7 +462,6 @@ describe('listWebDAVBackups', () => {
 
 describe('cleanupWebDAVBackups', () => {
   beforeEach(() => {
-    vi.clearAllMocks();
     mockGetSettings.mockResolvedValue({
       'backup.webdav.url': 'https://dav.example.com/backups',
       'backup.webdav.username': 'user',
@@ -506,15 +475,15 @@ describe('cleanupWebDAVBackups', () => {
       'backup.webdav.username': '',
       'backup.webdav.password': '',
     } as any);
-    const result = await cleanupWebDAVBackups(3);
-    expect(result).toBe(0);
+
+    await expect(cleanupWebDAVBackups(3)).resolves.toBe(0);
   });
 
   it('returns 0 when backups count is within retention', async () => {
     const xml = `<d:response><d:href>/backups/lore-backup-2025-01-01-00-00-00.json</d:href></d:response>`;
     mockFetch.mockResolvedValue({ ok: true, status: 207, text: vi.fn().mockResolvedValue(xml) });
-    const result = await cleanupWebDAVBackups(5);
-    expect(result).toBe(0);
+
+    await expect(cleanupWebDAVBackups(5)).resolves.toBe(0);
   });
 
   it('deletes excess backups beyond retention count', async () => {
@@ -524,13 +493,12 @@ describe('cleanupWebDAVBackups', () => {
       <d:response><d:href>/backups/lore-backup-2025-01-01-00-00-00.json</d:href></d:response>
     `;
     mockFetch
-      .mockResolvedValueOnce({ ok: true, status: 207, text: vi.fn().mockResolvedValue(xml) }) // PROPFIND
-      .mockResolvedValue({ ok: true, status: 204, statusText: 'No Content' }); // DELETE calls
+      .mockResolvedValueOnce({ ok: true, status: 207, text: vi.fn().mockResolvedValue(xml) })
+      .mockResolvedValue({ ok: true, status: 204, statusText: 'No Content' });
 
     const result = await cleanupWebDAVBackups(2);
-    expect(result).toBe(1); // 3 total, keep 2, delete 1
-    // One DELETE call issued
-    const deleteCalls = mockFetch.mock.calls.filter(([, opts]) => opts?.method === 'DELETE');
+    expect(result).toBe(1);
+    const deleteCalls = mockFetch.mock.calls.filter(([, options]) => options?.method === 'DELETE');
     expect(deleteCalls).toHaveLength(1);
   });
 });

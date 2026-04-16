@@ -5,6 +5,15 @@
  * metadata (e.g. UI rendering) don't pull in DB or cache dependencies.
  */
 
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+const REPO_ROOT = path.resolve(__dirname, '../../../../');
+const DEFAULT_REVIEW_LOCAL_PATH = path.join(REPO_ROOT, 'snapshots');
+const DEFAULT_BACKUP_LOCAL_PATH = path.join(DEFAULT_REVIEW_LOCAL_PATH, 'backups');
+
 // ---------------------------------------------------------------------------
 // Types
 // ---------------------------------------------------------------------------
@@ -25,8 +34,8 @@ export interface SettingDef {
   options?: string[];
   /** Display labels for enum options (keyed by option value) */
   option_labels?: Record<string, string>;
-  /** Environment variable to read as fallback (before hard-coded default) */
-  env?: string;
+  /** Hide value in snapshots/UI and only reveal whether it is configured */
+  secret?: boolean;
 }
 
 export interface SettingSection {
@@ -230,7 +239,7 @@ export const SETTINGS_SCHEMA: SettingDef[] = [
     key: 'embedding.provider',
     section: 'embedding',
     label: 'Embedding Provider',
-    type: 'enum', default: 'openai_compatible', env: 'LORE_EMBEDDING_PROVIDER',
+    type: 'enum', default: 'openai_compatible',
     options: ['openai_compatible'],
     option_labels: {
       openai_compatible: 'OpenAI-compatible',
@@ -241,14 +250,21 @@ export const SETTINGS_SCHEMA: SettingDef[] = [
     key: 'embedding.base_url',
     section: 'embedding',
     label: 'Embedding Base URL',
-    type: 'string', default: '', env: 'LORE_EMBEDDING_BASE_URL',
+    type: 'string', default: '',
     description: 'Embedding 服务基础 URL（当前使用 OpenAI-compatible /embeddings）',
+  },
+  {
+    key: 'embedding.api_key',
+    section: 'embedding',
+    label: 'Embedding API Key',
+    type: 'string', default: '', secret: true,
+    description: 'Embedding 服务 API key',
   },
   {
     key: 'embedding.model',
     section: 'embedding',
     label: 'Embedding Model',
-    type: 'string', default: '', env: 'LORE_EMBEDDING_MODEL',
+    type: 'string', default: '',
     description: '如 Qwen/Qwen3-Embedding-0.6B',
   },
 
@@ -257,7 +273,7 @@ export const SETTINGS_SCHEMA: SettingDef[] = [
     key: 'view_llm.provider',
     section: 'view_llm',
     label: 'View LLM Provider',
-    type: 'enum', default: 'openai_compatible', env: 'LORE_VIEW_LLM_PROVIDER',
+    type: 'enum', default: 'openai_compatible',
     options: ['openai_compatible', 'openai_responses', 'anthropic'],
     option_labels: {
       openai_compatible: 'OpenAI-compatible Chat',
@@ -270,14 +286,21 @@ export const SETTINGS_SCHEMA: SettingDef[] = [
     key: 'view_llm.base_url',
     section: 'view_llm',
     label: 'View LLM Base URL',
-    type: 'string', default: '', env: 'LORE_VIEW_LLM_BASE_URL',
+    type: 'string', default: '',
     description: '生成视图与 Dream 的 LLM 基础 URL；留空则禁用 LLM 精炼与 Dream 运行',
+  },
+  {
+    key: 'view_llm.api_key',
+    section: 'view_llm',
+    label: 'View LLM API Key',
+    type: 'string', default: '', secret: true,
+    description: '生成视图与 Dream 的 LLM API key',
   },
   {
     key: 'view_llm.model',
     section: 'view_llm',
     label: 'View LLM Model',
-    type: 'string', default: 'glm-5.1', env: 'LORE_VIEW_LLM_MODEL',
+    type: 'string', default: 'glm-5.1',
     description: '用于生成 gist/question 的 LLM 模型名',
   },
   {
@@ -285,7 +308,6 @@ export const SETTINGS_SCHEMA: SettingDef[] = [
     section: 'view_llm',
     label: 'View LLM Temperature',
     type: 'number', default: 0.2, min: 0, max: 2, step: 0.05,
-    env: 'LORE_VIEW_LLM_TEMPERATURE',
     description: 'LLM 生成温度（0=确定性，>1=更随机）',
   },
   {
@@ -293,7 +315,6 @@ export const SETTINGS_SCHEMA: SettingDef[] = [
     section: 'view_llm',
     label: 'View LLM 每次索引处理文档数',
     type: 'integer', default: 4, min: 0, max: 100, step: 1,
-    env: 'LORE_VIEW_LLM_MAX_DOCS_PER_RUN',
     description: '单次索引构建最多调用 LLM 精炼的文档数',
   },
   {
@@ -301,14 +322,13 @@ export const SETTINGS_SCHEMA: SettingDef[] = [
     section: 'view_llm',
     label: 'View LLM 超时 (ms)',
     type: 'integer', default: 1800000, min: 1000, max: 1800000, step: 1000,
-    env: 'LORE_VIEW_LLM_TIMEOUT_MS',
     description: 'View/Dream LLM 请求超时时间',
   },
   {
     key: 'view_llm.api_version',
     section: 'view_llm',
     label: 'View LLM API Version',
-    type: 'string', default: '', env: 'LORE_VIEW_LLM_API_VERSION',
+    type: 'string', default: '',
     description: '可选 API 版本头；Anthropic 原生端点通常使用该字段。',
   },
 
@@ -402,6 +422,13 @@ export const SETTINGS_SCHEMA: SettingDef[] = [
     description: '将备份保存到本地文件系统',
   },
   {
+    key: 'backup.local.path',
+    section: 'backup',
+    label: '本地备份目录',
+    type: 'string', default: DEFAULT_BACKUP_LOCAL_PATH,
+    description: '本地备份文件保存目录',
+  },
+  {
     key: 'backup.webdav.enabled',
     section: 'backup',
     label: 'WebDAV 备份',
@@ -425,7 +452,7 @@ export const SETTINGS_SCHEMA: SettingDef[] = [
     key: 'backup.webdav.password',
     section: 'backup',
     label: 'WebDAV 密码',
-    type: 'string', default: '',
+    type: 'string', default: '', secret: true,
   },
   {
     key: 'backup.include_recall_events',
@@ -433,6 +460,13 @@ export const SETTINGS_SCHEMA: SettingDef[] = [
     label: '包含召回事件',
     type: 'boolean', default: false,
     description: '备份中包含 recall_events 表（数据量可能很大）',
+  },
+  {
+    key: 'review.local.path',
+    section: 'review',
+    label: 'Review 本地目录',
+    type: 'string', default: DEFAULT_REVIEW_LOCAL_PATH,
+    description: 'Review changeset.json 保存目录',
   },
 ];
 
@@ -460,4 +494,5 @@ export const SECTIONS: SettingSection[] = [
   { id: 'policy', label: '写入策略', description: '控制 MCP 写入前的自动检查规则' },
   { id: 'dream', label: '做梦计划', description: '自动记忆整理的执行计划（需 View LLM 配置）' },
   { id: 'backup', label: '数据备份', description: '自动备份与恢复数据库' },
+  { id: 'review', label: 'Review', description: 'review changeset 本地存储位置' },
 ];

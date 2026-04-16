@@ -3,7 +3,6 @@ import path from 'node:path';
 import { getPool, sql } from '../../db';
 import { getSettings } from '../config/settings';
 
-const BACKUP_DIR = path.join(process.env.SNAPSHOT_DIR || '/app/snapshots', 'backups');
 const FORMAT_VERSION = 'lore-backup-v1';
 
 // Tables in dependency order (parents first for INSERT, children first for TRUNCATE)
@@ -216,8 +215,19 @@ export async function restoreDatabase(data: unknown): Promise<RestoreResult> {
 // Local file operations
 // ---------------------------------------------------------------------------
 
-async function ensureBackupDir(): Promise<void> {
-  await fs.mkdir(BACKUP_DIR, { recursive: true });
+async function getBackupDir(): Promise<string> {
+  const configured = String(await getSettings(['backup.local.path']).then((settings) => settings['backup.local.path'] ?? '')).trim();
+  if (!configured) {
+    const error = Object.assign(new Error('Local backup path is not configured.'), { status: 500 });
+    throw error;
+  }
+  return path.resolve(configured);
+}
+
+async function ensureBackupDir(): Promise<string> {
+  const backupDir = await getBackupDir();
+  await fs.mkdir(backupDir, { recursive: true });
+  return backupDir;
 }
 
 function backupFilename(): string {
@@ -225,10 +235,10 @@ function backupFilename(): string {
 }
 
 export async function exportToLocal(options: ExportOptions = {}): Promise<ExportLocalResult> {
-  await ensureBackupDir();
+  const backupDir = await ensureBackupDir();
   const data = await exportDatabase(options);
   const filename = backupFilename();
-  const filepath = path.join(BACKUP_DIR, filename);
+  const filepath = path.join(backupDir, filename);
   await fs.writeFile(filepath, JSON.stringify(data));
   const stat = await fs.stat(filepath);
   console.log(`[backup] saved local: ${filename} (${(stat.size / 1024 / 1024).toFixed(1)}MB)`);
@@ -236,13 +246,13 @@ export async function exportToLocal(options: ExportOptions = {}): Promise<Export
 }
 
 export async function listLocalBackups(): Promise<LocalBackupEntry[]> {
-  await ensureBackupDir();
+  const backupDir = await ensureBackupDir();
   try {
-    const files = await fs.readdir(BACKUP_DIR);
+    const files = await fs.readdir(backupDir);
     const backups: LocalBackupEntry[] = [];
     for (const f of files) {
       if (!f.startsWith('lore-backup-') || !f.endsWith('.json')) continue;
-      const stat = await fs.stat(path.join(BACKUP_DIR, f));
+      const stat = await fs.stat(path.join(backupDir, f));
       backups.push({ filename: f, size: stat.size, created_at: stat.mtime.toISOString() });
     }
     backups.sort((a, b) => b.created_at.localeCompare(a.created_at));
@@ -252,12 +262,14 @@ export async function listLocalBackups(): Promise<LocalBackupEntry[]> {
 
 export async function readLocalBackup(filename: string): Promise<string> {
   const safe = path.basename(filename);
-  return fs.readFile(path.join(BACKUP_DIR, safe), 'utf-8');
+  const backupDir = await getBackupDir();
+  return fs.readFile(path.join(backupDir, safe), 'utf-8');
 }
 
 export async function deleteLocalBackup(filename: string): Promise<void> {
   const safe = path.basename(filename);
-  await fs.unlink(path.join(BACKUP_DIR, safe));
+  const backupDir = await getBackupDir();
+  await fs.unlink(path.join(backupDir, safe));
 }
 
 export async function cleanupLocalBackups(retentionCount: number): Promise<number> {

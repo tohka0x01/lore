@@ -35,6 +35,16 @@ function normalizeEmbeddingProvider(value: unknown): EmbeddingProvider {
   return value === 'openai_compatible' ? 'openai_compatible' : 'openai_compatible';
 }
 
+function getExplicitOverride<T extends object, K extends keyof T>(
+  source: Partial<T> | null | undefined,
+  key: K,
+): T[K] | undefined {
+  if (!source || typeof source !== 'object' || !Object.prototype.hasOwnProperty.call(source, key)) {
+    return undefined;
+  }
+  return source[key] as T[K] | undefined;
+}
+
 function buildOpenAiProvider(config: { base_url: string; api_key: string }): ReturnType<typeof createOpenAI> {
   return createOpenAI({
     baseURL: config.base_url,
@@ -70,19 +80,20 @@ export function createEmbeddingModel(config: ResolvedEmbeddingConfig): Embedding
   return buildOpenAiProvider(config).embedding(config.model);
 }
 
-export async function resolveViewLlmConfig(embedding?: Partial<ResolvedEmbeddingConfig> | null): Promise<ResolvedViewLlmConfig | null> {
+export async function resolveViewLlmConfig(): Promise<ResolvedViewLlmConfig | null> {
   const s = await getSettingsBatch([
     'view_llm.provider',
     'view_llm.base_url',
+    'view_llm.api_key',
     'view_llm.model',
     'view_llm.temperature',
     'view_llm.timeout_ms',
     'view_llm.api_version',
   ]);
-  const provider = normalizeLlmProvider(s['view_llm.provider'] || process.env.LORE_VIEW_LLM_PROVIDER || 'openai_compatible');
-  const base_url = normalizeBaseUrl(s['view_llm.base_url'] || embedding?.base_url || '');
-  const api_key = String(process.env.LORE_VIEW_LLM_API_KEY || embedding?.api_key || '').trim();
-  const model = String(s['view_llm.model'] || '').trim();
+  const provider = normalizeLlmProvider(s['view_llm.provider'] ?? 'openai_compatible');
+  const base_url = normalizeBaseUrl(s['view_llm.base_url'] ?? '');
+  const api_key = String(s['view_llm.api_key'] ?? '').trim();
+  const model = String(s['view_llm.model'] ?? '').trim();
   if (!base_url || !api_key || !model) return null;
   return {
     provider,
@@ -91,19 +102,19 @@ export async function resolveViewLlmConfig(embedding?: Partial<ResolvedEmbedding
     model,
     timeout_ms: Number(s['view_llm.timeout_ms'] ?? 1800000) || 1800000,
     temperature: Number(s['view_llm.temperature'] ?? 0.2),
-    api_version: String(s['view_llm.api_version'] || process.env.LORE_VIEW_LLM_API_VERSION || '').trim(),
+    api_version: String(s['view_llm.api_version'] ?? '').trim(),
   };
 }
 
 export async function resolveEmbeddingConfig(embedding?: Partial<ResolvedEmbeddingConfig> | null): Promise<ResolvedEmbeddingConfig> {
-  const fallback = embedding && typeof embedding === 'object' ? embedding : {};
-  const s = await getSettingsBatch(['embedding.provider', 'embedding.base_url', 'embedding.model']);
-  const provider = normalizeEmbeddingProvider(s['embedding.provider'] || process.env.LORE_EMBEDDING_PROVIDER || fallback.provider || 'openai_compatible');
-  const base_url = normalizeBaseUrl(s['embedding.base_url'] || fallback.base_url || '');
-  const api_key = String(process.env.LORE_EMBEDDING_API_KEY || fallback.api_key || '').trim();
-  const model = String(s['embedding.model'] || fallback.model || '').trim();
+  const override = embedding && typeof embedding === 'object' ? embedding : null;
+  const s = await getSettingsBatch(['embedding.provider', 'embedding.base_url', 'embedding.api_key', 'embedding.model']);
+  const provider = normalizeEmbeddingProvider(getExplicitOverride(override, 'provider') ?? s['embedding.provider'] ?? 'openai_compatible');
+  const base_url = normalizeBaseUrl(getExplicitOverride(override, 'base_url') ?? s['embedding.base_url'] ?? '');
+  const api_key = String(getExplicitOverride(override, 'api_key') ?? s['embedding.api_key'] ?? '').trim();
+  const model = String(getExplicitOverride(override, 'model') ?? s['embedding.model'] ?? '').trim();
   if (!base_url || !api_key || !model) {
-    const error: Error & { status?: number } = new Error('Embedding config is missing. Configure embedding.base_url / embedding.model via /settings (or LORE_EMBEDDING_BASE_URL / LORE_EMBEDDING_MODEL env) and set LORE_EMBEDDING_API_KEY.');
+    const error: Error & { status?: number } = new Error('Embedding config is missing. Configure embedding.base_url, embedding.api_key, and embedding.model in /settings.');
     error.status = 500;
     throw error;
   }

@@ -16,6 +16,12 @@ import { api, getSetupFlowStatus } from '@/lib/api';
 import { dispatchSetupStatusChanged, type SetupFlowStatus } from '@/lib/bootSetup';
 import { useT } from '@/lib/i18n';
 
+const EMBEDDING_REBUILD_KEYS = new Set([
+  'embedding.base_url',
+  'embedding.api_key',
+  'embedding.model',
+]);
+
 interface SettingsSetupStepProps {
   sectionId: 'embedding' | 'view_llm';
 }
@@ -85,7 +91,7 @@ export default function SettingsSetupStep({ sectionId }: SettingsSetupStepProps)
     [draft, section],
   );
   const embeddingChanged = useMemo(
-    () => sectionId === 'embedding' && dirtyKeys.some((key) => key.startsWith('embedding.')),
+    () => sectionId === 'embedding' && dirtyKeys.some((key) => EMBEDDING_REBUILD_KEYS.has(key)),
     [dirtyKeys, sectionId],
   );
   const previousPath = useMemo(() => getPreviousStepPath(setupStatus, meta.stepId), [meta.stepId, setupStatus]);
@@ -187,18 +193,11 @@ export default function SettingsSetupStep({ sectionId }: SettingsSetupStepProps)
 
   const topNotice = useMemo(() => {
     if (!setupStatus) return null;
-    if (sectionId === 'embedding' && setupStatus.embedding.configured && !setupStatus.embedding.runtime_ready) {
-      return (
-        <Notice tone="warning" title={t('Runtime not ready')}>
-          {t('Embedding is configured, but runtime calls still need the LORE_EMBEDDING_API_KEY environment variable before vectors can run.')}
-        </Notice>
-      );
-    }
     if (sectionId === 'view_llm' && setupStatus.llm.configured && !setupStatus.llm.runtime_ready) {
       return (
         <Notice tone="warning" title={t('Runtime not ready')}>
           <div className="space-y-2">
-            <p>{t('View LLM settings are saved, but runtime access is still unavailable. Draft generation and dream workflows will stay disabled until the runtime is ready.')}</p>
+            <p>{t('View LLM settings are incomplete. Draft generation and dream workflows stay disabled until base URL, API key, and model are all configured in Settings.')}</p>
             {setupStatus.boot.draft_generation_reason && <p>{setupStatus.boot.draft_generation_reason}</p>}
           </div>
         </Notice>

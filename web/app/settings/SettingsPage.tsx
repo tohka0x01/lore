@@ -14,6 +14,12 @@ import {
   type SectionGroup,
 } from '@/components/settings/SettingsSectionEditor';
 
+const EMBEDDING_REBUILD_KEYS = new Set([
+  'embedding.base_url',
+  'embedding.api_key',
+  'embedding.model',
+]);
+
 interface ToastState {
   type: 'success' | 'error';
   text: string;
@@ -89,7 +95,7 @@ export default function SettingsPage(): React.JSX.Element {
   }, []);
 
   const embeddingChanged = useMemo(
-    () => dirtyKeys.some((key) => key.startsWith('embedding.')),
+    () => dirtyKeys.some((key) => EMBEDDING_REBUILD_KEYS.has(key)),
     [dirtyKeys],
   );
 

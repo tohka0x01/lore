@@ -103,6 +103,8 @@ const DICT: Record<'zh' | 'en', Record<string, string>> = {
       'Embedding 已完成配置，但真正运行前仍需要设置 LORE_EMBEDDING_API_KEY 环境变量。',
     'View LLM settings are saved, but runtime access is still unavailable. Draft generation and dream workflows will stay disabled until the runtime is ready.':
       'View LLM 设置已保存，但运行时仍不可用。在运行时就绪前，草稿生成和 dream 流程会继续保持禁用。',
+    'View LLM settings are incomplete. Draft generation and dream workflows stay disabled until base URL, API key, and model are all configured in Settings.':
+      'View LLM 设置尚未完整。只有在 Settings 中同时配置 base URL、API key 和 model 后，草稿生成与 dream 流程才会启用。',
     'Missing': '缺失',
     'Empty content': '内容为空',
     'Initialized': '已初始化',
@@ -348,6 +350,7 @@ const DICT: Record<'zh' | 'en', Record<string, string>> = {
     'Restore completed': '恢复完成',
     'Confirm restore? This will replace ALL current data.': '确认恢复？这将替换所有当前数据。',
     'Size': '大小',
+    'Stored': '已保存',
 
     // ── settings
     'Default': '默认',

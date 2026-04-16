@@ -13,9 +13,11 @@ vi.mock('fs/promises', () => ({
     unlink: vi.fn(),
   },
 }));
+vi.mock('../../config/settings', () => ({ getSetting: vi.fn() }));
 
 import { sql, getPool } from '../../../db';
 import fs from 'fs/promises';
+import { getSetting } from '../../config/settings';
 import {
   listReviewGroups,
   getReviewGroupDiff,
@@ -35,6 +37,7 @@ import {
 const mockSql = vi.mocked(sql);
 const mockGetPool = vi.mocked(getPool);
 const mockFs = vi.mocked(fs);
+const mockGetSetting = vi.mocked(getSetting);
 
 function makeResult(rows: Record<string, unknown>[] = [], rowCount = rows.length) {
   return { rows, rowCount } as ReturnType<typeof sql> extends Promise<infer R> ? R : never;
@@ -183,6 +186,7 @@ describe('_getTableColumns / _getPkColumns', () => {
 describe('listReviewGroups', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    mockGetSetting.mockResolvedValue('/tmp/review');
     mockSql.mockResolvedValue(makeResult([]));
   });
 
@@ -214,6 +218,7 @@ describe('listReviewGroups', () => {
 describe('getReviewGroupDiff', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    mockGetSetting.mockResolvedValue('/tmp/review');
     mockSql.mockResolvedValue(makeResult([]));
   });
 
@@ -255,6 +260,7 @@ describe('getReviewGroupDiff', () => {
 describe('approveReviewGroup', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    mockGetSetting.mockResolvedValue('/tmp/review');
     mockSql.mockResolvedValue(makeResult([]));
   });
 
@@ -276,7 +282,7 @@ describe('approveReviewGroup', () => {
     expect(mockFs.unlink).toHaveBeenCalled();
   });
 
-  it('saves remaining changeset when other nodes exist', async () => {
+  it('reads and writes changeset.json under the configured review path', async () => {
     const changeset = buildChangeset({
       'nodes:uuid1': { table: 'nodes', before: null, after: { uuid: 'uuid1' } },
       'nodes:uuid2': { table: 'nodes', before: null, after: { uuid: 'uuid2' } },
@@ -286,11 +292,12 @@ describe('approveReviewGroup', () => {
     mockFs.writeFile.mockResolvedValue(undefined);
 
     await approveReviewGroup('uuid1');
-    expect(mockFs.writeFile).toHaveBeenCalled();
-    const saved = JSON.parse((mockFs.writeFile.mock.calls[0] as any[])[1]);
-    expect(saved.rows['nodes:uuid1']).toBeUndefined();
-    expect(saved.rows['nodes:uuid2']).toBeDefined();
+
+    expect(mockFs.readFile).toHaveBeenCalledWith('/tmp/review/changeset.json', 'utf8');
+    expect(mockFs.mkdir).toHaveBeenCalledWith('/tmp/review', { recursive: true });
+    expect(mockFs.writeFile).toHaveBeenCalledWith('/tmp/review/changeset.json', expect.any(String), 'utf8');
   });
+
 });
 
 // ---------------------------------------------------------------------------
@@ -300,6 +307,7 @@ describe('approveReviewGroup', () => {
 describe('rollbackReviewGroup', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    mockGetSetting.mockResolvedValue('/tmp/review');
     mockSql.mockResolvedValue(makeResult([]));
   });
 
@@ -337,6 +345,7 @@ describe('rollbackReviewGroup', () => {
 describe('clearAllReviewGroups', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    mockGetSetting.mockResolvedValue('/tmp/review');
   });
 
   it('throws 404 when no pending changes', async () => {

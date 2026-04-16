@@ -64,24 +64,14 @@ describe('extractJsonObject', () => {
 // ---------------------------------------------------------------------------
 
 describe('resolveViewLlmConfig', () => {
-  const originalEnv = process.env.LORE_VIEW_LLM_API_KEY;
-
   beforeEach(() => {
     vi.clearAllMocks();
-    process.env.LORE_VIEW_LLM_API_KEY = 'test-key';
-  });
-
-  afterEach(() => {
-    if (originalEnv !== undefined) {
-      process.env.LORE_VIEW_LLM_API_KEY = originalEnv;
-    } else {
-      delete process.env.LORE_VIEW_LLM_API_KEY;
-    }
   });
 
   it('returns config when all settings are present', async () => {
     mockGetSettings.mockResolvedValueOnce({
       'view_llm.base_url': 'http://llm:8080',
+      'view_llm.api_key': 'test-key',
       'view_llm.model': 'test-model',
       'view_llm.temperature': 0.3,
       'view_llm.timeout_ms': 15000,
@@ -101,6 +91,7 @@ describe('resolveViewLlmConfig', () => {
   it('returns null when base_url is missing', async () => {
     mockGetSettings.mockResolvedValueOnce({
       'view_llm.base_url': '',
+      'view_llm.api_key': 'test-key',
       'view_llm.model': 'model',
     });
     const config = await resolveViewLlmConfig();
@@ -110,6 +101,7 @@ describe('resolveViewLlmConfig', () => {
   it('returns null when model is missing', async () => {
     mockGetSettings.mockResolvedValueOnce({
       'view_llm.base_url': 'http://llm',
+      'view_llm.api_key': 'test-key',
       'view_llm.model': '',
     });
     const config = await resolveViewLlmConfig();
@@ -117,40 +109,29 @@ describe('resolveViewLlmConfig', () => {
   });
 
   it('returns null when api_key is missing', async () => {
-    delete process.env.LORE_VIEW_LLM_API_KEY;
     mockGetSettings.mockResolvedValueOnce({
       'view_llm.base_url': 'http://llm',
+      'view_llm.api_key': '',
       'view_llm.model': 'model',
     });
     const config = await resolveViewLlmConfig();
     expect(config).toBeNull();
   });
 
-  it('falls back to embedding config for base_url and api_key', async () => {
-    delete process.env.LORE_VIEW_LLM_API_KEY;
+  it('does not fall back to embedding config', async () => {
     mockGetSettings.mockResolvedValueOnce({
       'view_llm.base_url': '',
+      'view_llm.api_key': '',
       'view_llm.model': 'model',
     });
-    const config = await resolveViewLlmConfig({
-      base_url: 'http://embed',
-      api_key: 'embed-key',
-      model: 'embed-model',
-    });
-    expect(config).toEqual({
-      provider: 'openai_compatible',
-      base_url: 'http://embed',
-      api_key: 'embed-key',
-      model: 'model',
-      temperature: 0.2,
-      timeout_ms: 1800000,
-      api_version: '',
-    });
+    const config = await resolveViewLlmConfig();
+    expect(config).toBeNull();
   });
 
   it('preserves zero temperature and defaults timeout when zero', async () => {
     mockGetSettings.mockResolvedValueOnce({
       'view_llm.base_url': 'http://llm',
+      'view_llm.api_key': 'test-key',
       'view_llm.model': 'model',
       'view_llm.temperature': 0,
       'view_llm.timeout_ms': 0,
@@ -164,6 +145,7 @@ describe('resolveViewLlmConfig', () => {
     mockGetSettings.mockResolvedValueOnce({
       'view_llm.provider': 'anthropic',
       'view_llm.base_url': 'http://llm',
+      'view_llm.api_key': 'test-key',
       'view_llm.model': 'model',
       'view_llm.api_version': '2023-06-01',
     });

@@ -73,8 +73,10 @@ export async function getSetupFlowStatus(): Promise<SetupFlowStatus> {
   const [settings, boot, resolvedViewLlm] = await Promise.all([
     getSettings([
       'embedding.base_url',
+      'embedding.api_key',
       'embedding.model',
       'view_llm.base_url',
+      'view_llm.api_key',
       'view_llm.model',
     ]),
     bootView(),
@@ -82,14 +84,16 @@ export async function getSetupFlowStatus(): Promise<SetupFlowStatus> {
   ]);
 
   const embeddingConfigured = isConfiguredValue(settings['embedding.base_url'])
+    && isConfiguredValue(settings['embedding.api_key'])
     && isConfiguredValue(settings['embedding.model']);
   const llmConfigured = isConfiguredValue(settings['view_llm.base_url'])
+    && isConfiguredValue(settings['view_llm.api_key'])
     && isConfiguredValue(settings['view_llm.model']);
 
   return buildSetupFlowStatus({
     embedding: {
       configured: embeddingConfigured,
-      runtime_ready: embeddingConfigured && isConfiguredValue(process.env.LORE_EMBEDDING_API_KEY),
+      runtime_ready: embeddingConfigured,
     },
     llm: {
       configured: llmConfigured,

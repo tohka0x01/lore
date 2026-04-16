@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach } from 'vitest';
 
 vi.mock('../../../db', () => ({ sql: vi.fn() }));
 vi.mock('../../config/settings', () => ({ getSettings: vi.fn() }));
@@ -23,8 +23,6 @@ const DEFAULT_VIEW_LLM_CONFIG = {
   api_version: '',
 };
 
-const originalApiKey = process.env.LORE_VIEW_LLM_API_KEY;
-
 describe('boot helpers', () => {
   it('exposes fixed boot URIs in deterministic order', () => {
     expect(getBootUris()).toEqual(['core://agent', 'core://soul', 'preferences://user']);
@@ -46,17 +44,12 @@ describe('bootView', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     delete process.env.CORE_MEMORY_URIS;
-    process.env.LORE_VIEW_LLM_API_KEY = 'test-key';
     mockResolveViewLlmConfig.mockResolvedValue(DEFAULT_VIEW_LLM_CONFIG);
     mockGetSettings.mockResolvedValue({
       'view_llm.base_url': 'http://llm:8080',
+      'view_llm.api_key': 'test-key',
       'view_llm.model': 'glm-5.1',
     });
-  });
-
-  afterEach(() => {
-    if (originalApiKey !== undefined) process.env.LORE_VIEW_LLM_API_KEY = originalApiKey;
-    else delete process.env.LORE_VIEW_LLM_API_KEY;
   });
 
   it('returns object with core_memories, recent_memories, nodes, and draft status', async () => {
@@ -229,9 +222,9 @@ describe('bootView', () => {
     mockResolveViewLlmConfig.mockResolvedValueOnce(null);
     mockGetSettings.mockResolvedValueOnce({
       'view_llm.base_url': '',
+      'view_llm.api_key': '',
       'view_llm.model': 'glm-5.1',
     });
-    delete process.env.LORE_VIEW_LLM_API_KEY;
     mockSql
       .mockResolvedValueOnce({ rows: [], rowCount: 0 } as any)
       .mockResolvedValueOnce({ rows: [], rowCount: 0 } as any)

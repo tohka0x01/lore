@@ -1,17 +1,16 @@
 import fs from 'fs/promises';
 import path from 'path';
-import { fileURLToPath } from 'url';
 import { sql, getPool } from '../../db';
+import { getSetting } from '../config/settings';
 
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
-const REPO_ROOT = path.resolve(__dirname, '../../../../');
-const DEFAULT_SNAPSHOT_DIR = process.env.SNAPSHOT_DIR || path.join(REPO_ROOT, 'snapshots');
-const CHANGESET_PATH = path.join(DEFAULT_SNAPSHOT_DIR, 'changeset.json');
-
-// ---------------------------------------------------------------------------
-// Types
-// ---------------------------------------------------------------------------
+async function getChangesetPath(): Promise<string> {
+  const configured = String((await getSetting('review.local.path')) ?? '').trim();
+  if (!configured) {
+    const error = Object.assign(new Error('Review local path is not configured.'), { status: 500 });
+    throw error;
+  }
+  return path.join(path.resolve(configured), 'changeset.json');
+}
 
 interface ChangesetRow {
   table: string;
@@ -90,7 +89,7 @@ function rowsEqual(table: string, a: Record<string, unknown> | null, b: Record<s
 
 async function loadChangeset(): Promise<ChangesetData> {
   try {
-    const raw = await fs.readFile(CHANGESET_PATH, 'utf8');
+    const raw = await fs.readFile(await getChangesetPath(), 'utf8');
     const parsed = JSON.parse(raw);
     return parsed?.rows ? parsed : { rows: {} };
   } catch {
@@ -99,13 +98,14 @@ async function loadChangeset(): Promise<ChangesetData> {
 }
 
 async function saveChangeset(data: ChangesetData): Promise<void> {
-  await fs.mkdir(DEFAULT_SNAPSHOT_DIR, { recursive: true });
-  await fs.writeFile(CHANGESET_PATH, JSON.stringify(data, null, 2), 'utf8');
+  const changesetPath = await getChangesetPath();
+  await fs.mkdir(path.dirname(changesetPath), { recursive: true });
+  await fs.writeFile(changesetPath, JSON.stringify(data, null, 2), 'utf8');
 }
 
 async function removeChangesetFile(): Promise<void> {
   try {
-    await fs.unlink(CHANGESET_PATH);
+    await fs.unlink(await getChangesetPath());
   } catch {}
 }
 

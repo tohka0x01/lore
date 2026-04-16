@@ -137,6 +137,7 @@ describe('loadLlmConfig', () => {
   it('returns null when base_url is missing', async () => {
     mockGetSettings.mockResolvedValue({
       'view_llm.base_url': '',
+      'view_llm.api_key': 'test-key',
       'view_llm.model': 'gpt-4',
       'view_llm.temperature': 0.3,
       'view_llm.timeout_ms': 1800000,
@@ -146,10 +147,9 @@ describe('loadLlmConfig', () => {
   });
 
   it('returns config when all fields present', async () => {
-    const originalEnv = process.env.LORE_VIEW_LLM_API_KEY;
-    process.env.LORE_VIEW_LLM_API_KEY = 'test-key';
     mockGetSettings.mockResolvedValue({
       'view_llm.base_url': 'http://localhost:1234/v1/',
+      'view_llm.api_key': 'test-key',
       'view_llm.model': 'gpt-4',
       'view_llm.temperature': 0.5,
       'view_llm.timeout_ms': 1800000,
@@ -164,7 +164,6 @@ describe('loadLlmConfig', () => {
       temperature: 0.5,
       api_version: '',
     });
-    process.env.LORE_VIEW_LLM_API_KEY = originalEnv;
   });
 });
 

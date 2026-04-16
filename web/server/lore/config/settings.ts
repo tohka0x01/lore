@@ -3,8 +3,7 @@
  *
  * Resolution order for each key:
  *   1. Value stored in `app_settings` (runtime editable via /settings UI)
- *   2. Environment variable (when `env` is declared in the schema)
- *   3. Hard-coded default declared in SETTINGS_SCHEMA
+ *   2. Hard-coded default declared in SETTINGS_SCHEMA
  *
  * Callers use `getSetting(key)` (async, cached) or `getSettings(keys[])` to
  * resolve one or many values at once. The cache is process-local with a short
@@ -75,14 +74,14 @@ export function coerce(value: unknown, schema: SettingDef): string | number | bo
   return value as string | number | boolean;
 }
 
-export function resolveFromEnvAndDefault(schema: SettingDef): string | number | boolean {
-  if (schema.env) {
-    const envValue = process.env[schema.env];
-    if (envValue !== undefined && envValue !== '') {
-      const coerced = coerce(envValue, schema);
-      if (coerced !== null) return coerced;
-    }
+function unwrapStoredValue(raw: unknown): unknown {
+  if (raw && typeof raw === 'object' && 'value' in (raw as Record<string, unknown>)) {
+    return (raw as Record<string, unknown>).value;
   }
+  return raw;
+}
+
+export function resolveFromDefault(schema: SettingDef): string | number | boolean {
   return schema.default;
 }
 
@@ -90,15 +89,14 @@ export function resolveValue(key: string, dbValues: Map<string, unknown>): strin
   const schema = SCHEMA_BY_KEY.get(key);
   if (!schema) return undefined;
   if (dbValues.has(key)) {
-    const raw = dbValues.get(key);
-    // DB values are stored as JSONB -- unwrap single primitives
-    const unwrapped = raw && typeof raw === 'object' && 'value' in (raw as Record<string, unknown>)
-      ? (raw as Record<string, unknown>).value
-      : raw;
-    const coerced = coerce(unwrapped, schema);
+    const coerced = coerce(unwrapStoredValue(dbValues.get(key)), schema);
     if (coerced !== null) return coerced;
   }
-  return resolveFromEnvAndDefault(schema);
+  return resolveFromDefault(schema);
+}
+
+function isSecretConfiguredValue(value: unknown): boolean {
+  return String(value ?? '').trim().length > 0;
 }
 
 // ---------------------------------------------------------------------------
@@ -124,24 +122,31 @@ export async function getAllSettings(): Promise<Record<string, string | number |
   return out;
 }
 
-/** Returns `{ values, defaults, sources }` for introspection/UI. */
+/** Returns `{ values, defaults, sources, secret_configured }` for introspection/UI. */
 export async function getSettingsSnapshot(): Promise<{
   values: Record<string, string | number | boolean | undefined>;
   defaults: Record<string, string | number | boolean>;
-  sources: Record<string, 'db' | 'env' | 'default'>;
+  sources: Record<string, 'db' | 'default'>;
+  secret_configured: Record<string, boolean>;
 }> {
   const dbValues = await getCachedValues();
   const values: Record<string, string | number | boolean | undefined> = {};
   const defaults: Record<string, string | number | boolean> = {};
-  const sources: Record<string, 'db' | 'env' | 'default'> = {};
+  const sources: Record<string, 'db' | 'default'> = {};
+  const secret_configured: Record<string, boolean> = {};
   for (const schema of SETTINGS_SCHEMA) {
     const dbOverridden = dbValues.has(schema.key);
-    const envOverridden = !dbOverridden && !!schema.env && process.env[schema.env] !== undefined && process.env[schema.env] !== '';
-    values[schema.key] = resolveValue(schema.key, dbValues);
+    const resolved = resolveValue(schema.key, dbValues);
     defaults[schema.key] = schema.default;
-    sources[schema.key] = dbOverridden ? 'db' : envOverridden ? 'env' : 'default';
+    sources[schema.key] = dbOverridden ? 'db' : 'default';
+    if (schema.secret) {
+      values[schema.key] = '';
+      secret_configured[schema.key] = isSecretConfiguredValue(resolved);
+      continue;
+    }
+    values[schema.key] = resolved;
   }
-  return { values, defaults, sources };
+  return { values, defaults, sources, secret_configured };
 }
 
 export function validatePatchEntry(key: string, value: unknown): string | number | boolean {
@@ -149,6 +154,9 @@ export function validatePatchEntry(key: string, value: unknown): string | number
   if (!schema) throw Object.assign(new Error(`Unknown setting key: ${key}`), { status: 400 });
   const coerced = coerce(value, schema);
   if (coerced === null) throw Object.assign(new Error(`Invalid value for ${key}`), { status: 400 });
+  if (schema.secret && schema.type === 'string' && String(coerced).trim() === '') {
+    throw Object.assign(new Error(`Use reset to clear secret setting: ${key}`), { status: 400 });
+  }
   if (schema.type === 'number' || schema.type === 'integer') {
     if (schema.min !== undefined && (coerced as number) < schema.min) {
       throw Object.assign(new Error(`${key} must be >= ${schema.min}`), { status: 400 });

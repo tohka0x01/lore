@@ -5,20 +5,20 @@ import clsx from 'clsx';
 import { Badge, Button, inputClass } from '@/components/ui';
 import { useT } from '@/lib/i18n';
 
-export type SettingSource = 'db' | 'env' | 'default';
+export type SettingSource = 'db' | 'default';
 
 export interface FieldSchema {
   key: string;
   label: string;
   type: 'number' | 'integer' | 'string' | 'enum' | 'boolean';
   description?: string;
-  env?: string;
   min?: number;
   max?: number;
   step?: number;
   options?: string[];
   option_labels?: Record<string, string>;
   section: string;
+  secret?: boolean;
 }
 
 export interface SectionSchema {
@@ -33,6 +33,7 @@ export interface SettingsData {
   values: Record<string, unknown>;
   defaults: Record<string, unknown>;
   sources: Record<string, SettingSource>;
+  secret_configured: Record<string, boolean>;
 }
 
 export interface SectionGroup extends SectionSchema {
@@ -47,7 +48,6 @@ function SourceDot({ source }: SourceDotProps): React.JSX.Element {
   const { t } = useT();
   const map: Record<SettingSource, { tone: string; label: string }> = {
     db: { tone: 'bg-sys-blue', label: t('Modified') },
-    env: { tone: 'bg-sys-green', label: t('From env') },
     default: { tone: 'bg-fill-primary', label: t('Default') },
   };
   const { tone, label } = map[source] || map.default;
@@ -86,14 +86,19 @@ interface StringInputProps {
   value: unknown;
   onChange: (v: string) => void;
   disabled: boolean;
+  secret?: boolean;
+  secretConfigured?: boolean;
 }
 
-function StringInput({ value, onChange, disabled }: StringInputProps): React.JSX.Element {
+function StringInput({ value, onChange, disabled, secret = false, secretConfigured = false }: StringInputProps): React.JSX.Element {
+  const { t } = useT();
   return (
     <input
-      type="text"
+      type={secret ? 'password' : 'text'}
       value={value == null ? '' : String(value)}
       disabled={disabled}
+      placeholder={secret && secretConfigured ? t('Stored') : undefined}
+      autoComplete="off"
       onChange={(e: ChangeEvent<HTMLInputElement>) => onChange(e.target.value)}
       className={`${inputClass} py-1.5`}
     />
@@ -163,19 +168,20 @@ interface FieldRowProps {
   value: unknown;
   source: SettingSource;
   dirty: boolean;
+  secretConfigured: boolean;
   onChange: (v: unknown) => void;
   onReset: () => void;
   saving: boolean;
 }
 
-export function FieldRow({ schema, value, source, dirty, onChange, onReset, saving }: FieldRowProps): React.JSX.Element {
+export function FieldRow({ schema, value, source, dirty, secretConfigured, onChange, onReset, saving }: FieldRowProps): React.JSX.Element {
   const { t } = useT();
   const isString = schema.type === 'string';
   const renderInput = () => {
     if (schema.type === 'number' || schema.type === 'integer') return <NumberInput value={value} onChange={onChange as (v: number | '') => void} schema={schema} disabled={saving} />;
     if (schema.type === 'enum') return <EnumInput value={value} onChange={onChange as (v: string) => void} schema={schema} disabled={saving} />;
     if (schema.type === 'boolean') return <BooleanInput value={value} onChange={onChange as (v: boolean) => void} disabled={saving} />;
-    return <StringInput value={value} onChange={onChange as (v: string) => void} disabled={saving} />;
+    return <StringInput value={value} onChange={onChange as (v: string) => void} disabled={saving} secret={schema.secret} secretConfigured={secretConfigured} />;
   };
 
   return (
@@ -190,6 +196,7 @@ export function FieldRow({ schema, value, source, dirty, onChange, onReset, savi
         <div className="flex items-center gap-3 flex-wrap">
           <span className="text-[14px] font-medium text-txt-primary">{schema.label}</span>
           <SourceDot source={source} />
+          {schema.secret && secretConfigured && !dirty && <Badge tone="green">{t('Stored')}</Badge>}
           {dirty && <Badge tone="blue">{t('Unsaved')}</Badge>}
           {source !== 'default' && !dirty && (
             <button
@@ -207,7 +214,6 @@ export function FieldRow({ schema, value, source, dirty, onChange, onReset, savi
         )}
         <p className="mt-1 text-[11px] text-txt-quaternary font-mono">
           {schema.key}
-          {schema.env && <> · env: {schema.env}</>}
           {(schema.min !== undefined || schema.max !== undefined) && <> · range [{schema.min ?? '∞'}, {schema.max ?? '∞'}]</>}
         </p>
       </div>
@@ -255,6 +261,7 @@ export function SettingsSectionEditor({
             value={effectiveValue}
             source={data.sources[schema.key]}
             dirty={schema.key in draft}
+            secretConfigured={data.secret_configured[schema.key] === true}
             onChange={(v) => onChange(schema.key, v)}
             onReset={() => onReset(schema.key)}
             saving={saving}

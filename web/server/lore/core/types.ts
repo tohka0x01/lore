@@ -143,7 +143,6 @@ export interface SettingDef {
   max?: number;
   step?: number;
   options?: Array<{ value: string; label: string }>;
-  envKey?: string;
 }
 
 export interface SettingSection {
@@ -155,7 +154,7 @@ export interface SettingSnapshot {
   key: string;
   value: string | number | boolean;
   default: string | number | boolean;
-  source: 'db' | 'env' | 'default';
+  source: 'db' | 'default';
 }
 
 // === Events ===

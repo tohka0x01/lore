@@ -194,7 +194,7 @@ export async function upsertGeneratedMemoryViewsForPath({
   );
   const existingMap = new Map(existing.rows.map((row: Record<string, unknown>) => [`${row.domain}::${row.path}::${row.view_type}`, row]));
 
-  const llmConfig = await resolveViewLlmConfig(resolvedEmbedding);
+  const llmConfig = await resolveViewLlmConfig();
   const weights = await loadViewWeights();
   let llmRefinedDocs = 0;
   let docsForViews = docs;
@@ -278,7 +278,7 @@ export async function ensureMemoryViewsIndex(
 
   const weights = await loadViewWeights();
   const sourceViewMap = buildViewMap(docs.flatMap((doc) => buildViewRecords(doc, weights)));
-  const llmConfig = await resolveViewLlmConfig(embedding);
+  const llmConfig = await resolveViewLlmConfig();
   let llmRefinedDocs = 0;
 
   if (llmConfig) {

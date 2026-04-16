@@ -156,10 +156,10 @@ export async function getBootDraftGenerationStatus(): Promise<BootDraftGeneratio
     };
   }
 
-  const settings = await getSettings(['view_llm.base_url', 'view_llm.model']);
+  const settings = await getSettings(['view_llm.base_url', 'view_llm.api_key', 'view_llm.model']);
   const baseUrl = String(settings['view_llm.base_url'] || '').trim();
+  const apiKey = String(settings['view_llm.api_key'] || '').trim();
   const model = String(settings['view_llm.model'] || '').trim();
-  const apiKey = String(process.env.LORE_VIEW_LLM_API_KEY || '').trim();
 
   if (!baseUrl) {
     return {

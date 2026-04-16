@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 vi.mock('../../config/settings', () => ({
   getSettings: vi.fn(),
@@ -112,40 +112,26 @@ describe('buildSetupFlowStatus', () => {
 });
 
 describe('getSetupFlowStatus', () => {
-  const originalEmbeddingApiKey = process.env.LORE_EMBEDDING_API_KEY;
-
   beforeEach(() => {
     vi.clearAllMocks();
-    delete process.env.LORE_EMBEDDING_API_KEY;
     mockGetSettings.mockResolvedValue({
       'embedding.base_url': 'http://embed:8080',
+      'embedding.api_key': 'embed-key',
       'embedding.model': 'embed-model',
       'view_llm.base_url': 'http://llm:8080',
+      'view_llm.api_key': 'llm-key',
       'view_llm.model': 'view-model',
     });
     mockBootView.mockResolvedValue(BASE_BOOT_VIEW as any);
     mockResolveViewLlmConfig.mockResolvedValue(null);
   });
 
-  afterEach(() => {
-    if (originalEmbeddingApiKey === undefined) delete process.env.LORE_EMBEDDING_API_KEY;
-    else process.env.LORE_EMBEDDING_API_KEY = originalEmbeddingApiKey;
-  });
-
-  it('treats base_url and model as setup-complete even if runtime is not ready', async () => {
-    const result = await getSetupFlowStatus();
-
-    expect(result.embedding).toEqual({ configured: true, runtime_ready: false });
-    expect(result.llm).toEqual({ configured: true, runtime_ready: false });
-    expect(result.next_step).toBe('/setup/boot/soul');
-  });
-
-  it('marks embedding runtime ready when the API key exists', async () => {
-    process.env.LORE_EMBEDDING_API_KEY = 'embed-key';
-
+  it('treats embedding as runtime-ready once settings are complete', async () => {
     const result = await getSetupFlowStatus();
 
     expect(result.embedding).toEqual({ configured: true, runtime_ready: true });
+    expect(result.llm).toEqual({ configured: true, runtime_ready: false });
+    expect(result.next_step).toBe('/setup/boot/soul');
   });
 
   it('marks llm runtime ready when resolveViewLlmConfig succeeds', async () => {
@@ -164,18 +150,20 @@ describe('getSetupFlowStatus', () => {
     expect(result.llm).toEqual({ configured: true, runtime_ready: true });
   });
 
-  it('treats embedding and llm as incomplete when required UI fields are missing', async () => {
+  it('treats embedding and llm as incomplete when required settings fields are missing', async () => {
     mockGetSettings.mockResolvedValue({
-      'embedding.base_url': '',
+      'embedding.base_url': 'http://embed:8080',
+      'embedding.api_key': '',
       'embedding.model': 'embed-model',
       'view_llm.base_url': 'http://llm:8080',
-      'view_llm.model': '',
+      'view_llm.api_key': '',
+      'view_llm.model': 'view-model',
     });
 
     const result = await getSetupFlowStatus();
 
-    expect(result.embedding.configured).toBe(false);
-    expect(result.llm.configured).toBe(false);
+    expect(result.embedding).toEqual({ configured: false, runtime_ready: false });
+    expect(result.llm).toEqual({ configured: false, runtime_ready: false });
     expect(result.next_step).toBe('/setup/embedding');
   });
 });
