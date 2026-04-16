@@ -4,8 +4,8 @@ import React, { useState, useEffect, useCallback, useRef, useMemo, ReactNode } f
 import { useRouter, usePathname } from 'next/navigation';
 import { Sun, Moon } from 'lucide-react';
 import clsx from 'clsx';
-import { getDomains, getBootStatus, AUTH_ERROR_EVENT } from '../lib/api';
-import { getBootSetupDecision, BOOT_STATUS_CHANGED_EVENT, type BootOverallState } from '@/lib/bootSetup';
+import { getDomains, getSetupFlowStatus, AUTH_ERROR_EVENT } from '../lib/api';
+import { getSetupFlowDecision, SETUP_STATUS_CHANGED_EVENT, type SetupFlowStatus } from '@/lib/bootSetup';
 import { LanguageProvider, useT } from '../lib/i18n';
 import { ThemeProvider, useTheme } from '../lib/theme';
 import TokenAuth from './TokenAuth';
@@ -72,19 +72,13 @@ function NavDock(): React.JSX.Element {
       if (!el || !navRef.current) return;
       const navRect = navRef.current.getBoundingClientRect();
       const elRect = el.getBoundingClientRect();
-      // scrollLeft is needed because translateX is relative to the nav content origin,
-      // but getBoundingClientRect is viewport-relative. When the nav overflows on
-      // mobile and scrolls, the viewport rects shift but the content origin doesn't.
       const scrollLeft = navRef.current.scrollLeft || 0;
       setIndicator({ x: elRect.left - navRect.left + scrollLeft, w: elRect.width, ready: true });
     };
-    // Measure after paint so fonts and layout are settled
     requestAnimationFrame(measure);
-    // Re-measure on resize (e.g. orientation change, font load)
     const nav = navRef.current;
     const ro = new ResizeObserver(measure);
     ro.observe(nav);
-    // Also re-measure on scroll (user swipes through tabs on mobile)
     nav.addEventListener('scroll', measure, { passive: true });
     return () => { ro.disconnect(); nav.removeEventListener('scroll', measure); };
   }, [targetHref, pathname]);
@@ -92,7 +86,6 @@ function NavDock(): React.JSX.Element {
   return (
     <header className="fixed top-3 md:top-4 left-1/2 z-50 max-w-[calc(100vw-16px)]" style={{ transform: 'translateX(-50%)' }}>
       <div className="animate-in relative flex items-center gap-0.5 md:gap-1.5 rounded-full border border-separator-thin bg-bg-elevated/80 backdrop-blur-2xl backdrop-saturate-150 pl-1.5 md:pl-2.5 pr-1 md:pr-2 py-1.5 md:py-2 shadow-dock">
-        {/* brand */}
         <button
           onClick={() => router.push('/memory')}
           className="press flex items-center gap-1.5 md:gap-2 rounded-full pl-0.5 md:pl-1 pr-1.5 md:pr-2.5 py-1 hover:bg-fill-quaternary transition-colors"
@@ -115,53 +108,50 @@ function NavDock(): React.JSX.Element {
 
         <div className="hidden md:block h-5 w-px bg-separator-thin mx-0.5" />
 
-        {/* tabs with sliding pill */}
         <div className="relative overflow-hidden">
-        <nav
-          ref={navRef}
-          className="relative flex items-center gap-0.5 overflow-x-auto no-scrollbar"
-          onMouseLeave={() => setHoverHref(null)}
-        >
-          <div
-            aria-hidden
-            className={clsx(
-              'pointer-events-none absolute inset-y-0 rounded-full transition-all duration-300 ease-spring',
-              indicator.ready ? 'opacity-100' : 'opacity-0',
-              hoverHref ? 'bg-fill-primary shadow-none' : 'bg-bg-elevated shadow-none',
-            )}
-            style={{ transform: `translateX(${indicator.x}px)`, width: `${indicator.w}px` }}
-          />
-          {tabs.map((tab) => {
-            const isActive = activeHref === tab.href;
-            const isHover = hoverHref === tab.href;
-            const showAsActive = isActive && !hoverHref;
-            return (
-              <button
-                key={tab.href}
-                ref={(el) => { if (el) tabRefs.current.set(tab.href, el); }}
-                onMouseEnter={() => setHoverHref(tab.href)}
-                onClick={() => router.push(tab.href)}
-                className={clsx(
-                  'press relative z-10 shrink-0 rounded-full px-2.5 md:px-3.5 py-1.5 md:py-2 text-[12px] md:text-[13.5px] transition-colors duration-200 ease-spring',
-                  showAsActive
-                    ? 'font-semibold text-sys-blue'
-                    : isHover
-                      ? 'font-medium text-txt-primary'
-                      : 'font-medium text-txt-secondary/90',
-                )}
-              >
-                {t(tab.label)}
-              </button>
-            );
-          })}
-        </nav>
-        {/* Fade hint for scrollable tabs on mobile */}
-        <div className="pointer-events-none absolute inset-y-0 right-0 w-6 bg-gradient-to-l from-[var(--bg-elevated)] to-transparent md:hidden" />
+          <nav
+            ref={navRef}
+            className="relative flex items-center gap-0.5 overflow-x-auto no-scrollbar"
+            onMouseLeave={() => setHoverHref(null)}
+          >
+            <div
+              aria-hidden
+              className={clsx(
+                'pointer-events-none absolute inset-y-0 rounded-full transition-all duration-300 ease-spring',
+                indicator.ready ? 'opacity-100' : 'opacity-0',
+                hoverHref ? 'bg-fill-primary shadow-none' : 'bg-bg-elevated shadow-none',
+              )}
+              style={{ transform: `translateX(${indicator.x}px)`, width: `${indicator.w}px` }}
+            />
+            {tabs.map((tab) => {
+              const isActive = activeHref === tab.href;
+              const isHover = hoverHref === tab.href;
+              const showAsActive = isActive && !hoverHref;
+              return (
+                <button
+                  key={tab.href}
+                  ref={(el) => { if (el) tabRefs.current.set(tab.href, el); }}
+                  onMouseEnter={() => setHoverHref(tab.href)}
+                  onClick={() => router.push(tab.href)}
+                  className={clsx(
+                    'press relative z-10 shrink-0 rounded-full px-2.5 md:px-3.5 py-1.5 md:py-2 text-[12px] md:text-[13.5px] transition-colors duration-200 ease-spring',
+                    showAsActive
+                      ? 'font-semibold text-sys-blue'
+                      : isHover
+                        ? 'font-medium text-txt-primary'
+                        : 'font-medium text-txt-secondary/90',
+                  )}
+                >
+                  {t(tab.label)}
+                </button>
+              );
+            })}
+          </nav>
+          <div className="pointer-events-none absolute inset-y-0 right-0 w-6 bg-gradient-to-l from-[var(--bg-elevated)] to-transparent md:hidden" />
         </div>
 
         <div className="hidden md:block h-5 w-px bg-separator-thin mx-0.5" />
 
-        {/* theme toggle */}
         <button
           onClick={toggleTheme}
           aria-label={theme === 'dark' ? t('Switch to light') : t('Switch to dark')}
@@ -173,7 +163,6 @@ function NavDock(): React.JSX.Element {
             : <Sun size={14} strokeWidth={2} />}
         </button>
 
-        {/* language switch — hidden on mobile, set it once on desktop */}
         <div className="hidden sm:flex items-center rounded-full bg-fill-quaternary p-[3px]">
           {(['zh', 'en'] as const).map((code) => (
             <button
@@ -188,7 +177,6 @@ function NavDock(): React.JSX.Element {
             </button>
           ))}
         </div>
-
       </div>
     </header>
   );
@@ -202,50 +190,56 @@ function AppShellInner({ children }: AppShellInnerProps): React.JSX.Element {
   const router = useRouter();
   const pathname = usePathname() || '';
   const { confirm } = useConfirm();
+  const { t } = useT();
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [isCheckingAuth, setIsCheckingAuth] = useState(true);
   const [backendError, setBackendError] = useState(false);
-  const [bootOverallState, setBootOverallState] = useState<BootOverallState | null>(null);
-  const [hasCheckedBoot, setHasCheckedBoot] = useState(false);
-  const [bootRefreshToken, setBootRefreshToken] = useState(0);
-  const [hasAcknowledgedBootPrompt, setHasAcknowledgedBootPrompt] = useState(false);
-  const promptingBootSetupRef = useRef(false);
-  const { t } = useT();
+  const [setupStatus, setSetupStatus] = useState<SetupFlowStatus | null>(null);
+  const [hasCheckedSetup, setHasCheckedSetup] = useState(false);
+  const [setupRefreshToken, setSetupRefreshToken] = useState(0);
+  const [hasAcknowledgedSetupPrompt, setHasAcknowledgedSetupPrompt] = useState(false);
+  const promptingSetupRef = useRef(false);
 
-  const handleAuthError = useCallback(() => {
-    setIsAuthenticated(false);
-    setBootOverallState(null);
-    setHasCheckedBoot(false);
-    setHasAcknowledgedBootPrompt(false);
-    promptingBootSetupRef.current = false;
+  const clearSetupPromptAck = useCallback(() => {
+    setHasAcknowledgedSetupPrompt(false);
+    promptingSetupRef.current = false;
     try {
       window.sessionStorage.removeItem(BOOT_SETUP_ACK_KEY);
     } catch {}
   }, []);
+
+  const handleAuthError = useCallback(() => {
+    setIsAuthenticated(false);
+    setSetupStatus(null);
+    setHasCheckedSetup(false);
+    clearSetupPromptAck();
+  }, [clearSetupPromptAck]);
+
   const handleAuthenticated = useCallback(() => {
     setIsAuthenticated(true);
     setBackendError(false);
-    setBootOverallState(null);
-    setHasCheckedBoot(false);
-    promptingBootSetupRef.current = false;
+    setSetupStatus(null);
+    setHasCheckedSetup(false);
+    promptingSetupRef.current = false;
     try {
-      setHasAcknowledgedBootPrompt(window.sessionStorage.getItem(BOOT_SETUP_ACK_KEY) === '1');
+      setHasAcknowledgedSetupPrompt(window.sessionStorage.getItem(BOOT_SETUP_ACK_KEY) === '1');
     } catch {
-      setHasAcknowledgedBootPrompt(false);
+      setHasAcknowledgedSetupPrompt(false);
     }
   }, []);
-  const handleBootStatusChanged = useCallback(() => {
-    setBootRefreshToken((prev) => prev + 1);
+
+  const handleSetupStatusChanged = useCallback(() => {
+    setSetupRefreshToken((prev) => prev + 1);
   }, []);
 
   useEffect(() => {
     window.addEventListener(AUTH_ERROR_EVENT, handleAuthError);
-    window.addEventListener(BOOT_STATUS_CHANGED_EVENT, handleBootStatusChanged);
+    window.addEventListener(SETUP_STATUS_CHANGED_EVENT, handleSetupStatusChanged);
     return () => {
       window.removeEventListener(AUTH_ERROR_EVENT, handleAuthError);
-      window.removeEventListener(BOOT_STATUS_CHANGED_EVENT, handleBootStatusChanged);
+      window.removeEventListener(SETUP_STATUS_CHANGED_EVENT, handleSetupStatusChanged);
     };
-  }, [handleAuthError, handleBootStatusChanged]);
+  }, [handleAuthError, handleSetupStatusChanged]);
 
   useEffect(() => {
     let mounted = true;
@@ -255,8 +249,8 @@ function AppShellInner({ children }: AppShellInnerProps): React.JSX.Element {
         if (mounted) {
           setIsAuthenticated(true);
           setBackendError(false);
-          setBootOverallState(null);
-          setHasCheckedBoot(false);
+          setSetupStatus(null);
+          setHasCheckedSetup(false);
           setIsCheckingAuth(false);
         }
       } catch (e) {
@@ -266,8 +260,8 @@ function AppShellInner({ children }: AppShellInnerProps): React.JSX.Element {
           else if (err.response.status === 401) {
             setIsAuthenticated(false);
             setBackendError(false);
-            setBootOverallState(null);
-            setHasCheckedBoot(false);
+            setSetupStatus(null);
+            setHasCheckedSetup(false);
           }
           setIsCheckingAuth(false);
         }
@@ -280,67 +274,64 @@ function AppShellInner({ children }: AppShellInnerProps): React.JSX.Element {
   useEffect(() => {
     if (!isAuthenticated) return;
     let mounted = true;
-    const loadBootStatus = async () => {
+    const loadSetupStatus = async () => {
       try {
-        const next = await getBootStatus();
+        const next = await getSetupFlowStatus();
         if (mounted) {
-          setBootOverallState(next.overall_state);
+          setSetupStatus(next);
         }
       } catch {
         if (mounted) {
-          setBootOverallState(null);
+          setSetupStatus(null);
         }
       } finally {
         if (mounted) {
-          setHasCheckedBoot(true);
+          setHasCheckedSetup(true);
         }
       }
     };
-    void loadBootStatus();
+    void loadSetupStatus();
     return () => { mounted = false; };
-  }, [bootRefreshToken, isAuthenticated]);
+  }, [isAuthenticated, setupRefreshToken]);
 
   useEffect(() => {
     if (!isAuthenticated) return;
     try {
-      setHasAcknowledgedBootPrompt(window.sessionStorage.getItem(BOOT_SETUP_ACK_KEY) === '1');
+      setHasAcknowledgedSetupPrompt(window.sessionStorage.getItem(BOOT_SETUP_ACK_KEY) === '1');
     } catch {
-      setHasAcknowledgedBootPrompt(false);
+      setHasAcknowledgedSetupPrompt(false);
     }
   }, [isAuthenticated]);
 
   useEffect(() => {
-    if (!hasCheckedBoot) return;
-    if (bootOverallState !== 'complete') return;
-    setHasAcknowledgedBootPrompt(false);
-    promptingBootSetupRef.current = false;
-    try {
-      window.sessionStorage.removeItem(BOOT_SETUP_ACK_KEY);
-    } catch {}
-  }, [bootOverallState, hasCheckedBoot]);
+    if (!hasCheckedSetup) return;
+    if (!setupStatus?.complete) return;
+    clearSetupPromptAck();
+  }, [clearSetupPromptAck, hasCheckedSetup, setupStatus]);
 
-  const bootSetupDecision = useMemo(() => {
-    if (!isAuthenticated || !hasCheckedBoot) return { kind: 'none', target: null };
-    return getBootSetupDecision(pathname, bootOverallState, hasAcknowledgedBootPrompt);
-  }, [bootOverallState, hasAcknowledgedBootPrompt, hasCheckedBoot, isAuthenticated, pathname]);
+  const setupDecision = useMemo(() => {
+    if (!isAuthenticated || !hasCheckedSetup) return { kind: 'none' as const, target: null };
+    return getSetupFlowDecision(pathname, setupStatus, hasAcknowledgedSetupPrompt);
+  }, [hasAcknowledgedSetupPrompt, hasCheckedSetup, isAuthenticated, pathname, setupStatus]);
 
-  const bootRedirect = bootSetupDecision.kind === 'redirect' ? bootSetupDecision.target : null;
-  const shouldPromptBootSetup = bootSetupDecision.kind === 'prompt';
+  const setupRedirect = setupDecision.kind === 'redirect' ? setupDecision.target : null;
+  const shouldPromptSetup = setupDecision.kind === 'prompt';
+  const setupPromptTarget = setupDecision.target || '/setup/embedding';
 
   const homeFallbackRedirect = useMemo(() => {
-    if (!isAuthenticated || !hasCheckedBoot) return null;
-    if (bootSetupDecision.kind !== 'none') return null;
+    if (!isAuthenticated || !hasCheckedSetup) return null;
+    if (setupDecision.kind !== 'none') return null;
     return pathname === '/' ? '/memory' : null;
-  }, [bootSetupDecision.kind, hasCheckedBoot, isAuthenticated, pathname]);
+  }, [hasCheckedSetup, isAuthenticated, pathname, setupDecision.kind]);
 
   useEffect(() => {
-    if (!bootRedirect || bootRedirect === pathname) return;
-    router.replace(bootRedirect);
-  }, [bootRedirect, pathname, router]);
+    if (!setupRedirect || setupRedirect === pathname) return;
+    router.replace(setupRedirect);
+  }, [pathname, router, setupRedirect]);
 
   useEffect(() => {
-    if (!shouldPromptBootSetup || promptingBootSetupRef.current) return;
-    promptingBootSetupRef.current = true;
+    if (!shouldPromptSetup || promptingSetupRef.current) return;
+    promptingSetupRef.current = true;
     void confirm({
       title: t('Setup required'),
       message: t('Lore needs boot initialization before you can enter the normal workspace.'),
@@ -348,22 +339,22 @@ function AppShellInner({ children }: AppShellInnerProps): React.JSX.Element {
       hideCancel: true,
       dismissible: false,
     }).then((accepted) => {
-      promptingBootSetupRef.current = false;
+      promptingSetupRef.current = false;
       if (!accepted) return;
       try {
         window.sessionStorage.setItem(BOOT_SETUP_ACK_KEY, '1');
       } catch {}
-      setHasAcknowledgedBootPrompt(true);
-      router.replace('/setup');
+      setHasAcknowledgedSetupPrompt(true);
+      router.replace(setupPromptTarget);
     });
-  }, [confirm, router, shouldPromptBootSetup, t]);
+  }, [confirm, router, setupPromptTarget, shouldPromptSetup, t]);
 
   useEffect(() => {
     if (!homeFallbackRedirect || homeFallbackRedirect === pathname) return;
     router.replace(homeFallbackRedirect);
   }, [homeFallbackRedirect, pathname, router]);
 
-  if (isCheckingAuth || (isAuthenticated && !hasCheckedBoot)) {
+  if (isCheckingAuth || (isAuthenticated && !hasCheckedSetup)) {
     return (
       <div className="flex h-screen items-center justify-center bg-bg-system">
         <div className="h-6 w-6 animate-spin rounded-full border-2 border-fill-tertiary border-t-sys-blue" />
@@ -371,7 +362,7 @@ function AppShellInner({ children }: AppShellInnerProps): React.JSX.Element {
     );
   }
 
-  if (bootRedirect && bootRedirect !== pathname) {
+  if (setupRedirect && setupRedirect !== pathname) {
     return (
       <div className="flex h-screen items-center justify-center bg-bg-system">
         <div className="h-6 w-6 animate-spin rounded-full border-2 border-fill-tertiary border-t-sys-blue" />
@@ -379,7 +370,7 @@ function AppShellInner({ children }: AppShellInnerProps): React.JSX.Element {
     );
   }
 
-  if (shouldPromptBootSetup) {
+  if (shouldPromptSetup) {
     return (
       <div className="flex h-screen items-center justify-center bg-bg-system">
         <div className="h-6 w-6 animate-spin rounded-full border-2 border-fill-tertiary border-t-sys-blue" />

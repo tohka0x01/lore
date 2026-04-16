@@ -105,8 +105,8 @@ describe('exportDatabase', () => {
 
   it('queries all CORE_TABLES', async () => {
     await exportDatabase();
-    // 9 core tables
-    expect(mockSql.mock.calls.length).toBe(9);
+    // 10 core tables
+    expect(mockSql.mock.calls.length).toBe(10);
   });
 
   it('does not query recall_events by default', async () => {

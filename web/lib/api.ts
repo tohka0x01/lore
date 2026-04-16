@@ -1,7 +1,7 @@
 'use client';
 
 import axios, { AxiosInstance, InternalAxiosRequestConfig, AxiosResponse, AxiosError } from 'axios';
-import type { BootViewData, GenerateBootDraftsResponse, SaveBootNodesResponse } from '@/lib/bootSetup';
+import type { BootViewData, GenerateBootDraftsResponse, SaveBootNodesResponse, SetupFlowStatus } from '@/lib/bootSetup';
 
 export const AUTH_ERROR_EVENT = 'lore:auth-error';
 const WEB_CLIENT_TYPE = 'admin';
@@ -50,6 +50,7 @@ api.interceptors.response.use(
 );
 
 export const getDomains = (): Promise<unknown> => api.get('/browse/domains').then((r) => r.data);
+export const getSetupFlowStatus = (): Promise<SetupFlowStatus> => api.get('/setup/flow').then((r) => r.data as SetupFlowStatus);
 export const getBootStatus = (): Promise<BootViewData> => api.get('/browse/boot').then((r) => r.data as BootViewData);
 export const saveBootStatus = (payload: { session_id?: string | null; nodes: Record<string, string> }): Promise<SaveBootNodesResponse> =>
   api.put('/browse/boot', payload).then((r) => r.data as SaveBootNodesResponse);

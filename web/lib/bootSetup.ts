@@ -1,10 +1,12 @@
-export const BOOT_STATUS_CHANGED_EVENT = 'lore:boot-status-changed';
+export const SETUP_STATUS_CHANGED_EVENT = 'lore:setup-status-changed';
+export const BOOT_STATUS_CHANGED_EVENT = SETUP_STATUS_CHANGED_EVENT;
 
 export type BootNodeRole = 'agent' | 'soul' | 'user';
 export type BootNodeState = 'missing' | 'empty' | 'initialized';
 export type BootOverallState = 'uninitialized' | 'partial' | 'complete';
 export type BootSaveStatus = 'created' | 'updated' | 'unchanged' | 'failed';
 export type BootDraftStatus = 'generated' | 'failed';
+export type SetupStepId = 'embedding' | 'llm' | 'boot-agent' | 'boot-soul' | 'boot-user';
 
 export interface BootMemory {
   uri: string;
@@ -79,6 +81,50 @@ export interface BootSetupDecision {
   target: string | null;
 }
 
+export interface SetupRuntimeStatus {
+  configured: boolean;
+  runtime_ready: boolean;
+}
+
+export interface SetupFlowStep {
+  id: SetupStepId;
+  path: string;
+  complete: boolean;
+  role?: BootNodeRole;
+  uri?: string;
+}
+
+export interface SetupFlowStatus {
+  complete: boolean;
+  next_step: string | null;
+  steps: SetupFlowStep[];
+  embedding: SetupRuntimeStatus;
+  llm: SetupRuntimeStatus;
+  boot: {
+    overall_state: BootOverallState;
+    nodes: BootStatusNode[];
+    loaded: number;
+    total: number;
+    remaining_count: number;
+    draft_generation_available: boolean;
+    draft_generation_reason: string | null;
+  };
+}
+
+export const SETUP_STEP_IDS: SetupStepId[] = ['embedding', 'llm', 'boot-agent', 'boot-soul', 'boot-user'];
+
+export const SETUP_STEP_PATHS: Record<SetupStepId, string> = {
+  embedding: '/setup/embedding',
+  llm: '/setup/llm',
+  'boot-agent': '/setup/boot/agent',
+  'boot-soul': '/setup/boot/soul',
+  'boot-user': '/setup/boot/user',
+};
+
+export function getSetupStepPath(stepId: SetupStepId): string {
+  return SETUP_STEP_PATHS[stepId];
+}
+
 export function isSetupPath(pathname: string | null | undefined): boolean {
   const value = String(pathname || '');
   return value === '/setup' || value.startsWith('/setup/');
@@ -87,6 +133,39 @@ export function isSetupPath(pathname: string | null | undefined): boolean {
 export function isSettingsPath(pathname: string | null | undefined): boolean {
   const value = String(pathname || '');
   return value === '/settings' || value.startsWith('/settings/');
+}
+
+export function getSetupFlowDecision(
+  pathname: string | null | undefined,
+  setupStatus: SetupFlowStatus | null | undefined,
+  hasAcknowledgedPrompt = false,
+): BootSetupDecision {
+  if (!setupStatus) return { kind: 'none', target: null };
+
+  if (!setupStatus.complete) {
+    if (isSetupPath(pathname) || isSettingsPath(pathname)) {
+      return { kind: 'none', target: null };
+    }
+    const target = setupStatus.next_step || getSetupStepPath('embedding');
+    if (!hasAcknowledgedPrompt) {
+      return { kind: 'prompt', target };
+    }
+    return { kind: 'redirect', target };
+  }
+
+  if (isSetupPath(pathname) || pathname === '/') {
+    return { kind: 'redirect', target: '/memory' };
+  }
+
+  return { kind: 'none', target: null };
+}
+
+export function getSetupFlowRedirect(
+  pathname: string | null | undefined,
+  setupStatus: SetupFlowStatus | null | undefined,
+): string | null {
+  const decision = getSetupFlowDecision(pathname, setupStatus, true);
+  return decision.kind === 'redirect' ? decision.target : null;
 }
 
 export function getBootSetupDecision(
@@ -121,7 +200,11 @@ export function getBootSetupRedirect(
   return decision.kind === 'redirect' ? decision.target : null;
 }
 
-export function dispatchBootStatusChanged(): void {
+export function dispatchSetupStatusChanged(): void {
   if (typeof window === 'undefined') return;
-  window.dispatchEvent(new CustomEvent(BOOT_STATUS_CHANGED_EVENT));
+  window.dispatchEvent(new CustomEvent(SETUP_STATUS_CHANGED_EVENT));
+}
+
+export function dispatchBootStatusChanged(): void {
+  dispatchSetupStatusChanged();
 }

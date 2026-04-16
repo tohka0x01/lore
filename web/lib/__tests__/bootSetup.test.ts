@@ -1,5 +1,51 @@
 import { describe, expect, it } from 'vitest';
-import { getBootSetupDecision, getBootSetupRedirect, isSettingsPath, isSetupPath } from '@/lib/bootSetup';
+import {
+  getBootSetupDecision,
+  getBootSetupRedirect,
+  getSetupFlowDecision,
+  getSetupFlowRedirect,
+  isSettingsPath,
+  isSetupPath,
+  type SetupFlowStatus,
+} from '@/lib/bootSetup';
+
+const partialSetupFlow: SetupFlowStatus = {
+  complete: false,
+  next_step: '/setup/llm',
+  steps: [
+    { id: 'embedding', path: '/setup/embedding', complete: true },
+    { id: 'llm', path: '/setup/llm', complete: false },
+    { id: 'boot-agent', path: '/setup/boot/agent', complete: false, role: 'agent', uri: 'core://agent' },
+    { id: 'boot-soul', path: '/setup/boot/soul', complete: false, role: 'soul', uri: 'core://soul' },
+    { id: 'boot-user', path: '/setup/boot/user', complete: false, role: 'user', uri: 'preferences://user' },
+  ],
+  embedding: { configured: true, runtime_ready: true },
+  llm: { configured: false, runtime_ready: false },
+  boot: {
+    overall_state: 'partial',
+    nodes: [],
+    loaded: 1,
+    total: 3,
+    remaining_count: 2,
+    draft_generation_available: false,
+    draft_generation_reason: 'View LLM API key is not configured.',
+  },
+};
+
+const completeSetupFlow: SetupFlowStatus = {
+  ...partialSetupFlow,
+  complete: true,
+  next_step: null,
+  steps: partialSetupFlow.steps.map((step) => ({ ...step, complete: true })),
+  llm: { configured: true, runtime_ready: true },
+  boot: {
+    ...partialSetupFlow.boot,
+    overall_state: 'complete',
+    remaining_count: 0,
+    draft_generation_available: true,
+    draft_generation_reason: null,
+  },
+};
 
 describe('bootSetup routing helpers', () => {
   it('detects setup paths', () => {
@@ -52,5 +98,31 @@ describe('bootSetup routing helpers', () => {
     expect(getBootSetupDecision('/memory', undefined, false)).toEqual({ kind: 'none', target: null });
     expect(getBootSetupRedirect('/memory', null)).toBeNull();
     expect(getBootSetupRedirect('/memory', undefined)).toBeNull();
+  });
+
+  it('prompts to the first incomplete setup step before acknowledgement', () => {
+    expect(getSetupFlowDecision('/memory', partialSetupFlow, false)).toEqual({ kind: 'prompt', target: '/setup/llm' });
+    expect(getSetupFlowDecision('/', partialSetupFlow, false)).toEqual({ kind: 'prompt', target: '/setup/llm' });
+  });
+
+  it('redirects to the first incomplete setup step after acknowledgement', () => {
+    expect(getSetupFlowDecision('/memory', partialSetupFlow, true)).toEqual({ kind: 'redirect', target: '/setup/llm' });
+    expect(getSetupFlowRedirect('/memory', partialSetupFlow)).toBe('/setup/llm');
+  });
+
+  it('allows setup and settings pages while setup is incomplete', () => {
+    expect(getSetupFlowDecision('/setup/llm', partialSetupFlow, false)).toEqual({ kind: 'none', target: null });
+    expect(getSetupFlowDecision('/settings', partialSetupFlow, false)).toEqual({ kind: 'none', target: null });
+    expect(getSetupFlowRedirect('/setup/llm', partialSetupFlow)).toBeNull();
+  });
+
+  it('redirects setup pages back to memory after completion', () => {
+    expect(getSetupFlowDecision('/setup/boot/user', completeSetupFlow, false)).toEqual({ kind: 'redirect', target: '/memory' });
+    expect(getSetupFlowRedirect('/setup/embedding', completeSetupFlow)).toBe('/memory');
+  });
+
+  it('does nothing on normal pages after setup completion', () => {
+    expect(getSetupFlowDecision('/memory', completeSetupFlow, false)).toEqual({ kind: 'none', target: null });
+    expect(getSetupFlowRedirect('/recall', completeSetupFlow)).toBeNull();
   });
 });

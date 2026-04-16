@@ -1,176 +1,18 @@
 'use client';
 
-import React, { useCallback, useEffect, useMemo, useRef, useState, ReactNode, ChangeEvent } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import clsx from 'clsx';
-import { api } from '../../lib/api';
-import { PageCanvas, PageTitle, Section, Badge, Button } from '../../components/ui';
-import { useT } from '../../lib/i18n';
 import { AxiosError } from 'axios';
-import { useConfirm } from '../../components/ConfirmDialog';
-
-type SettingSource = 'db' | 'env' | 'default';
-
-interface FieldSchema {
-  key: string;
-  label: string;
-  type: 'number' | 'integer' | 'string' | 'enum';
-  description?: string;
-  env?: string;
-  min?: number;
-  max?: number;
-  step?: number;
-  options?: string[];
-  option_labels?: Record<string, string>;
-  section: string;
-}
-
-interface SectionSchema {
-  id: string;
-  label: string;
-  description?: string;
-}
-
-interface SettingsData {
-  schema: FieldSchema[];
-  sections: SectionSchema[];
-  values: Record<string, unknown>;
-  defaults: Record<string, unknown>;
-  sources: Record<string, SettingSource>;
-}
-
-interface SectionGroup extends SectionSchema {
-  items: FieldSchema[];
-}
-
-interface SourceDotProps {
-  source: SettingSource;
-}
-
-function SourceDot({ source }: SourceDotProps): React.JSX.Element {
-  const { t } = useT();
-  const map: Record<SettingSource, { tone: string; label: string }> = {
-    db: { tone: 'bg-sys-blue', label: t('Modified') },
-    env: { tone: 'bg-sys-green', label: t('From env') },
-    default: { tone: 'bg-fill-primary', label: t('Default') },
-  };
-  const { tone, label } = map[source] || map.default;
-  return (
-    <span className="inline-flex items-center gap-1.5 text-[11px] text-txt-tertiary">
-      <span className={clsx('h-1.5 w-1.5 rounded-full', tone)} />
-      {label}
-    </span>
-  );
-}
-
-interface NumberInputProps {
-  value: unknown;
-  onChange: (v: number | '') => void;
-  schema: FieldSchema;
-  disabled: boolean;
-}
-
-function NumberInput({ value, onChange, schema, disabled }: NumberInputProps): React.JSX.Element {
-  const step = schema.step ?? (schema.type === 'integer' ? 1 : 0.01);
-  return (
-    <input
-      type="number" step={step} min={schema.min} max={schema.max}
-      value={value == null ? '' : String(value)} disabled={disabled}
-      onChange={(e: ChangeEvent<HTMLInputElement>) => onChange(e.target.value === '' ? '' : Number(e.target.value))}
-      className="w-32 rounded-lg border border-separator-thin bg-bg-raised px-3 py-1.5 text-right text-[13px] font-mono tabular-nums text-txt-primary focus:border-sys-blue/60 focus:bg-bg-surface focus:outline-none disabled:opacity-40"
-    />
-  );
-}
-
-interface StringInputProps {
-  value: unknown;
-  onChange: (v: string) => void;
-  disabled: boolean;
-}
-
-function StringInput({ value, onChange, disabled }: StringInputProps): React.JSX.Element {
-  return (
-    <input
-      type="text" value={value == null ? '' : String(value)} disabled={disabled}
-      onChange={(e: ChangeEvent<HTMLInputElement>) => onChange(e.target.value)}
-      className="w-full rounded-lg border border-separator-thin bg-bg-raised px-3 py-1.5 text-[13px] font-mono text-txt-primary focus:border-sys-blue/60 focus:bg-bg-surface focus:outline-none disabled:opacity-40"
-    />
-  );
-}
-
-interface EnumInputProps {
-  value: unknown;
-  onChange: (v: string) => void;
-  schema: FieldSchema;
-  disabled: boolean;
-}
-
-function EnumInput({ value, onChange, schema, disabled }: EnumInputProps): React.JSX.Element {
-  const labels = schema.option_labels || {};
-  return (
-    <select value={value == null ? '' : String(value)} disabled={disabled}
-      onChange={(e: ChangeEvent<HTMLSelectElement>) => onChange(e.target.value)}
-      className="rounded-lg border border-separator-thin bg-bg-raised px-3 py-1.5 text-[13px] font-mono text-txt-primary cursor-pointer focus:border-sys-blue/60 focus:bg-bg-surface focus:outline-none disabled:opacity-40 max-w-full"
-    >
-      {(schema.options || []).map((opt) => (
-        <option key={opt} value={opt}>{labels[opt] ? `${opt} — ${labels[opt]}` : opt}</option>
-      ))}
-    </select>
-  );
-}
-
-interface FieldRowProps {
-  schema: FieldSchema;
-  value: unknown;
-  defaultValue: unknown;
-  source: SettingSource;
-  dirty: boolean;
-  onChange: (v: unknown) => void;
-  onReset: () => void;
-  saving: boolean;
-}
-
-function FieldRow({ schema, value, defaultValue: _defaultValue, source, dirty, onChange, onReset, saving }: FieldRowProps): React.JSX.Element {
-  const { t } = useT();
-  const isString = schema.type === 'string';
-  const renderInput = () => {
-    if (schema.type === 'number' || schema.type === 'integer') return <NumberInput value={value} onChange={onChange as (v: number | '') => void} schema={schema} disabled={saving} />;
-    if (schema.type === 'enum') return <EnumInput value={value} onChange={onChange as (v: string) => void} schema={schema} disabled={saving} />;
-    return <StringInput value={value} onChange={onChange as (v: string) => void} disabled={saving} />;
-  };
-
-  return (
-    <div className={clsx(
-      'grid gap-3 md:gap-4 border-b border-separator-hairline px-4 md:px-6 py-4 last:border-b-0 transition-colors',
-      isString ? 'grid-cols-1' : 'grid-cols-1 sm:grid-cols-[1fr_auto] sm:items-center',
-      dirty && 'bg-sys-blue/[0.04]',
-    )}>
-      <div className="min-w-0">
-        <div className="flex items-center gap-3 flex-wrap">
-          <span className="text-[14px] font-medium text-txt-primary">{schema.label}</span>
-          <SourceDot source={source} />
-          {dirty && <Badge tone="blue">{t('Unsaved')}</Badge>}
-          {source !== 'default' && !dirty && (
-            <button type="button" onClick={onReset} disabled={saving}
-              className="text-[11px] text-sys-blue hover:opacity-80 disabled:opacity-30">
-              {t('Reset')}
-            </button>
-          )}
-        </div>
-        {schema.description && (
-          <p className="mt-0.5 text-[12.5px] text-txt-secondary leading-relaxed">{schema.description}</p>
-        )}
-        <p className="mt-1 text-[11px] text-txt-quaternary font-mono">
-          {schema.key}
-          {schema.env && <> · env: {schema.env}</>}
-          {(schema.min !== undefined || schema.max !== undefined) && <> · range [{schema.min ?? '∞'}, {schema.max ?? '∞'}]</>}
-        </p>
-      </div>
-      <div className={isString ? '' : 'shrink-0'}>
-        {renderInput()}
-      </div>
-    </div>
-  );
-}
+import { api } from '@/lib/api';
+import { PageCanvas, PageTitle, Section, Badge, Button, Card } from '@/components/ui';
+import { useT } from '@/lib/i18n';
+import { useConfirm } from '@/components/ConfirmDialog';
+import {
+  groupSettingsSections,
+  SettingsSectionEditor,
+  type SettingsData,
+  type SectionGroup,
+} from '@/components/settings/SettingsSectionEditor';
 
 interface ToastState {
   type: 'success' | 'error';
@@ -189,17 +31,24 @@ export default function SettingsPage(): React.JSX.Element {
   const { confirm: confirmDialog } = useConfirm();
 
   const load = useCallback(async () => {
-    setLoading(true); setError(null);
+    setLoading(true);
+    setError(null);
     try {
-      const { data: d } = await api.get('/settings');
-      setData(d); setDraft({});
+      const { data: next } = await api.get('/settings');
+      setData(next as SettingsData);
+      setDraft({});
     } catch (e) {
       const axiosErr = e as AxiosError<{ detail?: string }>;
       setError(axiosErr.response?.data?.detail || axiosErr.message || 'Failed to load');
-    } finally { setLoading(false); }
+    } finally {
+      setLoading(false);
+    }
   }, []);
 
-  useEffect(() => { load(); }, [load]);
+  useEffect(() => {
+    void load();
+  }, [load]);
+
   useEffect(() => {
     if (!toast) return;
     const timer = setTimeout(() => setToast(null), 3000);
@@ -221,73 +70,106 @@ export default function SettingsPage(): React.JSX.Element {
   }, [data]);
 
   const handleReset = useCallback(async (key: string) => {
-    setSaving(true); setError(null);
+    setSaving(true);
+    setError(null);
     try {
       const { data: next } = await api.post('/settings/reset', { keys: [key] });
-      setData(next);
-      setDraft((prev) => { const { [key]: _, ...rest } = prev; return rest; });
+      setData(next as SettingsData);
+      setDraft((prev) => {
+        const { [key]: _, ...rest } = prev;
+        return rest;
+      });
       setToast({ type: 'success', text: `Reset ${key}` });
     } catch (e) {
       const axiosErr = e as AxiosError<{ detail?: string }>;
       setError(axiosErr.response?.data?.detail || axiosErr.message || 'Reset failed');
+    } finally {
+      setSaving(false);
     }
-    finally { setSaving(false); }
   }, []);
 
   const embeddingChanged = useMemo(
-    () => dirtyKeys.some((k) => k.startsWith('embedding.')),
+    () => dirtyKeys.some((key) => key.startsWith('embedding.')),
     [dirtyKeys],
   );
 
   const handleRebuild = useCallback(async () => {
-    setRebuilding(true); setError(null);
+    setRebuilding(true);
+    setError(null);
     try {
-      const res = await api.post('/browse/recall/rebuild');
-      const d = res.data as Record<string, unknown>;
-      setToast({ type: 'success', text: t('Rebuild completed') + ` (views: ${d.updated_count ?? 0}, glossary: ${d.glossary_embedding_updated_count ?? 0})` });
+      const response = await api.post('/browse/recall/rebuild');
+      const payload = response.data as Record<string, unknown>;
+      setToast({
+        type: 'success',
+        text: `${t('Rebuild completed')} (views: ${payload.updated_count ?? 0}, glossary: ${payload.glossary_embedding_updated_count ?? 0})`,
+      });
     } catch (e) {
       const axiosErr = e as AxiosError<{ detail?: string }>;
       setError(axiosErr.response?.data?.detail || axiosErr.message || 'Rebuild failed');
-    } finally { setRebuilding(false); }
+    } finally {
+      setRebuilding(false);
+    }
   }, [t]);
 
   const handleSave = useCallback(async () => {
     if (!dirtyKeys.length) return;
     if (embeddingChanged) {
-      const ok = await confirmDialog({ message: t('Changing the embedding model will invalidate all existing embeddings and trigger a full rebuild. Continue?'), confirmLabel: t('Continue') });
+      const ok = await confirmDialog({
+        message: t('Changing the embedding model will invalidate all existing embeddings and trigger a full rebuild. Continue?'),
+        confirmLabel: t('Continue'),
+      });
       if (!ok) return;
     }
-    setSaving(true); setError(null);
+
+    setSaving(true);
+    setError(null);
     try {
       const { data: next } = await api.put('/settings', { patch: draft });
-      setData(next); setDraft({});
+      setData(next as SettingsData);
+      setDraft({});
       setToast({ type: 'success', text: `Saved ${dirtyKeys.length} change${dirtyKeys.length === 1 ? '' : 's'}` });
-      if (embeddingChanged) handleRebuild();
+      if (embeddingChanged) {
+        void handleRebuild();
+      }
     } catch (e) {
       const axiosErr = e as AxiosError<{ detail?: string }>;
       setError(axiosErr.response?.data?.detail || axiosErr.message || 'Save failed');
+    } finally {
+      setSaving(false);
     }
-    finally { setSaving(false); }
-  }, [draft, dirtyKeys, embeddingChanged, handleRebuild, t]);
+  }, [confirmDialog, dirtyKeys, draft, embeddingChanged, handleRebuild, t]);
 
-  const handleDiscard = useCallback(() => setDraft({}), []);
-
-  const grouped = useMemo((): SectionGroup[] => {
-    if (!data) return [];
-    const bySection = new Map<string, SectionGroup>(data.sections.map((s) => [s.id, { ...s, items: [] }]));
-    for (const item of data.schema) {
-      const section = bySection.get(item.section);
-      if (section) section.items.push(item);
-    }
-    return [...bySection.values()];
-  }, [data]);
+  const grouped = useMemo(() => groupSettingsSections(data), [data]);
 
   const weightSum = useMemo((): number | null => {
     if (!data) return null;
-    const keys = ['recall.weights.w_exact', 'recall.weights.w_glossary_semantic', 'recall.weights.w_dense', 'recall.weights.w_lexical'];
-    const effective = (k: string): number => (k in draft ? Number(draft[k]) : Number(data.values[k]));
-    return keys.reduce((acc, k) => acc + (Number.isFinite(effective(k)) ? effective(k) : 0), 0);
+    const keys = [
+      'recall.weights.w_exact',
+      'recall.weights.w_glossary_semantic',
+      'recall.weights.w_dense',
+      'recall.weights.w_lexical',
+    ];
+    const effective = (key: string): number => (key in draft ? Number(draft[key]) : Number(data.values[key]));
+    return keys.reduce((acc, key) => acc + (Number.isFinite(effective(key)) ? effective(key) : 0), 0);
   }, [data, draft]);
+
+  const sectionRight = useCallback((section: SectionGroup): React.ReactNode => {
+    if (section.id === 'recall_weights' && weightSum !== null) {
+      return (
+        <Badge tone={Math.abs(weightSum - 1) < 0.02 ? 'green' : 'orange'}>
+          Σ = {weightSum.toFixed(3)}
+        </Badge>
+      );
+    }
+    if (section.id === 'embedding') {
+      return (
+        <Button size="sm" variant="secondary" onClick={() => void handleRebuild()} disabled={rebuilding || saving}>
+          {rebuilding ? t('Rebuilding…') : t('Rebuild Index')}
+        </Button>
+      );
+    }
+    return null;
+  }, [handleRebuild, rebuilding, saving, t, weightSum]);
 
   return (
     <PageCanvas maxWidth="4xl">
@@ -298,9 +180,11 @@ export default function SettingsPage(): React.JSX.Element {
         right={
           <>
             {dirtyKeys.length > 0 && (
-              <Button variant="ghost" onClick={handleDiscard} disabled={saving}>{t('Discard')}</Button>
+              <Button variant="ghost" onClick={() => setDraft({})} disabled={saving}>
+                {t('Discard')}
+              </Button>
             )}
-            <Button variant="primary" onClick={handleSave} disabled={saving || dirtyKeys.length === 0}>
+            <Button variant="primary" onClick={() => void handleSave()} disabled={saving || dirtyKeys.length === 0}>
               {saving ? t('Saving…') : dirtyKeys.length > 0 ? `${t('Save')} ${dirtyKeys.length}` : t('Save')}
             </Button>
           </>
@@ -326,41 +210,19 @@ export default function SettingsPage(): React.JSX.Element {
 
       {data && !loading && (
         <div className="space-y-5">
-          {grouped.map((section, i) => (
-            <div key={section.id} className={clsx('animate-in', `stagger-${Math.min(i + 1, 6)}`)}>
-              <Section
-                padded={false}
-                title={section.label}
-                subtitle={section.description}
-                right={
-                  section.id === 'recall_weights' && weightSum !== null ? (
-                    <Badge tone={Math.abs(weightSum - 1) < 0.02 ? 'green' : 'orange'}>
-                      Σ = {weightSum.toFixed(3)}
-                    </Badge>
-                  ) : section.id === 'embedding' ? (
-                    <Button size="sm" variant="secondary" onClick={handleRebuild} disabled={rebuilding || saving}>
-                      {rebuilding ? t('Rebuilding…') : t('Rebuild Index')}
-                    </Button>
-                  ) : null
-                }
-              >
-                {section.items.map((schema) => {
-                  const effectiveValue = schema.key in draft ? draft[schema.key] : data.values[schema.key];
-                  return (
-                    <FieldRow
-                      key={schema.key}
-                      schema={schema}
-                      value={effectiveValue}
-                      defaultValue={data.defaults[schema.key]}
-                      source={data.sources[schema.key]}
-                      dirty={schema.key in draft}
-                      onChange={(v) => handleChange(schema.key, v)}
-                      onReset={() => handleReset(schema.key)}
-                      saving={saving}
-                    />
-                  );
-                })}
-              </Section>
+          {grouped.map((section, index) => (
+            <div key={section.id} className={clsx('animate-in', `stagger-${Math.min(index + 1, 6)}`)}>
+              <Card className="overflow-hidden p-0">
+                <SettingsSectionEditor
+                  section={section}
+                  data={data}
+                  draft={draft}
+                  saving={saving}
+                  onChange={handleChange}
+                  onReset={handleReset}
+                  right={sectionRight(section)}
+                />
+              </Card>
             </div>
           ))}
           <BackupActionPanel />
@@ -369,8 +231,6 @@ export default function SettingsPage(): React.JSX.Element {
     </PageCanvas>
   );
 }
-
-// ─── Backup Action Panel ──────────────────────────────────────────────
 
 function fmtBytes(bytes: number | undefined): string {
   if (!bytes) return '0 B';
@@ -401,14 +261,22 @@ function BackupActionPanel(): React.JSX.Element {
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const loadStatus = useCallback(async () => {
-    try { setStatus((await api.get('/backup')).data); } catch {}
+    try {
+      setStatus((await api.get('/backup')).data as BackupStatus);
+    } catch {}
   }, []);
 
   const loadBackups = useCallback(async () => {
-    try { setBackups((await api.get('/backup', { params: { action: 'list' } })).data.backups || []); } catch {}
+    try {
+      setBackups(((await api.get('/backup', { params: { action: 'list' } })).data as { backups?: BackupInfo[] }).backups || []);
+    } catch {}
   }, []);
 
-  useEffect(() => { loadStatus(); loadBackups(); }, [loadStatus, loadBackups]);
+  useEffect(() => {
+    void loadStatus();
+    void loadBackups();
+  }, [loadBackups, loadStatus]);
+
   useEffect(() => {
     if (!message) return;
     const timer = setTimeout(() => setMessage(null), 5000);
@@ -418,39 +286,46 @@ function BackupActionPanel(): React.JSX.Element {
   const handleExport = async () => {
     setExporting(true);
     try {
-      const resp = await api.get('/backup', {
+      const response = await api.get('/backup', {
         params: { action: 'export' },
         responseType: 'blob',
       });
-      const disposition = (resp.headers as Record<string, string>)?.['content-disposition'] || '';
+      const disposition = (response.headers as Record<string, string>)?.['content-disposition'] || '';
       const filename = disposition.match(/filename="(.+)"/)?.[1] || 'lore-backup.json';
-      const url = URL.createObjectURL(resp.data as Blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = filename;
-      a.click();
+      const url = URL.createObjectURL(response.data as Blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = filename;
+      link.click();
       URL.revokeObjectURL(url);
       setMessage({ type: 'success', text: t('Export completed') });
     } catch (err) {
       const axiosErr = err as AxiosError<{ detail?: string }>;
       setMessage({ type: 'error', text: axiosErr.response?.data?.detail || axiosErr.message });
-    } finally { setExporting(false); }
+    } finally {
+      setExporting(false);
+    }
   };
 
   const handleImport = async (file: File) => {
-    const ok = await confirmDialog({ message: t('Confirm restore? This will replace ALL current data.'), destructive: true, confirmLabel: t('Restore') });
+    const ok = await confirmDialog({
+      message: t('Confirm restore? This will replace ALL current data.'),
+      destructive: true,
+      confirmLabel: t('Restore'),
+    });
     if (!ok) {
       if (fileInputRef.current) fileInputRef.current.value = '';
       return;
     }
+
     setImporting(true);
     try {
       const text = await file.text();
       const data = JSON.parse(text);
       const result = await api.post('/backup', { action: 'restore', data });
       setMessage({ type: 'success', text: `${t('Restore completed')} (${(result.data as Record<string, unknown>).duration_ms}ms)` });
-      loadStatus();
-      loadBackups();
+      void loadStatus();
+      void loadBackups();
     } catch (err) {
       const axiosErr = err as AxiosError<{ detail?: string }>;
       setMessage({ type: 'error', text: axiosErr.response?.data?.detail || axiosErr.message });
@@ -465,27 +340,36 @@ function BackupActionPanel(): React.JSX.Element {
     try {
       await api.post('/backup', { action: 'backup' });
       setMessage({ type: 'success', text: t('Backup completed') });
-      loadStatus();
-      loadBackups();
+      void loadStatus();
+      void loadBackups();
     } catch (err) {
       const axiosErr = err as AxiosError<{ detail?: string }>;
       setMessage({ type: 'error', text: axiosErr.response?.data?.detail || axiosErr.message });
-    } finally { setBackupRunning(false); }
+    } finally {
+      setBackupRunning(false);
+    }
   };
 
   const handleRestoreFile = async (filename: string) => {
-    const ok = await confirmDialog({ message: t('Confirm restore? This will replace ALL current data.'), destructive: true, confirmLabel: t('Restore') });
+    const ok = await confirmDialog({
+      message: t('Confirm restore? This will replace ALL current data.'),
+      destructive: true,
+      confirmLabel: t('Restore'),
+    });
     if (!ok) return;
+
     setRestoringFile(filename);
     try {
       const result = await api.post('/backup', { action: 'restore-file', filename });
       setMessage({ type: 'success', text: `${t('Restore completed')} (${(result.data as Record<string, unknown>).duration_ms}ms)` });
-      loadStatus();
-      loadBackups();
+      void loadStatus();
+      void loadBackups();
     } catch (err) {
       const axiosErr = err as AxiosError<{ detail?: string }>;
       setMessage({ type: 'error', text: axiosErr.response?.data?.detail || axiosErr.message });
-    } finally { setRestoringFile(null); }
+    } finally {
+      setRestoringFile(null);
+    }
   };
 
   return (
@@ -494,15 +378,20 @@ function BackupActionPanel(): React.JSX.Element {
         padded={false}
         title={t('Backup Actions')}
         subtitle={t('Manual backup and restore operations')}
-        right={status?.last_backup ? (
-          <Badge tone="default">{t('Last backup')}: {status.last_backup}</Badge>
-        ) : null}
+        right={status?.last_backup ? <Badge tone="default">{t('Last backup')}: {status.last_backup}</Badge> : null}
       >
         <div className="px-4 md:px-6 py-4 space-y-4">
           {message && (
-            <div className={clsx('rounded-xl px-3.5 py-2.5 text-[13px]',
-              message.type === 'success' ? 'bg-sys-green/10 border border-sys-green/20 text-sys-green' : 'bg-sys-red/10 border border-sys-red/20 text-sys-red'
-            )}>{message.text}</div>
+            <div
+              className={clsx(
+                'rounded-xl px-3.5 py-2.5 text-[13px]',
+                message.type === 'success'
+                  ? 'bg-sys-green/10 border border-sys-green/20 text-sys-green'
+                  : 'bg-sys-red/10 border border-sys-red/20 text-sys-red',
+              )}
+            >
+              {message.text}
+            </div>
           )}
 
           <div className="flex gap-3 flex-wrap">
@@ -515,8 +404,13 @@ function BackupActionPanel(): React.JSX.Element {
             <Button variant="ghost" onClick={() => fileInputRef.current?.click()} disabled={importing}>
               {importing ? t('Restoring…') : t('Import & Restore')}
             </Button>
-            <input ref={fileInputRef} type="file" accept=".json" className="hidden"
-              onChange={(e) => e.target.files?.[0] && handleImport(e.target.files[0])} />
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept=".json"
+              className="hidden"
+              onChange={(event) => event.target.files?.[0] && void handleImport(event.target.files[0])}
+            />
           </div>
 
           {backups.length > 0 && (
@@ -530,13 +424,15 @@ function BackupActionPanel(): React.JSX.Element {
                   </tr>
                 </thead>
                 <tbody>
-                  {backups.slice(0, 10).map((b) => (
-                    <tr key={b.filename} className="border-b border-separator-hairline last:border-b-0">
-                      <td className="px-0 py-2 font-mono text-txt-primary first:pr-4">{b.filename.replace('lore-backup-', '').replace('.json', '')}</td>
-                      <td className="px-0 py-2 text-right text-txt-tertiary">{fmtBytes(b.size)}</td>
+                  {backups.slice(0, 10).map((backup) => (
+                    <tr key={backup.filename} className="border-b border-separator-hairline last:border-b-0">
+                      <td className="px-0 py-2 font-mono text-txt-primary first:pr-4">
+                        {backup.filename.replace('lore-backup-', '').replace('.json', '')}
+                      </td>
+                      <td className="px-0 py-2 text-right text-txt-tertiary">{fmtBytes(backup.size)}</td>
                       <td className="px-0 py-2 text-right last:pl-4">
-                        <Button variant="ghost" size="sm" onClick={() => handleRestoreFile(b.filename)} disabled={!!restoringFile}>
-                          {restoringFile === b.filename ? t('Restoring…') : t('Restore')}
+                        <Button variant="ghost" size="sm" onClick={() => void handleRestoreFile(backup.filename)} disabled={!!restoringFile}>
+                          {restoringFile === backup.filename ? t('Restoring…') : t('Restore')}
                         </Button>
                       </td>
                     </tr>

@@ -50,6 +50,14 @@ const DICT: Record<'zh' | 'en', Record<string, string>> = {
     'Manual only': '仅手动填写',
     'Refreshing…': '刷新中…',
     'Generating…': '生成中…',
+    'Rebuilding…': '重建中…',
+    'Rebuild completed': '重建完成',
+    'Restore': '恢复',
+    'Current step': '当前步骤',
+    'Runtime not ready': '运行时未就绪',
+    'Rebuild Index': '重建索引',
+    'Changing the embedding model will invalidate all existing embeddings and trigger a full rebuild. Continue?':
+      '修改 Embedding 模型会让现有向量全部失效，并触发一次完整重建。是否继续？',
 
     // ── auth
     'Memory management console': '记忆管理控制台',
@@ -62,6 +70,17 @@ const DICT: Record<'zh' | 'en', Record<string, string>> = {
     // ── setup
     'Setup required': '需要初始化',
     'First-run setup': '首次初始化',
+    'Lore will guide you through the next required step automatically.': 'Lore 会自动带你进入当前还未完成的下一步。',
+    'Embedding setup': 'Embedding 配置',
+    'Configure the vector endpoint Lore uses for embeddings before continuing.': '先配置 Lore 用于向量化的 Embedding 服务，再继续后续步骤。',
+    'View LLM setup': 'View LLM 配置',
+    'Configure the model Lore uses for draft generation, view refinement, and dream workflows.': '配置 Lore 用于生成草稿、视图精炼和 dream 流程的模型。',
+    'Agent boot memory': 'Agent 启动记忆',
+    'Write the fixed workflow-constraints node that Lore always loads at startup.': '填写 Lore 每次启动都会固定加载的工作规则节点。',
+    'Soul boot memory': 'Soul 启动记忆',
+    'Write the fixed persona baseline that Lore carries into every session.': '填写 Lore 每次会话都会带上的人格基线节点。',
+    'User boot memory': 'User 启动记忆',
+    'Write the stable user profile Lore should remember across future sessions.': '填写 Lore 未来会话中都应记住的稳定用户画像。',
     'Lore needs boot initialization before you can enter the normal workspace.':
       '进入正常工作区之前，需要先完成 Lore 的 boot 初始化。',
     'Refresh status': '刷新状态',
@@ -80,6 +99,10 @@ const DICT: Record<'zh' | 'en', Record<string, string>> = {
     'Draft generation unavailable': '草稿生成不可用',
     'You can still complete setup manually, or open Settings first and configure the default View LLM.':
       '你仍然可以手动完成初始化，或者先打开设置配置默认 View LLM。',
+    'Embedding is configured, but runtime calls still need the LORE_EMBEDDING_API_KEY environment variable before vectors can run.':
+      'Embedding 已完成配置，但真正运行前仍需要设置 LORE_EMBEDDING_API_KEY 环境变量。',
+    'View LLM settings are saved, but runtime access is still unavailable. Draft generation and dream workflows will stay disabled until the runtime is ready.':
+      'View LLM 设置已保存，但运行时仍不可用。在运行时就绪前，草稿生成和 dream 流程会继续保持禁用。',
     'Missing': '缺失',
     'Empty content': '内容为空',
     'Initialized': '已初始化',
@@ -89,6 +112,9 @@ const DICT: Record<'zh' | 'en', Record<string, string>> = {
     'Write the final memory content here': '在这里填写最终要保存的记忆内容',
     'Draft generated': '草稿已生成',
     'Generate draft': '生成草稿',
+    'Agent boot': 'Agent 启动',
+    'Soul boot': 'Soul 启动',
+    'User boot': 'User 启动',
     'workflow constraints': '工作规则 / 协作约束',
     'style / persona / self-definition': '风格 / 人格 / 自我定义',
     'stable user definition': '稳定用户定义',
