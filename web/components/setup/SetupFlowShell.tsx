@@ -17,14 +17,6 @@ interface SetupFlowShellProps {
   footer?: React.ReactNode;
 }
 
-const STEP_LABELS: Record<SetupStepId, string> = {
-  embedding: 'Embedding setup',
-  llm: 'View LLM setup',
-  'boot-agent': 'Agent boot memory',
-  'boot-soul': 'Soul boot memory',
-  'boot-user': 'User boot memory',
-};
-
 function stepTone(current: boolean, complete: boolean): 'blue' | 'green' | 'default' {
   if (current) return 'blue';
   if (complete) return 'green';
@@ -75,7 +67,7 @@ export function SetupFlowShell({
                 tone={stepTone(step.id === stepId, step.complete)}
                 className="px-2.5 py-1 text-[12px]"
               >
-                {t(STEP_LABELS[step.id])}
+                {t(step.label)}
               </Badge>
             ))}
           </div>

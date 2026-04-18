@@ -1,7 +1,13 @@
 import type { ClientType } from '../../auth';
 import { sql } from '../../db';
 import { parseUri } from '../core/utils';
-import { getBootNodeSpec, getBootUris, type BootNodeRole } from './boot';
+import {
+  getBootNodeSpec,
+  getBootUris,
+  type BootClientType,
+  type BootNodeRole,
+  type BootNodeSpec,
+} from './boot';
 import { createNode, updateNodeByPath } from './write';
 import { resolveViewLlmConfig } from '../llm/config';
 import { generateText, type ProviderMessage } from '../llm/provider';
@@ -83,6 +89,21 @@ const ROLE_DRAFT_INSTRUCTIONS: Record<BootNodeRole, string[]> = {
   ],
 };
 
+const CLIENT_DRAFT_INSTRUCTIONS: Record<BootClientType, string[]> = {
+  claudecode: [
+    'Focus on Claude Code-specific runtime defaults, hooks, tool behavior, and coding workflow expectations.',
+    'Describe what only applies inside Claude Code rather than repeating generic agent rules.',
+  ],
+  openclaw: [
+    'Focus on OpenClaw-specific runtime defaults, plugin behavior, tool preferences, and operational constraints.',
+    'Describe what only applies inside OpenClaw rather than repeating generic agent rules.',
+  ],
+  hermes: [
+    'Focus on Hermes-specific memory-provider behavior, runtime conventions, and tool usage constraints.',
+    'Describe what only applies inside Hermes rather than repeating generic agent rules.',
+  ],
+};
+
 function asStatusError(message: string, status: number): Error & { status: number } {
   return Object.assign(new Error(message), { status });
 }
@@ -93,6 +114,23 @@ function requireBootSpec(uri: unknown) {
     throw asStatusError(`Unsupported boot URI: ${String(uri || '').trim() || '(empty)'}`, 422);
   }
   return spec;
+}
+
+function buildDraftInstructionList(spec: BootNodeSpec): string[] {
+  const instructions = [...ROLE_DRAFT_INSTRUCTIONS[spec.role]];
+
+  if (spec.scope === 'global' && spec.role === 'agent') {
+    instructions.push('Keep this node strictly for agent-wide rules that apply across every supported runtime.');
+    instructions.push('Do not duplicate host-specific constraints that belong under core://agent/<client_type>.');
+  }
+
+  if (spec.scope === 'client' && spec.client_type) {
+    instructions.push(`This boot node is specific to the ${spec.client_type} runtime.`);
+    instructions.push('Assume core://agent already contains the shared agent rules; focus only on the host-specific delta.');
+    instructions.push(...CLIENT_DRAFT_INSTRUCTIONS[spec.client_type]);
+  }
+
+  return instructions;
 }
 
 function normalizeBootRecord(nodes: unknown): Array<{ uri: string; content: string }> {
@@ -190,22 +228,20 @@ async function getExistingBootNodeState(uri: string): Promise<ExistingBootNodeSt
   };
 }
 
-function buildDraftMessages(options: {
-  uri: string;
-  role: BootNodeRole;
-  roleLabel: string;
-  purpose: string;
-  sharedContext: string;
-  nodeContext: string;
-}): ProviderMessage[] {
-  const instructions = ROLE_DRAFT_INSTRUCTIONS[options.role].join(' ');
+function buildDraftMessages(spec: BootNodeSpec, sharedContext: string, nodeContext: string): ProviderMessage[] {
+  const instructions = buildDraftInstructionList(spec).join(' ');
   const payload = {
-    uri: options.uri,
-    role: options.role,
-    role_label: options.roleLabel,
-    purpose: options.purpose,
-    shared_context: options.sharedContext || '',
-    node_context: options.nodeContext || '',
+    id: spec.id,
+    uri: spec.uri,
+    role: spec.role,
+    role_label: spec.role_label,
+    purpose: spec.purpose,
+    scope: spec.scope,
+    client_type: spec.client_type,
+    setup_title: spec.setup_title,
+    setup_description: spec.setup_description,
+    shared_context: sharedContext || '',
+    node_context: nodeContext || '',
   };
 
   return [
@@ -240,13 +276,15 @@ export async function saveBootNodes(
       const spec = requireBootSpec(entry.uri);
       const current = await getExistingBootNodeState(spec.uri);
       const { domain, path } = parseUri(spec.uri);
-      const title = path.split('/').pop() || path;
+      const segments = path.split('/').filter(Boolean);
+      const title = segments[segments.length - 1] || path;
+      const parentPath = segments.slice(0, -1).join('/');
 
       if (!current.exists) {
         const created = await createNode(
           {
             domain,
-            parentPath: '',
+            parentPath,
             title,
             content: entry.content,
           },
@@ -318,14 +356,7 @@ export async function generateBootDrafts({
     try {
       const response = await generateText(
         config,
-        buildDraftMessages({
-          uri: spec.uri,
-          role: spec.role,
-          roleLabel: spec.role_label,
-          purpose: spec.purpose,
-          sharedContext,
-          nodeContext: normalizedNodeContext[spec.uri] || '',
-        }),
+        buildDraftMessages(spec, sharedContext, normalizedNodeContext[spec.uri] || ''),
       );
       const parsed = extractJsonObject(response.content);
       const content = typeof parsed?.content === 'string' ? parsed.content.trim() : '';

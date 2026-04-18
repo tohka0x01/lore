@@ -73,6 +73,35 @@ describe('saveBootNodes', () => {
     });
   });
 
+  it('creates a nested client-specific boot node under the correct parent path', async () => {
+    mockSql.mockResolvedValueOnce({ rows: [], rowCount: 0 } as any);
+    mockCreateNode.mockResolvedValueOnce({
+      success: true,
+      uri: 'core://agent/openclaw',
+      path: 'agent/openclaw',
+      node_uuid: 'new-openclaw-uuid',
+    });
+
+    const result = await saveBootNodes({
+      nodes: { 'core://agent/openclaw': 'OpenClaw rules' },
+    });
+
+    expect(mockCreateNode).toHaveBeenCalledWith(
+      {
+        domain: 'core',
+        parentPath: 'agent',
+        title: 'openclaw',
+        content: 'OpenClaw rules',
+      },
+      {},
+    );
+    expect(result.results[0]).toMatchObject({
+      uri: 'core://agent/openclaw',
+      status: 'created',
+      node_uuid: 'new-openclaw-uuid',
+    });
+  });
+
   it('updates an existing fixed boot node when content changes', async () => {
     mockSql.mockResolvedValueOnce({
       rows: [{ node_uuid: 'agent-uuid', priority: 0, disclosure: null, content: 'Old rules' }],
@@ -219,6 +248,24 @@ describe('generateBootDrafts', () => {
         },
       ],
     });
+  });
+
+  it('includes client-specific draft instructions for runtime-specific agent nodes', async () => {
+    mockGenerateText.mockResolvedValueOnce({
+      content: '{"uri":"core://agent/openclaw","content":"使用 OpenClaw 特有的运行时规则。"}',
+      raw: {},
+    });
+
+    await generateBootDrafts({
+      uris: ['core://agent/openclaw'],
+    });
+
+    const systemPrompt = String(mockGenerateText.mock.calls[0]?.[1]?.[0]?.content || '');
+    const userPrompt = String(mockGenerateText.mock.calls[0]?.[1]?.[1]?.content || '');
+    expect(systemPrompt).toContain('This boot node is specific to the openclaw runtime.');
+    expect(systemPrompt).toContain('OpenClaw-specific runtime defaults');
+    expect(userPrompt).toContain('"uri": "core://agent/openclaw"');
+    expect(userPrompt).toContain('"client_type": "openclaw"');
   });
 
   it('returns per-node failures without aborting the whole batch', async () => {

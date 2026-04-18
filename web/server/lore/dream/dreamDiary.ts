@@ -95,7 +95,7 @@ export async function runDream(): Promise<DreamResult> {
     console.log('[dream] step 2: data collection');
     await appendDreamWorkflowEvent(diaryId, 'phase_started', { phase: 'data_collection', label: 'Data collection' });
     const [boot, recallStats, recallReview, writeStats] = await Promise.all([
-      bootView(),
+      bootView({ client_type: 'admin' }),
       getRecallStats({ days: 1, limit: 20 }),
       getDreamRecallReview({ days: 1, limit: 12 }),
       getWriteEventStats({ days: 1, limit: 20 }),
@@ -133,6 +133,8 @@ export async function runDream(): Promise<DreamResult> {
         uri: node.uri,
         role_label: node.role_label,
         purpose: node.purpose,
+        scope: node.scope,
+        client_type: node.client_type,
         state: node.state,
         content: node.content || '',
       })),

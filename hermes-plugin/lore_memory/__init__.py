@@ -23,6 +23,7 @@ from .client import LoreClient, LoreError
 from . import formatters
 
 logger = logging.getLogger(__name__)
+CLIENT_BOOT_URI = "core://agent/hermes"
 
 # ---------------------------------------------------------------------------
 # Guidance text (static behavioral instructions)
@@ -41,8 +42,8 @@ def _load_guidance() -> str:
     return (
         "Lore is the primary long-term memory system. "
         "lore_boot is a fixed startup baseline inside Lore, not a separate config layer. "
-        "At startup, lore_boot deterministically loads core://agent (workflow constraints), core://soul (style / persona / self-definition), and preferences://user (stable user definition / durable user context). "
-        "Treat boot as the session's startup baseline. Use recall and search to add prompt-specific memory leads, not to replace the role of those fixed paths. "
+        f"At startup, lore_boot deterministically loads the three global boot nodes core://agent (workflow constraints), core://soul (style / persona / self-definition), and preferences://user (stable user definition / durable user context), plus {CLIENT_BOOT_URI} for Hermes-specific agent rules. "
+        "Treat boot as the session's startup baseline. core://agent holds shared agent rules; core://agent/hermes holds Hermes-specific rules. Use recall and search to add prompt-specific memory leads, not to replace the role of those fixed paths. "
         "Use lore_get_node to read, lore_create_node to create, lore_search to find. Read before update/delete."
     )
 
@@ -65,12 +66,15 @@ def _format_boot_section(data: Dict) -> str:
         "## lore_boot 已加载内容",
         "",
         "`lore_boot` 是 Lore 节点系统中的固定启动基线,不是独立于记忆系统的外挂配置。",
-        "启动时会确定性加载 3 个固定节点:",
+        "启动时会先确定性加载 3 个全局固定节点:",
         "- `core://agent` — workflow constraints",
         "- `core://soul` — style / persona / self-definition",
         "- `preferences://user` — stable user definition / durable user context",
         "",
-        "把 boot 当作本会话的稳定 startup baseline。`<recall>` 和 `lore_search` 提供的是按当前问题补充的候选线索,不会取代这 3 个路径各自的职责。",
+        "Hermes 会话还会额外加载 1 个 agent 特化节点:",
+        f"- `{CLIENT_BOOT_URI}` — hermes runtime constraints",
+        "",
+        "把 boot 当作本会话的稳定 startup baseline。`core://agent` 提供通用 agent 规则, `core://agent/hermes` 提供 Hermes 环境专属规则。`<recall>` 和 `lore_search` 提供的是按当前问题补充的候选线索,不会取代这些固定路径各自的职责。",
         "",
     ]
 

@@ -1,3 +1,4 @@
+import type { ClientType } from '../../auth';
 import { sql } from '../../db';
 import { parseUri } from '../core/utils';
 import { getSettings } from '../config/settings';
@@ -6,13 +7,21 @@ import { resolveViewLlmConfig } from '../llm/config';
 export type BootNodeRole = 'agent' | 'soul' | 'user';
 export type BootNodeState = 'missing' | 'empty' | 'initialized';
 export type BootOverallState = 'uninitialized' | 'partial' | 'complete';
+export type BootNodeScope = 'global' | 'client';
+export type BootClientType = Extract<ClientType, 'claudecode' | 'openclaw' | 'hermes'>;
 
 export interface BootNodeSpec {
+  id: string;
   uri: string;
   role: BootNodeRole;
   role_label: string;
   purpose: string;
   dream_protection: 'protected';
+  scope: BootNodeScope;
+  client_type: BootClientType | null;
+  setup_slug: string;
+  setup_title: string;
+  setup_description: string;
 }
 
 export interface BootStatusNode extends BootNodeSpec {
@@ -24,7 +33,7 @@ export interface BootStatusNode extends BootNodeSpec {
   node_uuid: string | null;
 }
 
-interface CoreMemory {
+interface CoreMemory extends BootNodeSpec {
   uri: string;
   content: string;
   priority: number;
@@ -48,6 +57,11 @@ export interface BootDraftGenerationStatus {
   model: string | null;
 }
 
+export interface BootViewOptions {
+  client_type?: ClientType | null;
+  include_all_clients?: boolean;
+}
+
 export interface BootViewResult {
   loaded: number;
   total: number;
@@ -59,6 +73,8 @@ export interface BootViewResult {
   remaining_count: number;
   draft_generation_available: boolean;
   draft_generation_reason: string | null;
+  selected_client_type: ClientType | null;
+  includes_all_clients: boolean;
 }
 
 interface CoreMemoryRow {
@@ -76,29 +92,98 @@ interface RecentMemoryRow {
   created_at: Date | string | null;
 }
 
-export const FIXED_BOOT_NODES: readonly BootNodeSpec[] = [
+const GLOBAL_BOOT_NODES: readonly BootNodeSpec[] = [
   {
+    id: 'agent',
     uri: 'core://agent',
     role: 'agent',
     role_label: 'workflow constraints',
     purpose: 'Working rules, collaboration constraints, and execution protocol.',
     dream_protection: 'protected',
+    scope: 'global',
+    client_type: null,
+    setup_slug: 'agent',
+    setup_title: 'Agent boot memory',
+    setup_description: 'Write the fixed workflow-constraints node that every Lore agent loads at startup.',
   },
   {
+    id: 'soul',
     uri: 'core://soul',
     role: 'soul',
     role_label: 'style / persona / self-definition',
     purpose: 'Agent style, persona, and self-cognition baseline.',
     dream_protection: 'protected',
+    scope: 'global',
+    client_type: null,
+    setup_slug: 'soul',
+    setup_title: 'Soul boot memory',
+    setup_description: 'Write the fixed persona baseline that Lore carries into every session.',
   },
   {
+    id: 'user',
     uri: 'preferences://user',
     role: 'user',
     role_label: 'stable user definition',
     purpose: 'Stable user information, user preferences, and durable collaboration context.',
     dream_protection: 'protected',
+    scope: 'global',
+    client_type: null,
+    setup_slug: 'user',
+    setup_title: 'User boot memory',
+    setup_description: 'Write the stable user profile Lore should remember across future sessions.',
   },
 ] as const;
+
+const CLIENT_BOOT_NODES: readonly BootNodeSpec[] = [
+  {
+    id: 'agent-claudecode',
+    uri: 'core://agent/claudecode',
+    role: 'agent',
+    role_label: 'claude code runtime constraints',
+    purpose: 'Claude Code-specific tools, session hooks, and runtime workflow constraints.',
+    dream_protection: 'protected',
+    scope: 'client',
+    client_type: 'claudecode',
+    setup_slug: 'agent-claudecode',
+    setup_title: 'Claude Code boot memory',
+    setup_description: 'Write the Claude Code-specific agent rules that load together with core://agent.',
+  },
+  {
+    id: 'agent-openclaw',
+    uri: 'core://agent/openclaw',
+    role: 'agent',
+    role_label: 'openclaw runtime constraints',
+    purpose: 'OpenClaw-specific tools, plugin behavior, and runtime workflow constraints.',
+    dream_protection: 'protected',
+    scope: 'client',
+    client_type: 'openclaw',
+    setup_slug: 'agent-openclaw',
+    setup_title: 'OpenClaw boot memory',
+    setup_description: 'Write the OpenClaw-specific agent rules that load together with core://agent.',
+  },
+  {
+    id: 'agent-hermes',
+    uri: 'core://agent/hermes',
+    role: 'agent',
+    role_label: 'hermes runtime constraints',
+    purpose: 'Hermes-specific memory-provider behavior, tools, and runtime workflow constraints.',
+    dream_protection: 'protected',
+    scope: 'client',
+    client_type: 'hermes',
+    setup_slug: 'agent-hermes',
+    setup_title: 'Hermes boot memory',
+    setup_description: 'Write the Hermes-specific agent rules that load together with core://agent.',
+  },
+] as const;
+
+export const FIXED_BOOT_NODES: readonly BootNodeSpec[] = [
+  ...GLOBAL_BOOT_NODES,
+  ...CLIENT_BOOT_NODES,
+] as const;
+
+const CLIENT_BOOT_NODE_MAP = new Map<BootClientType, BootNodeSpec>(
+  CLIENT_BOOT_NODES.map((node) => [node.client_type as BootClientType, node]),
+);
 
 function normalizeUri(uri: unknown): string {
   const { domain, path } = parseUri(uri);
@@ -121,6 +206,14 @@ function deriveOverallState(nodes: BootStatusNode[]): BootOverallState {
   return 'partial';
 }
 
+function isRuntimeBootClientType(value: ClientType | null | undefined): value is BootClientType {
+  return value === 'claudecode' || value === 'openclaw' || value === 'hermes';
+}
+
+function shouldIncludeAllClientBootNodes(options: BootViewOptions): boolean {
+  return options.include_all_clients === true || options.client_type === 'admin';
+}
+
 const FIXED_BOOT_NODE_MAP = new Map<string, BootNodeSpec>(
   FIXED_BOOT_NODES.map((node) => [normalizeUri(node.uri), node]),
 );
@@ -129,8 +222,22 @@ export function getBootNodeSpecs(): BootNodeSpec[] {
   return [...FIXED_BOOT_NODES];
 }
 
+export function getRuntimeBootNodeSpecs(clientType?: ClientType | null): BootNodeSpec[] {
+  const specs = [...GLOBAL_BOOT_NODES];
+  const normalizedClientType = clientType ?? null;
+  if (!isRuntimeBootClientType(normalizedClientType)) return specs;
+
+  const clientSpec = CLIENT_BOOT_NODE_MAP.get(normalizedClientType);
+  if (clientSpec) specs.push(clientSpec);
+  return specs;
+}
+
 export function getBootUris(): string[] {
   return FIXED_BOOT_NODES.map((node) => node.uri);
+}
+
+export function getRuntimeBootUris(clientType?: ClientType | null): string[] {
+  return getRuntimeBootNodeSpecs(clientType).map((node) => node.uri);
 }
 
 export function getBootUriSet(): Set<string> {
@@ -192,13 +299,16 @@ export async function getBootDraftGenerationStatus(): Promise<BootDraftGeneratio
   };
 }
 
-export async function bootView(): Promise<BootViewResult> {
-  const uris = getBootUris();
+export async function bootView(options: BootViewOptions = {}): Promise<BootViewResult> {
+  const includesAllClients = shouldIncludeAllClientBootNodes(options);
+  const selectedNodes = includesAllClients
+    ? getBootNodeSpecs()
+    : getRuntimeBootNodeSpecs(options.client_type ?? null);
   const results: CoreMemory[] = [];
   const failed: string[] = [];
   const nodes: BootStatusNode[] = [];
 
-  for (const spec of FIXED_BOOT_NODES) {
+  for (const spec of selectedNodes) {
     try {
       const { domain, path } = parseUri(spec.uri);
       const memoryResult = await sql(
@@ -245,6 +355,7 @@ export async function bootView(): Promise<BootViewResult> {
         node_uuid: row.node_uuid,
       });
       results.push({
+        ...spec,
         uri: spec.uri,
         content,
         priority: row.priority || 0,
@@ -286,7 +397,7 @@ export async function bootView(): Promise<BootViewResult> {
 
   return {
     loaded: results.length,
-    total: uris.length,
+    total: selectedNodes.length,
     failed,
     core_memories: results,
     recent_memories: (recentResult.rows as RecentMemoryRow[]).map((row) => ({
@@ -300,5 +411,7 @@ export async function bootView(): Promise<BootViewResult> {
     remaining_count,
     draft_generation_available: draftStatus.available,
     draft_generation_reason: draftStatus.reason,
+    selected_client_type: options.client_type ?? null,
+    includes_all_clients: includesAllClients,
   };
 }

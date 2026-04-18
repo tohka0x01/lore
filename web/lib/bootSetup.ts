@@ -4,19 +4,34 @@ export const BOOT_STATUS_CHANGED_EVENT = SETUP_STATUS_CHANGED_EVENT;
 export type BootNodeRole = 'agent' | 'soul' | 'user';
 export type BootNodeState = 'missing' | 'empty' | 'initialized';
 export type BootOverallState = 'uninitialized' | 'partial' | 'complete';
+export type BootNodeScope = 'global' | 'client';
+export type BootClientType = 'claudecode' | 'openclaw' | 'hermes';
 export type BootSaveStatus = 'created' | 'updated' | 'unchanged' | 'failed';
 export type BootDraftStatus = 'generated' | 'failed';
-export type SetupStepId = 'embedding' | 'llm' | 'boot-agent' | 'boot-soul' | 'boot-user';
+export type SetupStepId = string;
+
+const STATIC_SETUP_STEP_PATHS = {
+  embedding: '/setup/embedding',
+  llm: '/setup/llm',
+} as const;
 
 export interface BootMemory {
+  id?: string;
   uri: string;
   content: string;
   priority: number;
   disclosure: string | null;
   node_uuid: string;
+  role?: BootNodeRole;
   boot_role?: BootNodeRole;
   boot_role_label?: string;
   boot_purpose?: string;
+  purpose?: string;
+  scope?: BootNodeScope;
+  client_type?: BootClientType | null;
+  setup_slug?: string;
+  setup_title?: string;
+  setup_description?: string;
 }
 
 export interface BootRecentMemory {
@@ -27,11 +42,17 @@ export interface BootRecentMemory {
 }
 
 export interface BootStatusNode {
+  id: string;
   uri: string;
   role: BootNodeRole;
   role_label: string;
   purpose: string;
   dream_protection: 'protected';
+  scope: BootNodeScope;
+  client_type: BootClientType | null;
+  setup_slug: string;
+  setup_title: string;
+  setup_description: string;
   state: BootNodeState;
   content: string;
   content_length: number;
@@ -51,6 +72,8 @@ export interface BootViewData {
   remaining_count: number;
   draft_generation_available: boolean;
   draft_generation_reason: string | null;
+  selected_client_type: string | null;
+  includes_all_clients: boolean;
 }
 
 export interface SaveBootNodeResult {
@@ -89,9 +112,14 @@ export interface SetupRuntimeStatus {
 export interface SetupFlowStep {
   id: SetupStepId;
   path: string;
+  label: string;
+  description?: string;
   complete: boolean;
   role?: BootNodeRole;
   uri?: string;
+  scope?: BootNodeScope;
+  client_type?: BootClientType | null;
+  setup_slug?: string;
 }
 
 export interface SetupFlowStatus {
@@ -108,21 +136,31 @@ export interface SetupFlowStatus {
     remaining_count: number;
     draft_generation_available: boolean;
     draft_generation_reason: string | null;
+    includes_all_clients: boolean;
   };
 }
 
-export const SETUP_STEP_IDS: SetupStepId[] = ['embedding', 'llm', 'boot-agent', 'boot-soul', 'boot-user'];
+export function makeBootSetupStepId(setupSlug: string): SetupStepId {
+  return `boot:${String(setupSlug || '').trim()}`;
+}
 
-export const SETUP_STEP_PATHS: Record<SetupStepId, string> = {
-  embedding: '/setup/embedding',
-  llm: '/setup/llm',
-  'boot-agent': '/setup/boot/agent',
-  'boot-soul': '/setup/boot/soul',
-  'boot-user': '/setup/boot/user',
-};
+export function extractBootSetupSlug(stepId: string): string | null {
+  const value = String(stepId || '').trim();
+  return value.startsWith('boot:') ? value.slice('boot:'.length) : null;
+}
+
+export function isBootSetupStepId(stepId: string): boolean {
+  return extractBootSetupSlug(stepId) !== null;
+}
 
 export function getSetupStepPath(stepId: SetupStepId): string {
-  return SETUP_STEP_PATHS[stepId];
+  if (stepId in STATIC_SETUP_STEP_PATHS) {
+    return STATIC_SETUP_STEP_PATHS[stepId as keyof typeof STATIC_SETUP_STEP_PATHS];
+  }
+
+  const bootSlug = extractBootSetupSlug(stepId);
+  if (bootSlug) return `/setup/boot/${bootSlug}`;
+  return '/setup';
 }
 
 export function isSetupPath(pathname: string | null | undefined): boolean {

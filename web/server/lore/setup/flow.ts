@@ -1,6 +1,7 @@
 import {
   getSetupStepPath,
-  type BootNodeRole,
+  makeBootSetupStepId,
+  type BootStatusNode,
   type SetupFlowStatus,
   type SetupFlowStep,
   type SetupRuntimeStatus,
@@ -13,15 +14,19 @@ function isConfiguredValue(value: unknown): boolean {
   return String(value || '').trim().length > 0;
 }
 
-function buildBootStep(role: BootNodeRole, boot: BootViewResult): SetupFlowStep {
-  const node = boot.nodes.find((entry) => entry.role === role);
-  const stepId = role === 'agent' ? 'boot-agent' : role === 'soul' ? 'boot-soul' : 'boot-user';
+function buildBootStep(node: BootStatusNode): SetupFlowStep {
+  const stepId = makeBootSetupStepId(node.setup_slug);
   return {
     id: stepId,
     path: getSetupStepPath(stepId),
-    complete: node?.state === 'initialized',
-    role,
-    uri: node?.uri,
+    label: node.setup_title,
+    description: node.setup_description,
+    complete: node.state === 'initialized',
+    role: node.role,
+    uri: node.uri,
+    scope: node.scope,
+    client_type: node.client_type,
+    setup_slug: node.setup_slug,
   };
 }
 
@@ -38,16 +43,16 @@ export function buildSetupFlowStatus(input: {
     {
       id: 'embedding',
       path: getSetupStepPath('embedding'),
+      label: 'Embedding setup',
       complete: input.embedding.configured,
     },
     {
       id: 'llm',
       path: getSetupStepPath('llm'),
+      label: 'View LLM setup',
       complete: input.llm.configured,
     },
-    buildBootStep('agent', input.boot),
-    buildBootStep('soul', input.boot),
-    buildBootStep('user', input.boot),
+    ...input.boot.nodes.map((node) => buildBootStep(node)),
   ];
 
   const next_step = findNextStep(steps);
@@ -65,6 +70,7 @@ export function buildSetupFlowStatus(input: {
       remaining_count: input.boot.remaining_count,
       draft_generation_available: input.boot.draft_generation_available,
       draft_generation_reason: input.boot.draft_generation_reason,
+      includes_all_clients: input.boot.includes_all_clients,
     },
   };
 }
@@ -79,7 +85,7 @@ export async function getSetupFlowStatus(): Promise<SetupFlowStatus> {
       'view_llm.api_key',
       'view_llm.model',
     ]),
-    bootView(),
+    bootView({ client_type: 'admin' }),
     resolveViewLlmConfig(),
   ]);
 

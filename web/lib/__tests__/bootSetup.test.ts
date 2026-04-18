@@ -13,11 +13,11 @@ const partialSetupFlow: SetupFlowStatus = {
   complete: false,
   next_step: '/setup/llm',
   steps: [
-    { id: 'embedding', path: '/setup/embedding', complete: true },
-    { id: 'llm', path: '/setup/llm', complete: false },
-    { id: 'boot-agent', path: '/setup/boot/agent', complete: false, role: 'agent', uri: 'core://agent' },
-    { id: 'boot-soul', path: '/setup/boot/soul', complete: false, role: 'soul', uri: 'core://soul' },
-    { id: 'boot-user', path: '/setup/boot/user', complete: false, role: 'user', uri: 'preferences://user' },
+    { id: 'embedding', path: '/setup/embedding', label: 'Embedding setup', complete: true },
+    { id: 'llm', path: '/setup/llm', label: 'View LLM setup', complete: false },
+    { id: 'boot:agent', path: '/setup/boot/agent', label: 'Agent boot memory', complete: false, role: 'agent', uri: 'core://agent', scope: 'global', client_type: null, setup_slug: 'agent' },
+    { id: 'boot:soul', path: '/setup/boot/soul', label: 'Soul boot memory', complete: false, role: 'soul', uri: 'core://soul', scope: 'global', client_type: null, setup_slug: 'soul' },
+    { id: 'boot:user', path: '/setup/boot/user', label: 'User boot memory', complete: false, role: 'user', uri: 'preferences://user', scope: 'global', client_type: null, setup_slug: 'user' },
   ],
   embedding: { configured: true, runtime_ready: true },
   llm: { configured: false, runtime_ready: false },
@@ -29,6 +29,7 @@ const partialSetupFlow: SetupFlowStatus = {
     remaining_count: 2,
     draft_generation_available: false,
     draft_generation_reason: 'View LLM API key is not configured.',
+    includes_all_clients: true,
   },
 };
 

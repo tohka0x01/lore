@@ -11,8 +11,10 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
   const unauthorized = requireBearerAuth(request);
   if (unauthorized) return unauthorized;
 
+  const clientType = normalizeClientType(new URL(request.url).searchParams.get('client_type'));
+
   try {
-    return NextResponse.json(await bootView());
+    return NextResponse.json(await bootView({ client_type: clientType }));
   } catch (error) {
     return jsonContractError(error, 'Failed to load boot view');
   }

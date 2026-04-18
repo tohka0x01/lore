@@ -50,6 +50,8 @@ export interface DreamBootBaselineEntry {
   uri: string;
   role_label: string;
   purpose: string;
+  scope?: 'global' | 'client';
+  client_type?: string | null;
   state: 'missing' | 'empty' | 'initialized';
   content: string;
 }
@@ -237,10 +239,14 @@ export function buildDreamSystemPrompt(initialContext: DreamInitialContext): str
   const guidanceAvailable = Boolean(initialContext.guidance.trim());
   const recentQueries = buildRecentQueries(initialContext.recallStats);
   const reviewedQueries = buildReviewedQueries(initialContext.recallReview);
+  const bootBaselineLines = initialContext.bootBaseline.length > 0
+    ? initialContext.bootBaseline.map((entry) => `- ${entry.uri} — ${entry.role_label}`)
+    : ['- (no boot memories loaded)'];
+  const hasClientBoot = initialContext.bootBaseline.some((entry) => entry.scope === 'client');
 
   const bootContextLine = guidanceAvailable
-    ? 'Read the guidance first and apply it to every write decision and to the final diary. Use core://agent, core://soul, and preferences://user as always-available key memories throughout the review.'
-    : 'Use core://agent, core://soul, and preferences://user as always-available key memories throughout the review.';
+    ? 'Read the guidance first and apply it to every write decision and to the final diary. Use the loaded boot baseline as always-available key memories throughout the review.'
+    : 'Use the loaded boot baseline as always-available key memories throughout the review.';
 
   const rules = `You are running a daily dream review.
 
@@ -251,10 +257,9 @@ Your job today:
 4. Record the work in natural Chinese using guidance-level evidence and reasoning
 
 ${bootContextLine}
-Use these three boot nodes as fixed reference memories while you judge recall problems, choose write scope, and explain decisions in the diary:
-- core://agent — workflow constraints
-- core://soul — style / persona / self-definition
-- preferences://user — stable user definition / durable user context
+Use the following protected boot nodes as fixed reference memories while you judge recall problems, choose write scope, and explain decisions in the diary:
+${bootBaselineLines.join('\n')}
+${hasClientBoot ? 'This baseline includes both global boot nodes and client-specific agent boot nodes. Treat core://agent as the shared agent rule layer and core://agent/<client_type> nodes as runtime-specific rule layers.' : 'Treat the boot baseline as the fixed rule layer for the system before you touch any other memory.'}
 
 ## Workflow
 
@@ -329,7 +334,7 @@ Each write should do one of three things:
 - support necessary, evidence-backed maintenance
 
 Read more nodes than you modify.
-Keep core://agent, core://soul, and preferences://user intact and use them as fixed key memories, not routine write targets or move destinations.
+Keep every boot node listed above intact and use them as fixed key memories, not routine write targets or move destinations.
 
 ### 6. Write the diary
 Write the final diary in natural Chinese.

@@ -22,7 +22,7 @@ Lore gives an AI agent **persistent memory that survives session resets**. Inste
 
 Core capabilities:
 
-- **Boot** — load a fixed startup baseline inside Lore (`core://agent`, `core://soul`, `preferences://user`)
+- **Boot** — load Lore's fixed startup baseline: 3 global boot nodes plus an optional client-specific agent boot node such as `core://agent/openclaw`
 - **Recall** — semantic pre-fetch of relevant memories before each reply, with 8 pluggable scoring strategies
 - **Read / Search** — explicit memory lookup by URI, keyword, or vector similarity
 - **Write** — create, update, delete, and alias memory nodes with policy validation
@@ -92,7 +92,7 @@ One memory, multiple entry points. A node at `project://my_project` can have an 
 
 | Layer | What it does |
 |-------|-------------|
-| **Boot** | Loads Lore's fixed startup baseline (`core://agent`, `core://soul`, `preferences://user`) |
+| **Boot** | Loads Lore's fixed startup baseline: 3 global boot nodes plus an optional client-specific agent boot node |
 | **Recall** | Multi-signal semantic pre-fetch before each LLM turn |
 | **Search** | Hybrid FTS + vector search for explicit queries |
 
@@ -147,7 +147,7 @@ Open `http://127.0.0.1:18901` for the Web UI.
 | `API_TOKEN` | (empty) | Set this for auth on public deployments |
 | `WEB_PORT` | `18901` | Web app port |
 
-Boot is fixed in server code and always loads the same three startup nodes: `core://agent`, `core://soul`, and `preferences://user`.
+Boot is fixed in server code. Lore always loads the same three global startup nodes: `core://agent`, `core://soul`, and `preferences://user`. When the current runtime has a matching `client_type`, Lore also loads a client-specific agent boot node such as `core://agent/openclaw`.
 
 Recall weights, scoring strategy, view LLM, embedding endpoint, dream schedule, backup config, and policy settings are managed at runtime via the **Settings UI** (`/settings`), stored in the `app_settings` table.
 
@@ -280,7 +280,7 @@ The plugin exposes 12 tools to the LLM:
 |------|---------|
 | `lore_guidance` | Load the full Lore usage rules |
 | `lore_status` | Check connection health |
-| `lore_boot` | Load the fixed startup baseline (3 boot nodes) |
+| `lore_boot` | Load the fixed startup baseline (3 global boot nodes + optional client-specific agent boot node) |
 | `lore_get_node` | Read a node by URI |
 | `lore_search` | Find memories by keyword or domain |
 | `lore_list_domains` | Browse top-level domains |

@@ -120,10 +120,17 @@ const DICT: Record<'zh' | 'en', Record<string, string>> = {
     'Configure the model Lore uses for draft generation, view refinement, and dream workflows.': '配置 Lore 用于生成草稿、视图精炼和 dream 流程的模型。',
     'Agent boot memory': 'Agent 启动记忆',
     'Write the fixed workflow-constraints node that Lore always loads at startup.': '填写 Lore 每次启动都会固定加载的工作规则节点。',
+    'Write the fixed workflow-constraints node that every Lore agent loads at startup.': '填写每个 Lore agent 启动时都会固定加载的通用工作规则节点。',
     'Soul boot memory': 'Soul 启动记忆',
     'Write the fixed persona baseline that Lore carries into every session.': '填写 Lore 每次会话都会带上的人格基线节点。',
     'User boot memory': 'User 启动记忆',
     'Write the stable user profile Lore should remember across future sessions.': '填写 Lore 未来会话中都应记住的稳定用户画像。',
+    'Claude Code boot memory': 'Claude Code 启动记忆',
+    'Write the Claude Code-specific agent rules that load together with core://agent.': '填写会与 core://agent 一起加载的 Claude Code 专属 agent 规则。',
+    'OpenClaw boot memory': 'OpenClaw 启动记忆',
+    'Write the OpenClaw-specific agent rules that load together with core://agent.': '填写会与 core://agent 一起加载的 OpenClaw 专属 agent 规则。',
+    'Hermes boot memory': 'Hermes 启动记忆',
+    'Write the Hermes-specific agent rules that load together with core://agent.': '填写会与 core://agent 一起加载的 Hermes 专属 agent 规则。',
     'Lore needs boot initialization before you can enter the normal workspace.':
       '进入正常工作区之前，需要先完成 Lore 的 boot 初始化。',
     'Refresh status': '刷新状态',
@@ -133,12 +140,12 @@ const DICT: Record<'zh' | 'en', Record<string, string>> = {
     'Startup nodes loaded': '已加载启动节点',
     'Draft model': '草稿模型',
     'Fixed boot baseline': '固定启动基线',
-    'These three fixed paths load at startup for every Lore instance.':
-      '这 3 个固定路径会在每个 Lore 实例启动时加载。',
+    'These global boot paths load at startup for every Lore instance.':
+      '这些全局 boot 路径会在每个 Lore 实例启动时加载。',
     'You can write these manually, or use the configured View LLM to draft a first pass and then edit it before saving.':
       '你可以手动填写，也可以用已配置的 View LLM 先生成初稿，再编辑后保存。',
     'Shared draft context': '共享草稿上下文',
-    'Optional shared context for all three draft generations': '给这 3 个草稿生成共享的可选上下文',
+    'Optional shared context for all boot draft generations': '给所有 boot 草稿生成共享的可选上下文',
     'Draft generation unavailable': '草稿生成不可用',
     'You can still complete setup manually, or open Settings first and configure the default View LLM.':
       '你仍然可以手动完成初始化，或者先打开设置配置默认 View LLM。',
@@ -161,10 +168,19 @@ const DICT: Record<'zh' | 'en', Record<string, string>> = {
     'Soul boot': 'Soul 启动',
     'User boot': 'User 启动',
     'workflow constraints': '工作规则 / 协作约束',
+    'claude code runtime constraints': 'Claude Code 运行时约束',
+    'openclaw runtime constraints': 'OpenClaw 运行时约束',
+    'hermes runtime constraints': 'Hermes 运行时约束',
     'style / persona / self-definition': '风格 / 人格 / 自我定义',
     'stable user definition': '稳定用户定义',
     'Working rules, collaboration constraints, and execution protocol.':
       '工作规则、协作约束与执行协议。',
+    'Claude Code-specific tools, session hooks, and runtime workflow constraints.':
+      'Claude Code 专属工具、会话 hook 与运行时工作流约束。',
+    'OpenClaw-specific tools, plugin behavior, and runtime workflow constraints.':
+      'OpenClaw 专属工具、插件行为与运行时工作流约束。',
+    'Hermes-specific memory-provider behavior, tools, and runtime workflow constraints.':
+      'Hermes 专属 memory provider 行为、工具与运行时工作流约束。',
     'Agent style, persona, and self-cognition baseline.':
       '代理的风格、人格与自我认知基线。',
     'Stable user information, user preferences, and durable collaboration context.':

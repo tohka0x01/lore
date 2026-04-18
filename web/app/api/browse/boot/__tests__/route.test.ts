@@ -47,13 +47,17 @@ describe('/api/browse/boot route', () => {
       remaining_count: 2,
       draft_generation_available: false,
       draft_generation_reason: 'View LLM base URL is not configured.',
+      selected_client_type: 'admin',
+      includes_all_clients: true,
     } as any);
 
-    const response = await GET(new Request('http://localhost/api/browse/boot', {
+    const response = await GET(new Request('http://localhost/api/browse/boot?client_type=admin', {
       headers: { authorization: 'Bearer secret' },
     }) as any);
     const body = await response.json();
 
+    expect(mockNormalizeClientType).toHaveBeenCalledWith('admin');
+    expect(mockBootView).toHaveBeenCalledWith({ client_type: 'admin' });
     expect(response.status).toBe(200);
     expect(body.overall_state).toBe('partial');
     expect(body.remaining_count).toBe(2);

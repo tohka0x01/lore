@@ -61,13 +61,23 @@ def format_boot_view(data: Dict) -> str:
         lines.append("")
 
     if core_memories:
+        client_boot_memories = [memory for memory in core_memories if memory.get("scope") == "client"]
         lines.append("## Fixed boot baseline:")
         lines.append("")
-        lines.append("Lore boot deterministically loads three fixed startup nodes inside Lore:")
+        lines.append("Lore boot deterministically loads three global startup nodes inside Lore:")
         lines.append("- core://agent — workflow constraints")
         lines.append("- core://soul — style / persona / self-definition")
         lines.append("- preferences://user — stable user definition / durable user context")
         lines.append("")
+        if client_boot_memories:
+            lines.append(
+                "This boot view also includes the active client-specific agent node:"
+                if len(client_boot_memories) == 1
+                else "This boot view also includes the client-specific agent nodes:"
+            )
+            for memory in client_boot_memories:
+                lines.append(f"- {memory.get('uri', '')} — {memory.get('boot_role_label', 'client-specific agent constraints')}")
+            lines.append("")
 
         for memory in core_memories:
             lines.append(f"### {memory.get('uri', '')}")

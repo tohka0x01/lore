@@ -20,18 +20,24 @@ const mockBootView = vi.mocked(bootView);
 const mockResolveViewLlmConfig = vi.mocked(resolveViewLlmConfig);
 
 const BASE_BOOT_VIEW = {
-  loaded: 3,
-  total: 3,
+  loaded: 4,
+  total: 4,
   failed: [],
   core_memories: [],
   recent_memories: [],
   nodes: [
     {
+      id: 'agent',
       uri: 'core://agent',
       role: 'agent' as const,
       role_label: 'workflow constraints',
       purpose: 'Working rules, collaboration constraints, and execution protocol.',
       dream_protection: 'protected' as const,
+      scope: 'global' as const,
+      client_type: null,
+      setup_slug: 'agent',
+      setup_title: 'Agent boot memory',
+      setup_description: 'Write the fixed workflow-constraints node that every Lore agent loads at startup.',
       state: 'initialized' as const,
       content: 'Agent memory',
       content_length: 12,
@@ -40,11 +46,17 @@ const BASE_BOOT_VIEW = {
       node_uuid: 'agent-uuid',
     },
     {
+      id: 'soul',
       uri: 'core://soul',
       role: 'soul' as const,
       role_label: 'style / persona / self-definition',
       purpose: 'Agent style, persona, and self-cognition baseline.',
       dream_protection: 'protected' as const,
+      scope: 'global' as const,
+      client_type: null,
+      setup_slug: 'soul',
+      setup_title: 'Soul boot memory',
+      setup_description: 'Write the fixed persona baseline that Lore carries into every session.',
       state: 'empty' as const,
       content: '',
       content_length: 0,
@@ -53,11 +65,17 @@ const BASE_BOOT_VIEW = {
       node_uuid: 'soul-uuid',
     },
     {
+      id: 'user',
       uri: 'preferences://user',
       role: 'user' as const,
       role_label: 'stable user definition',
       purpose: 'Stable user information, user preferences, and durable collaboration context.',
       dream_protection: 'protected' as const,
+      scope: 'global' as const,
+      client_type: null,
+      setup_slug: 'user',
+      setup_title: 'User boot memory',
+      setup_description: 'Write the stable user profile Lore should remember across future sessions.',
       state: 'missing' as const,
       content: '',
       content_length: 0,
@@ -65,11 +83,32 @@ const BASE_BOOT_VIEW = {
       disclosure: null,
       node_uuid: null,
     },
+    {
+      id: 'agent-openclaw',
+      uri: 'core://agent/openclaw',
+      role: 'agent' as const,
+      role_label: 'openclaw runtime constraints',
+      purpose: 'OpenClaw-specific tools, plugin behavior, and runtime workflow constraints.',
+      dream_protection: 'protected' as const,
+      scope: 'client' as const,
+      client_type: 'openclaw' as const,
+      setup_slug: 'agent-openclaw',
+      setup_title: 'OpenClaw boot memory',
+      setup_description: 'Write the OpenClaw-specific agent rules that load together with core://agent.',
+      state: 'initialized' as const,
+      content: 'OpenClaw memory',
+      content_length: 15,
+      priority: 1,
+      disclosure: null,
+      node_uuid: 'openclaw-uuid',
+    },
   ],
   overall_state: 'partial' as const,
   remaining_count: 2,
   draft_generation_available: false,
   draft_generation_reason: 'View LLM API key is not configured.',
+  selected_client_type: 'admin' as const,
+  includes_all_clients: true,
 };
 
 describe('buildSetupFlowStatus', () => {
@@ -83,11 +122,12 @@ describe('buildSetupFlowStatus', () => {
     expect(result.complete).toBe(false);
     expect(result.next_step).toBe('/setup/llm');
     expect(result.steps).toEqual([
-      { id: 'embedding', path: '/setup/embedding', complete: true },
-      { id: 'llm', path: '/setup/llm', complete: false },
-      { id: 'boot-agent', path: '/setup/boot/agent', complete: true, role: 'agent', uri: 'core://agent' },
-      { id: 'boot-soul', path: '/setup/boot/soul', complete: false, role: 'soul', uri: 'core://soul' },
-      { id: 'boot-user', path: '/setup/boot/user', complete: false, role: 'user', uri: 'preferences://user' },
+      { id: 'embedding', path: '/setup/embedding', label: 'Embedding setup', complete: true },
+      { id: 'llm', path: '/setup/llm', label: 'View LLM setup', complete: false },
+      { id: 'boot:agent', path: '/setup/boot/agent', label: 'Agent boot memory', description: 'Write the fixed workflow-constraints node that every Lore agent loads at startup.', complete: true, role: 'agent', uri: 'core://agent', scope: 'global', client_type: null, setup_slug: 'agent' },
+      { id: 'boot:soul', path: '/setup/boot/soul', label: 'Soul boot memory', description: 'Write the fixed persona baseline that Lore carries into every session.', complete: false, role: 'soul', uri: 'core://soul', scope: 'global', client_type: null, setup_slug: 'soul' },
+      { id: 'boot:user', path: '/setup/boot/user', label: 'User boot memory', description: 'Write the stable user profile Lore should remember across future sessions.', complete: false, role: 'user', uri: 'preferences://user', scope: 'global', client_type: null, setup_slug: 'user' },
+      { id: 'boot:agent-openclaw', path: '/setup/boot/agent-openclaw', label: 'OpenClaw boot memory', description: 'Write the OpenClaw-specific agent rules that load together with core://agent.', complete: true, role: 'agent', uri: 'core://agent/openclaw', scope: 'client', client_type: 'openclaw', setup_slug: 'agent-openclaw' },
     ]);
   });
 
@@ -132,6 +172,7 @@ describe('getSetupFlowStatus', () => {
     expect(result.embedding).toEqual({ configured: true, runtime_ready: true });
     expect(result.llm).toEqual({ configured: true, runtime_ready: false });
     expect(result.next_step).toBe('/setup/boot/soul');
+    expect(mockBootView).toHaveBeenCalledWith({ client_type: 'admin' });
   });
 
   it('marks llm runtime ready when resolveViewLlmConfig succeeds', async () => {

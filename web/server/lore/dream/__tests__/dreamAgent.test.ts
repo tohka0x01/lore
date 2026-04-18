@@ -890,11 +890,11 @@ describe('buildDreamSystemPrompt', () => {
   it('includes key boot memories and action-first guidance-driven workflow', () => {
     const prompt = buildDreamSystemPrompt(makeInitialContext());
     expect(prompt).toContain('Read the guidance first and apply it to every write decision and to the final diary');
-    expect(prompt).toContain('Use core://agent, core://soul, and preferences://user as always-available key memories throughout the review');
-    expect(prompt).toContain('Use these three boot nodes as fixed reference memories while you judge recall problems, choose write scope, and explain decisions in the diary');
+    expect(prompt).toContain('Use the loaded boot baseline as always-available key memories throughout the review');
+    expect(prompt).toContain('Use the following protected boot nodes as fixed reference memories while you judge recall problems, choose write scope, and explain decisions in the diary');
     expect(prompt).toContain('core://agent — workflow constraints');
     expect(prompt).toContain('core://soul — style / persona / self-definition');
-    expect(prompt).toContain('preferences://user — stable user definition / durable user context');
+    expect(prompt).toContain('preferences://user — stable user definition');
     expect(prompt).toContain('## Key boot memories');
     expect(prompt).toContain('## Guidance');
     expect(prompt).toContain('## Today\'s working context');
@@ -1003,14 +1003,14 @@ describe('buildDreamSystemPrompt', () => {
     const prompt = buildDreamSystemPrompt(makeInitialContext());
     expect(prompt).toContain('Write the final diary in natural Chinese');
     expect(prompt).toContain('Use exactly five sections with Chinese titles corresponding to');
-    expect(prompt).toContain('Use core://agent, core://soul, and preferences://user as always-available key memories throughout the review');
+    expect(prompt).toContain('Use the loaded boot baseline as always-available key memories throughout the review');
     expect(prompt).not.toContain('Dream 的宪法层');
     expect(prompt).not.toContain('Lore guidance 与这三个固定节点一起构成 Dream 的 baseline calibration');
   });
 
   it('mentions fixed boot protection and ordered change priorities', () => {
     const prompt = buildDreamSystemPrompt(makeInitialContext());
-    expect(prompt).toContain('Keep core://agent, core://soul, and preferences://user intact and use them as fixed key memories');
+    expect(prompt).toContain('Keep every boot node listed above intact and use them as fixed key memories');
     expect(prompt).toContain('Prefer this improvement order');
     expect(prompt).toContain('structure / node boundary');
     expect(prompt).toContain('Read more nodes than you modify');

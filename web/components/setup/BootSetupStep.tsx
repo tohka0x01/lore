@@ -8,35 +8,23 @@ import { Badge, Button, Card, Notice } from '@/components/ui';
 import { SetupBackButton, SetupFlowShell } from '@/components/setup/SetupFlowShell';
 import { useConfirm } from '@/components/ConfirmDialog';
 import { generateBootStatusDrafts, getBootStatus, getSetupFlowStatus, saveBootStatus } from '@/lib/api';
-import { dispatchSetupStatusChanged, type BootNodeRole, type BootStatusNode, type SetupFlowStatus } from '@/lib/bootSetup';
+import {
+  dispatchSetupStatusChanged,
+  makeBootSetupStepId,
+  type BootNodeRole,
+  type BootStatusNode,
+  type SetupFlowStatus,
+} from '@/lib/bootSetup';
 import { useT } from '@/lib/i18n';
 
 interface BootSetupStepProps {
-  role: BootNodeRole;
+  setupSlug: string;
 }
 
 interface NodeMessage {
   tone: 'success' | 'danger' | 'info';
   text: string;
 }
-
-const ROLE_META: Record<BootNodeRole, { stepId: 'boot-agent' | 'boot-soul' | 'boot-user'; title: string; description: string }> = {
-  agent: {
-    stepId: 'boot-agent',
-    title: 'Agent boot memory',
-    description: 'Write the fixed workflow-constraints node that Lore always loads at startup.',
-  },
-  soul: {
-    stepId: 'boot-soul',
-    title: 'Soul boot memory',
-    description: 'Write the fixed persona baseline that Lore carries into every session.',
-  },
-  user: {
-    stepId: 'boot-user',
-    title: 'User boot memory',
-    description: 'Write the stable user profile Lore should remember across future sessions.',
-  },
-};
 
 function statusTone(state: BootStatusNode['state']): 'red' | 'orange' | 'green' {
   if (state === 'missing') return 'red';
@@ -63,12 +51,12 @@ function previousPath(setupStatus: SetupFlowStatus | null, stepId: string): stri
   return setupStatus.steps[index - 1]?.path || null;
 }
 
-export default function BootSetupStep({ role }: BootSetupStepProps): React.JSX.Element {
-  const meta = ROLE_META[role];
+export default function BootSetupStep({ setupSlug }: BootSetupStepProps): React.JSX.Element {
   const { t } = useT();
   const router = useRouter();
   const pathname = usePathname() || '';
   const { toast } = useConfirm();
+  const stepId = useMemo(() => makeBootSetupStepId(setupSlug), [setupSlug]);
   const [setupStatus, setSetupStatus] = useState<SetupFlowStatus | null>(null);
   const [node, setNode] = useState<BootStatusNode | null>(null);
   const [draft, setDraft] = useState('');
@@ -91,7 +79,7 @@ export default function BootSetupStep({ role }: BootSetupStepProps): React.JSX.E
     try {
       const [boot, nextSetupStatus] = await Promise.all([getBootStatus(), getSetupFlowStatus()]);
       setSetupStatus(nextSetupStatus);
-      const nextNode = boot.nodes.find((entry) => entry.role === role) || null;
+      const nextNode = boot.nodes.find((entry) => entry.setup_slug === setupSlug) || null;
       setNode(nextNode);
       if (nextNode && !dirtyRef.current) {
         setDraft(nextNode.content || '');
@@ -102,7 +90,7 @@ export default function BootSetupStep({ role }: BootSetupStepProps): React.JSX.E
     } finally {
       setLoading(false);
     }
-  }, [role, t]);
+  }, [setupSlug, t]);
 
   useEffect(() => {
     void load();
@@ -170,8 +158,14 @@ export default function BootSetupStep({ role }: BootSetupStepProps): React.JSX.E
     }
   }, [draft, goNext, load, node, t, toast]);
 
-  const Icon = roleIcon(role);
-  const previous = useMemo(() => previousPath(setupStatus, meta.stepId), [meta.stepId, setupStatus]);
+  const Icon = roleIcon(node?.role || 'agent');
+  const currentStep = useMemo(
+    () => setupStatus?.steps.find((step) => step.id === stepId) || null,
+    [setupStatus, stepId],
+  );
+  const previous = useMemo(() => previousPath(setupStatus, stepId), [setupStatus, stepId]);
+  const pageTitle = currentStep?.label || node?.setup_title || 'Boot memory';
+  const pageDescription = currentStep?.description || node?.setup_description || 'Write the fixed boot node for this setup step.';
 
   const topNotice = useMemo(() => {
     if (!setupStatus) return null;
@@ -190,10 +184,10 @@ export default function BootSetupStep({ role }: BootSetupStepProps): React.JSX.E
 
   return (
     <SetupFlowShell
-      stepId={meta.stepId}
+      stepId={stepId}
       setupStatus={setupStatus}
-      title={t(meta.title)}
-      description={t(meta.description)}
+      title={t(pageTitle)}
+      description={t(pageDescription)}
       topNotice={topNotice}
       footer={previous ? <SetupBackButton href={previous} /> : <div />}
     >
@@ -209,6 +203,12 @@ export default function BootSetupStep({ role }: BootSetupStepProps): React.JSX.E
         </div>
       )}
 
+      {!loading && !node && (
+        <Notice tone="danger" title={t('Not found')}>
+          {t('Failed to load')}
+        </Notice>
+      )}
+
       {!loading && node && (
         <Card className="space-y-5">
           <div className="flex items-start justify-between gap-4 flex-wrap">
@@ -220,6 +220,7 @@ export default function BootSetupStep({ role }: BootSetupStepProps): React.JSX.E
                 <div className="flex items-center gap-2 flex-wrap">
                   <h2 className="text-[18px] font-semibold tracking-tight text-txt-primary">{t(node.role_label)}</h2>
                   <Badge tone={statusTone(node.state)}>{statusLabel(t, node.state)}</Badge>
+                  {node.scope === 'client' && node.client_type && <Badge tone="default">{node.client_type}</Badge>}
                   {dirty && <Badge tone="blue">{t('Unsaved')}</Badge>}
                 </div>
                 <div className="mt-1 text-[12px] font-mono text-txt-tertiary break-all">{node.uri}</div>

@@ -35,6 +35,8 @@ export interface BootMemory {
   created_at?: string | null;
   boot_role_label?: string;
   boot_purpose?: string;
+  scope?: string;
+  client_type?: string | null;
 }
 
 export interface BootViewData {
@@ -163,13 +165,23 @@ export function formatBootView(data: BootViewData | undefined): string {
     lines.push('');
   }
   if (coreMemories.length > 0) {
+    const clientBootMemories = coreMemories.filter((memory) => memory?.scope === 'client');
     lines.push('## Fixed boot baseline:');
     lines.push('');
-    lines.push('Lore boot deterministically loads three fixed startup nodes inside Lore:');
+    lines.push('Lore boot deterministically loads three global startup nodes inside Lore:');
     lines.push('- core://agent — workflow constraints');
     lines.push('- core://soul — style / persona / self-definition');
     lines.push('- preferences://user — stable user definition / durable user context');
     lines.push('');
+    if (clientBootMemories.length > 0) {
+      lines.push(clientBootMemories.length === 1
+        ? 'This boot view also includes the active client-specific agent node:'
+        : 'This boot view also includes the client-specific agent nodes:');
+      for (const memory of clientBootMemories) {
+        lines.push(`- ${memory?.uri || ''} — ${memory?.boot_role_label || 'client-specific agent constraints'}`);
+      }
+      lines.push('');
+    }
     for (const memory of coreMemories) {
       lines.push(`### ${memory?.uri || ''}`);
       if (memory?.boot_role_label) lines.push(`Role: ${memory.boot_role_label}`);

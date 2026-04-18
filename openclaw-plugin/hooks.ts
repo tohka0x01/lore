@@ -5,6 +5,8 @@ import { fetchJson, hasRecallConfig } from './api';
 import { normalizeUriList } from './formatters';
 import { formatRecallBlock } from './formatters';
 
+const CLIENT_BOOT_URI = "core://agent/openclaw";
+
 // ---- Pending recall usage map (session-scoped) ----
 
 export const pendingRecallUsage = new Map<string, { queryId: string; nodeUris: string[]; createdAt: number }>();
@@ -128,12 +130,15 @@ function formatBootSection(data: any): string {
     "## lore_boot 已加载内容",
     "",
     "`lore_boot` 是 Lore 节点系统中的固定启动基线,不是独立于记忆系统的外挂配置。",
-    "启动时会确定性加载 3 个固定节点:",
+    "启动时会先确定性加载 3 个全局固定节点:",
     "- `core://agent` — workflow constraints",
     "- `core://soul` — style / persona / self-definition",
     "- `preferences://user` — stable user definition / durable user context",
     "",
-    "把 boot 当作本会话的稳定 startup baseline。`<recall>` 和 `lore_search` 提供的是按当前问题补充的候选线索,不会取代这 3 个路径各自的职责。",
+    "OpenClaw 会话还会额外加载 1 个 agent 特化节点:",
+    `- \`${CLIENT_BOOT_URI}\` — openclaw runtime constraints`,
+    "",
+    "把 boot 当作本会话的稳定 startup baseline。`core://agent` 提供通用 agent 规则, `core://agent/openclaw` 提供 OpenClaw 环境专属规则。`<recall>` 和 `lore_search` 提供的是按当前问题补充的候选线索,不会取代这些固定路径各自的职责。",
     "",
   ];
 
@@ -207,8 +212,8 @@ async function fetchStartupRecallSection(pluginCfg: any, sessionId: string | und
 export const DEFAULT_GUIDANCE = [
   "Lore is the primary long-term memory system for this assistant.",
   "lore_boot is a fixed startup baseline inside Lore, not a separate config layer.",
-  "At startup, lore_boot deterministically loads core://agent (workflow constraints), core://soul (style / persona / self-definition), and preferences://user (stable user definition / durable user context).",
-  "Treat boot as the session's startup baseline. Use recall and search to add prompt-specific memory leads, not to replace the role of those fixed paths.",
+  `At startup, lore_boot deterministically loads the three global boot nodes core://agent (workflow constraints), core://soul (style / persona / self-definition), and preferences://user (stable user definition / durable user context), plus ${CLIENT_BOOT_URI} for OpenClaw-specific agent rules.`,
+  "Treat boot as the session's startup baseline. core://agent holds shared agent rules; core://agent/openclaw holds OpenClaw-specific rules. Use recall and search to add prompt-specific memory leads, not to replace the role of those fixed paths.",
   "Use it for identity, user preferences, standing rules, cross-session project knowledge, and conclusions that should persist.",
   "Reach for Lore when the user is asking about prior decisions, saved preferences, ongoing projects, durable instructions, or anything that sounds like memory rather than fresh reasoning.",
   "Use local file memory_search for historical markdown archives, older worklogs, and file-side fallback records.",

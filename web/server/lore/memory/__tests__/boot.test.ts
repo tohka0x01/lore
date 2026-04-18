@@ -7,7 +7,7 @@ vi.mock('../../llm/config', () => ({ resolveViewLlmConfig: vi.fn() }));
 import { sql } from '../../../db';
 import { getSettings } from '../../config/settings';
 import { resolveViewLlmConfig } from '../../llm/config';
-import { bootView, getBootNodeSpec, getBootUris, isBootUri } from '../boot';
+import { bootView, getBootNodeSpec, getBootUris, getRuntimeBootUris, isBootUri } from '../boot';
 
 const mockSql = vi.mocked(sql);
 const mockGetSettings = vi.mocked(getSettings);
@@ -25,7 +25,20 @@ const DEFAULT_VIEW_LLM_CONFIG = {
 
 describe('boot helpers', () => {
   it('exposes fixed boot URIs in deterministic order', () => {
-    expect(getBootUris()).toEqual(['core://agent', 'core://soul', 'preferences://user']);
+    expect(getBootUris()).toEqual([
+      'core://agent',
+      'core://soul',
+      'preferences://user',
+      'core://agent/claudecode',
+      'core://agent/openclaw',
+      'core://agent/hermes',
+    ]);
+    expect(getRuntimeBootUris('openclaw')).toEqual([
+      'core://agent',
+      'core://soul',
+      'preferences://user',
+      'core://agent/openclaw',
+    ]);
   });
 
   it('returns metadata for boot node lookups', () => {
@@ -153,7 +166,7 @@ describe('bootView', () => {
       .mockResolvedValueOnce({ rows: [], rowCount: 0 } as any);
 
     const result = await bootView();
-    expect(result.core_memories[0]).toEqual({
+    expect(result.core_memories[0]).toMatchObject({
       uri: 'core://agent',
       content: 'Agent constitution',
       priority: 8,
@@ -162,6 +175,9 @@ describe('bootView', () => {
       boot_role: 'agent',
       boot_role_label: 'workflow constraints',
       boot_purpose: 'Working rules, collaboration constraints, and execution protocol.',
+      scope: 'global',
+      client_type: null,
+      setup_slug: 'agent',
     });
     expect(result.core_memories[2]).toMatchObject({
       uri: 'preferences://user',
@@ -234,5 +250,52 @@ describe('bootView', () => {
     const result = await bootView();
     expect(result.draft_generation_available).toBe(false);
     expect(result.draft_generation_reason).toBe('View LLM base URL is not configured.');
+  });
+
+  it('loads the client-specific agent boot node when client_type matches a runtime', async () => {
+    mockSql
+      .mockResolvedValueOnce({ rows: [{ node_uuid: 'agent-uuid', priority: 0, disclosure: null, content: 'Agent rules' }], rowCount: 1 } as any)
+      .mockResolvedValueOnce({ rows: [{ node_uuid: 'soul-uuid', priority: 1, disclosure: null, content: 'Soul baseline' }], rowCount: 1 } as any)
+      .mockResolvedValueOnce({ rows: [{ node_uuid: 'user-uuid', priority: 2, disclosure: null, content: 'User profile' }], rowCount: 1 } as any)
+      .mockResolvedValueOnce({ rows: [{ node_uuid: 'openclaw-uuid', priority: 1, disclosure: null, content: 'OpenClaw rules' }], rowCount: 1 } as any)
+      .mockResolvedValueOnce({ rows: [], rowCount: 0 } as any);
+
+    const result = await bootView({ client_type: 'openclaw' });
+
+    expect(result.total).toBe(4);
+    expect(result.loaded).toBe(4);
+    expect(result.selected_client_type).toBe('openclaw');
+    expect(result.includes_all_clients).toBe(false);
+    expect(result.core_memories.map((memory) => memory.uri)).toEqual([
+      'core://agent',
+      'core://soul',
+      'preferences://user',
+      'core://agent/openclaw',
+    ]);
+    expect(result.nodes[3]).toMatchObject({
+      uri: 'core://agent/openclaw',
+      scope: 'client',
+      client_type: 'openclaw',
+      state: 'initialized',
+    });
+  });
+
+  it('returns the full protected boot manifest for admin/setup views', async () => {
+    mockSql
+      .mockResolvedValueOnce({ rows: [{ node_uuid: 'agent-uuid', priority: 0, disclosure: null, content: 'Agent rules' }], rowCount: 1 } as any)
+      .mockResolvedValueOnce({ rows: [{ node_uuid: 'soul-uuid', priority: 1, disclosure: null, content: 'Soul baseline' }], rowCount: 1 } as any)
+      .mockResolvedValueOnce({ rows: [{ node_uuid: 'user-uuid', priority: 2, disclosure: null, content: 'User profile' }], rowCount: 1 } as any)
+      .mockResolvedValueOnce({ rows: [{ node_uuid: 'claudecode-uuid', priority: 1, disclosure: null, content: 'Claude rules' }], rowCount: 1 } as any)
+      .mockResolvedValueOnce({ rows: [{ node_uuid: 'openclaw-uuid', priority: 1, disclosure: null, content: 'OpenClaw rules' }], rowCount: 1 } as any)
+      .mockResolvedValueOnce({ rows: [{ node_uuid: 'hermes-uuid', priority: 1, disclosure: null, content: 'Hermes rules' }], rowCount: 1 } as any)
+      .mockResolvedValueOnce({ rows: [], rowCount: 0 } as any);
+
+    const result = await bootView({ client_type: 'admin' });
+
+    expect(result.total).toBe(6);
+    expect(result.loaded).toBe(6);
+    expect(result.selected_client_type).toBe('admin');
+    expect(result.includes_all_clients).toBe(true);
+    expect(result.core_memories.map((memory) => memory.uri)).toEqual(getBootUris());
   });
 });

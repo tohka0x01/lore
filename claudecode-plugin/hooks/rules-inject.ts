@@ -15,6 +15,7 @@ import { execSync } from "node:child_process";
 
 const DEFAULT_BASE_URL = "http://127.0.0.1:18901";
 const BOOT_TIMEOUT_MS = 8000;
+const CLIENT_BOOT_URI = "core://agent/claudecode";
 
 function resolveRulesPath(): string {
   const pluginRoot = process.env.CLAUDE_PLUGIN_ROOT;
@@ -40,6 +41,8 @@ interface BootMemory {
   created_at?: string | null;
   boot_role_label?: string;
   boot_purpose?: string;
+  scope?: string;
+  client_type?: string | null;
 }
 
 interface BootResponse {
@@ -59,12 +62,15 @@ function formatBootSection(data: BootResponse): string {
     "## lore_boot 已加载内容",
     "",
     "`lore_boot` 是 Lore 节点系统中的固定启动基线,不是独立于记忆系统的外挂配置。",
-    "启动时会确定性加载 3 个固定节点:",
+    "启动时会先确定性加载 3 个全局固定节点:",
     "- `core://agent` — workflow constraints",
     "- `core://soul` — style / persona / self-definition",
     "- `preferences://user` — stable user definition / durable user context",
     "",
-    "把 boot 当作本会话的稳定 startup baseline。`<recall>` 和 `lore_search` 提供的是按当前问题补充的候选线索,不会取代这 3 个路径各自的职责。",
+    "Claude Code 会话还会额外加载 1 个 agent 特化节点:",
+    `- \`${CLIENT_BOOT_URI}\` — claude code runtime constraints`,
+    "",
+    "把 boot 当作本会话的稳定 startup baseline。`core://agent` 提供通用 agent 规则, `core://agent/claudecode` 提供 Claude Code 环境专属规则。`<recall>` 和 `lore_search` 提供的是按当前问题补充的候选线索,不会取代这些固定路径各自的职责。",
     "",
   ];
 

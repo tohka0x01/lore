@@ -83,7 +83,7 @@ export function createMcpServer(context: McpServerContext = {}): InstanceType<ty
     {},
     async () => {
       try {
-        const data = await bootView();
+        const data = await bootView({ client_type: context.clientType ?? null });
         return ok(formatBootView(data));
       } catch (error) {
         return fail('Lore boot failed', error);
