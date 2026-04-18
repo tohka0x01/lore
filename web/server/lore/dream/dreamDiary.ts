@@ -3,7 +3,7 @@ import { clampLimit } from '../core/utils';
 import { getSettings as getSettingsBatch, updateSettings } from '../config/settings';
 import { ensureRecallIndex } from '../recall/recall';
 import { getMemoryHealthReport, getDeadWrites, getPathEffectiveness } from '../recall/feedbackAnalytics';
-import { getRecallStats } from '../recall/recallAnalytics';
+import { getRecallStats, getDreamRecallReview } from '../recall/recallAnalytics';
 import { getWriteEventStats } from '../memory/writeEvents';
 import { listOrphans } from '../ops/maintenance';
 import { createNode, updateNodeByPath, deleteNodeByPath, moveNode } from '../memory/write';
@@ -94,13 +94,16 @@ export async function runDream(): Promise<DreamResult> {
     // Step 2: Data collection
     console.log('[dream] step 2: data collection');
     await appendDreamWorkflowEvent(diaryId, 'phase_started', { phase: 'data_collection', label: 'Data collection' });
-    const [health, deadWrites, pathEffectiveness, recallStats, writeStats] = await Promise.all([
+    const [health, deadWrites, pathEffectiveness, recallStats, recallReview, writeStats] = await Promise.all([
       getMemoryHealthReport({ days: 7, limit: 50 }),
       getDeadWrites({ days: 30, limit: 50 }),
       getPathEffectiveness({ days: 7 }),
       getRecallStats({ days: 1, limit: 20 }),
+      getDreamRecallReview({ days: 1, limit: 12 }),
       getWriteEventStats({ days: 1, limit: 20 }),
     ]);
+    const recallReviewRecord = recallReview as unknown as Record<string, unknown>;
+    const recallReviewSummaryRecord = (recallReviewRecord.summary as Record<string, unknown>) || {};
     let orphanCount = 0;
     try { orphanCount = (await listOrphans()).length; } catch {}
     await appendDreamWorkflowEvent(diaryId, 'phase_completed', {
@@ -109,11 +112,21 @@ export async function runDream(): Promise<DreamResult> {
       summary: {
         orphan_count: orphanCount,
         recall_queries: ((recallStats as Record<string, unknown>).summary as Record<string, unknown>)?.query_count || 0,
+        reviewed_queries: recallReviewSummaryRecord.reviewed_queries || 0,
+        possible_missed_recalls: recallReviewSummaryRecord.possible_missed_recalls || 0,
         write_events: ((writeStats as unknown as Record<string, unknown>).summary as Record<string, unknown>)?.total_events || 0,
       },
     });
 
-    const healthData: HealthData = { health: health as unknown as Record<string, unknown>, deadWrites: deadWrites as unknown as Record<string, unknown>, pathEffectiveness: pathEffectiveness as unknown as Record<string, unknown>, recallStats: recallStats as unknown as Record<string, unknown>, writeStats: writeStats as unknown as Record<string, unknown>, orphanCount };
+    const healthData: HealthData = {
+      health: health as unknown as Record<string, unknown>,
+      deadWrites: deadWrites as unknown as Record<string, unknown>,
+      pathEffectiveness: pathEffectiveness as unknown as Record<string, unknown>,
+      recallStats: recallStats as unknown as Record<string, unknown>,
+      recallReview: recallReview as unknown as Record<string, unknown>,
+      writeStats: writeStats as unknown as Record<string, unknown>,
+      orphanCount,
+    };
 
     // Fetch recent diaries so the agent knows what was already done
     const recentDiariesResult = await sql(
@@ -176,13 +189,37 @@ export async function runDream(): Promise<DreamResult> {
     const policyBlocks = workflowEvents.filter((event) => event.event_type === 'policy_validation_blocked').length;
     const policyWarnings = workflowEvents.filter((event) => event.event_type === 'policy_warning_emitted').length;
 
+    const writeSummary = (writeStats as unknown as Record<string, unknown>).summary as Record<string, unknown> | undefined;
+    const recallSummary = (recallStats as unknown as Record<string, unknown>).summary as Record<string, unknown> | undefined;
+    const recallReviewSummary = recallReviewSummaryRecord;
+    const reviewedQueryItems = Array.isArray(recallReviewRecord.reviewed_queries)
+      ? (recallReviewRecord.reviewed_queries as Record<string, unknown>[])
+      : [];
+    const memoryEventsTotal = Object.values(memoryChangeCounts).reduce((sum, count) => sum + Number(count || 0), 0);
+    const durableCreates = Number(memoryChangeCounts.create || 0);
+    const durableEnrichments = Number(memoryChangeCounts.update || 0) + Number(memoryChangeCounts.glossary_add || 0);
+    const maintenanceEvents = memoryEventsTotal - durableCreates - durableEnrichments;
+
     // Step 4: Save diary
     const indexResultTyped = indexResult as Record<string, unknown>;
     const summary: Record<string, unknown> = {
       index: { source_count: indexResultTyped.source_count, updated_count: indexResultTyped.updated_count, deleted_count: indexResultTyped.deleted_count },
       health: (health as unknown as Record<string, unknown>).classification_summary,
-      dead_writes: { total: (deadWrites as unknown as Record<string, unknown>).total_dead_writes },
-      paths: { recommendations_count: ((pathEffectiveness as unknown as Record<string, unknown>).recommendations as unknown[] || []).length },
+      recall_review: {
+        reviewed_queries: recallReviewSummary?.reviewed_queries || 0,
+        zero_use_queries: recallReviewSummary?.zero_use_queries || 0,
+        high_merge_low_use_queries: recallReviewSummary?.high_merge_low_use_queries || 0,
+        possible_missed_recalls: recallReviewSummary?.possible_missed_recalls || 0,
+      },
+      durable_extraction: {
+        created: durableCreates,
+        enriched: durableEnrichments,
+      },
+      maintenance: {
+        events: maintenanceEvents,
+        dead_writes: (deadWrites as unknown as Record<string, unknown>).total_dead_writes,
+        path_recommendations: ((pathEffectiveness as unknown as Record<string, unknown>).recommendations as unknown[] || []).length,
+      },
       structure: {
         moved: Number(memoryChangeCounts.move || 0),
         protected_blocks: protectedBlocks,
@@ -190,9 +227,10 @@ export async function runDream(): Promise<DreamResult> {
         policy_warnings: policyWarnings,
       },
       activity: {
-        recall_events: ((recallStats as unknown as Record<string, unknown>).summary as Record<string, unknown>)?.merged_count || 0,
-        recall_queries: ((recallStats as unknown as Record<string, unknown>).summary as Record<string, unknown>)?.query_count || 0,
-        write_events: ((writeStats as unknown as Record<string, unknown>).summary as Record<string, unknown>)?.total_events || 0,
+        recall_events: recallSummary?.merged_count || 0,
+        recall_queries: recallSummary?.query_count || 0,
+        reviewed_queries: recallReviewSummary?.reviewed_queries || 0,
+        write_events: writeSummary?.total_events || 0,
       },
       orphans: { count: orphanCount },
       agent: { tool_calls: agentResult.toolCalls.length, turns: agentResult.turns },
@@ -203,7 +241,26 @@ export async function runDream(): Promise<DreamResult> {
       `UPDATE dream_diary SET status = 'completed', completed_at = NOW(), duration_ms = $2,
        summary = $3::jsonb, narrative = $4, tool_calls = $5::jsonb, details = $6::jsonb
        WHERE id = $1`,
-      [diaryId, durationMs, JSON.stringify(summary), agentResult.narrative, JSON.stringify(agentResult.toolCalls), JSON.stringify({ index: indexResult, health, deadWrites, pathEffectiveness })],
+      [diaryId, durationMs, JSON.stringify(summary), agentResult.narrative, JSON.stringify(agentResult.toolCalls), JSON.stringify({
+        index: indexResult,
+        health,
+        deadWrites,
+        pathEffectiveness,
+        recallStats,
+        recallReview,
+        reviewed_queries: reviewedQueryItems.slice(0, 12),
+        writeStats,
+        maintenance: {
+          protected_blocks: protectedBlocks,
+          policy_blocks: policyBlocks,
+          policy_warnings: policyWarnings,
+          moved: Number(memoryChangeCounts.move || 0),
+        },
+        durable_extraction: {
+          created: durableCreates,
+          enriched: durableEnrichments,
+        },
+      })],
     );
     await appendDreamWorkflowEvent(diaryId, 'run_completed', {
       duration_ms: durationMs,

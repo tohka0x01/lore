@@ -525,24 +525,63 @@ describe('createNode', () => {
     ).rejects.toThrow('snake_case ASCII only');
   });
 
-  it('auto-generates slug from sibling count when no title provided', async () => {
+  it('writes normalized glossary keywords inside the create transaction', async () => {
     const client = makeMockClient([
-      { rows: [], rowCount: 0 },                      // BEGIN
-      { rows: [{ path: '5' }], rowCount: 1 },         // sibling paths query
-      { rows: [], rowCount: 0 },                      // INSERT nodes
-      { rows: [], rowCount: 0 },                      // INSERT memories
-      { rows: [{ id: 11 }], rowCount: 1 },            // INSERT edges
-      { rows: [], rowCount: 0 },                      // INSERT paths
-      { rows: [], rowCount: 0 },                      // COMMIT
+      { rows: [], rowCount: 0 },          // BEGIN
+      { rows: [], rowCount: 0 },          // INSERT nodes
+      { rows: [], rowCount: 0 },          // INSERT memories
+      { rows: [{ id: 1 }], rowCount: 1 }, // INSERT edges RETURNING id
+      { rows: [], rowCount: 0 },          // INSERT paths
+      { rows: [{ keyword: 'alpha' }], rowCount: 1 },
+      { rows: [{ keyword: 'beta' }], rowCount: 1 },
+      { rows: [], rowCount: 0 },          // COMMIT
     ]);
     mockGetPool.mockReturnValue(makePool(client) as any);
 
-    const result = await createNode({ domain: 'core', content: 'auto' });
-    // max sibling path segment is '5', so new slug should be '6'
-    expect(result.path).toBe('6');
+    await createNode({
+      domain: 'core',
+      title: 'glossary_node',
+      content: 'data',
+      glossary: [' alpha ', '', 'beta', 'alpha'],
+    });
+
+    const glossaryCalls = client.query.mock.calls.filter(
+      (c: unknown[]) => typeof c[0] === 'string' && (c[0] as string).includes('INSERT INTO glossary_keywords'),
+    );
+    expect(glossaryCalls).toHaveLength(2);
+    expect(glossaryCalls[0][1]).toEqual(['alpha', expect.any(String)]);
+    expect(glossaryCalls[1][1]).toEqual(['beta', expect.any(String)]);
+    expect(mockLogMemoryEvent.mock.calls[0][0]).toMatchObject({
+      after_snapshot: expect.objectContaining({ glossary_keywords: ['alpha', 'beta'] }),
+      details: expect.objectContaining({ glossary_added: ['alpha', 'beta'], glossary_skipped: [] }),
+    });
   });
 
-  it('rolls back on error and re-throws', async () => {
+  it('rolls back when glossary insertion fails', async () => {
+    const client = {
+      query: vi.fn()
+        .mockResolvedValueOnce({ rows: [], rowCount: 0 })
+        .mockResolvedValueOnce({ rows: [], rowCount: 0 })
+        .mockResolvedValueOnce({ rows: [], rowCount: 0 })
+        .mockResolvedValueOnce({ rows: [{ id: 1 }], rowCount: 1 })
+        .mockResolvedValueOnce({ rows: [], rowCount: 0 })
+        .mockRejectedValueOnce(new Error('glossary insert failed')),
+      release: vi.fn(),
+    };
+    mockGetPool.mockReturnValue(makePool(client) as any);
+
+    await expect(createNode({
+      domain: 'core',
+      title: 'glossary_node',
+      content: 'data',
+      glossary: ['alpha'],
+    })).rejects.toThrow('glossary insert failed');
+
+    expect(client.query).toHaveBeenCalledWith('ROLLBACK');
+    expect(client.release).toHaveBeenCalledOnce();
+  });
+
+  it('rolls back on create failure and re-throws', async () => {
     const client = {
       query: vi.fn()
         .mockResolvedValueOnce({ rows: [], rowCount: 0 }) // BEGIN
@@ -552,7 +591,6 @@ describe('createNode', () => {
     mockGetPool.mockReturnValue(makePool(client) as any);
 
     await expect(createNode({ domain: 'core', content: 'x' })).rejects.toThrow('DB error');
-    // ROLLBACK should have been called
     const rollbackCall = client.query.mock.calls.find(
       (c: unknown[]) => c[0] === 'ROLLBACK',
     );
@@ -770,9 +808,9 @@ describe('deleteNodeByPath', () => {
       { rows: [{ count: '0' }], rowCount: 1 },
       // deprecate memories for del-uuid
       { rows: [], rowCount: 1 },
-      // pathCount for child-uuid
-      { rows: [{ count: '0' }], rowCount: 1 },
-      // deprecate memories for child-uuid
+      // delete glossary rows for del-uuid
+      { rows: [], rowCount: 1 },
+      // delete glossary rows for child-uuid
       { rows: [], rowCount: 1 },
       { rows: [], rowCount: 0 },                         // COMMIT
     ]);
@@ -821,6 +859,7 @@ describe('deleteNodeByPath', () => {
       { rows: [{ count: '0' }], rowCount: 1 },
       { rows: [], rowCount: 1 },
       { rows: [{ count: '0' }], rowCount: 1 },
+      { rows: [], rowCount: 1 },
       { rows: [], rowCount: 1 },
       { rows: [], rowCount: 0 },
     ]);
@@ -880,16 +919,19 @@ describe('deleteNodeByPath', () => {
     expect(details.affected_paths).toContain('core://to/delete/child');
   });
 
-  it('issues DELETE on paths and edges for each affected edge', async () => {
+  it('removes glossary rows for every deleted node in the subtree', async () => {
     const client = makeDeleteClient();
     mockGetPool.mockReturnValue(makePool(client) as any);
 
     await deleteNodeByPath({ domain: 'core', path: 'to/delete' });
 
-    const deleteCalls = client.query.mock.calls.filter(
-      (c: unknown[]) => typeof c[0] === 'string' && (c[0] as string).includes('DELETE FROM paths'),
+    const glossaryDeletes = client.query.mock.calls.filter(
+      (c: unknown[]) => typeof c[0] === 'string' && (c[0] as string).includes('DELETE FROM glossary_keywords'),
     );
-    expect(deleteCalls.length).toBeGreaterThanOrEqual(1);
+    expect(glossaryDeletes).toEqual([
+      ['DELETE FROM glossary_keywords WHERE node_uuid = $1', ['del-uuid']],
+      ['DELETE FROM glossary_keywords WHERE node_uuid = $1', ['child-uuid']],
+    ]);
   });
 
   it('passes client_type through delete events', async () => {

@@ -23,6 +23,7 @@ import {
   type MoveMutationReceipt,
   type UpdateMutationReceipt,
 } from '../contracts';
+import { insertGlossaryKeywordsTx } from '../search/glossary';
 
 // ---------------------------------------------------------------------------
 // Internal types
@@ -77,6 +78,7 @@ export interface CreateNodeOptions {
   priority?: number;
   title?: string;
   disclosure?: string | null;
+  glossary?: string[];
 }
 
 export type CreateNodeResult = CreateMutationReceipt;
@@ -89,6 +91,7 @@ export async function createNode(
     priority = 0,
     title,
     disclosure = null,
+    glossary = [],
   }: CreateNodeOptions,
   eventContext: EventContext = {},
 ): Promise<CreateNodeResult> {
@@ -146,6 +149,8 @@ export async function createNode(
       [domain, path, edgeId],
     );
 
+    const glossaryResult = await insertGlossaryKeywordsTx(client, childUuid, glossary);
+
     await logMemoryEvent({
       client,
       event_type: 'create',
@@ -157,8 +162,18 @@ export async function createNode(
         eventContext,
       }),
       before_snapshot: null,
-      after_snapshot: { content, priority, disclosure },
-      details: { parent_path: parentPath, title: slug },
+      after_snapshot: {
+        content,
+        priority,
+        disclosure,
+        glossary_keywords: glossaryResult.added,
+      },
+      details: {
+        parent_path: parentPath,
+        title: slug,
+        glossary_added: glossaryResult.added,
+        glossary_skipped: glossaryResult.skipped,
+      },
     });
 
     await client.query('COMMIT');
@@ -349,16 +364,7 @@ export async function deleteNodeByPath(
     }
 
     for (const nodeUuid of affectedNodeUuids) {
-      const pathCount = await client.query(
-        `SELECT COUNT(*) AS count FROM paths p JOIN edges e ON p.edge_id = e.id WHERE e.child_uuid = $1`,
-        [nodeUuid],
-      );
-      if (Number((pathCount.rows[0] as { count: string } | undefined)?.count || 0) === 0) {
-        await client.query(
-          `UPDATE memories SET deprecated = TRUE, migrated_to = NULL WHERE node_uuid = $1 AND deprecated = FALSE`,
-          [nodeUuid],
-        );
-      }
+      await client.query(`DELETE FROM glossary_keywords WHERE node_uuid = $1`, [nodeUuid]);
     }
 
     await logMemoryEvent({

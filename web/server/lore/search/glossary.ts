@@ -1,6 +1,7 @@
 import { sql } from '../../db';
 import type { ClientType } from '../../auth';
 import { ROOT_NODE_UUID } from '../core/constants';
+import type { TransactionClient } from '../core/types';
 import { parseUri } from '../core/utils';
 import { scheduleGeneratedArtifactsRefresh as scheduleSharedGeneratedArtifactsRefresh } from '../core/generatedArtifacts';
 import { logMemoryEvent } from '../memory/writeEvents';
@@ -51,6 +52,38 @@ async function listPathsByNodeUuid(nodeUuid: string): Promise<PathRow[]> {
     [nodeUuid],
   );
   return result.rows as PathRow[];
+}
+
+export function normalizeGlossaryKeywords(values: unknown[], maxItems = 16): string[] {
+  const normalized: string[] = [];
+  const seen = new Set<string>();
+  for (const value of Array.isArray(values) ? values : []) {
+    const keyword = String(value || '').trim();
+    if (!keyword || seen.has(keyword)) continue;
+    seen.add(keyword);
+    normalized.push(keyword);
+    if (normalized.length >= maxItems) break;
+  }
+  return normalized;
+}
+
+export async function insertGlossaryKeywordsTx(
+  client: TransactionClient,
+  nodeUuid: string,
+  keywords: unknown[],
+): Promise<{ added: string[]; skipped: string[] }> {
+  const normalized = normalizeGlossaryKeywords(keywords, 64);
+  const added: string[] = [];
+  const skipped: string[] = [];
+  for (const keyword of normalized) {
+    const result = await client.query(
+      `INSERT INTO glossary_keywords (keyword, node_uuid, created_at) VALUES ($1, $2, NOW()) ON CONFLICT DO NOTHING RETURNING keyword`,
+      [keyword, nodeUuid],
+    );
+    if ((result.rowCount ?? 0) > 0) added.push(keyword);
+    else skipped.push(keyword);
+  }
+  return { added, skipped };
 }
 
 // ---------------------------------------------------------------------------
@@ -148,9 +181,7 @@ export async function manageTriggers(
   const removed: string[] = [];
   const skipped_remove: string[] = [];
 
-  for (const raw of add) {
-    const keyword = String(raw || '').trim();
-    if (!keyword) continue;
+  for (const keyword of normalizeGlossaryKeywords(add, 64)) {
     const before = await sql(`SELECT 1 FROM glossary_keywords WHERE keyword = $1 AND node_uuid = $2 LIMIT 1`, [keyword, nodeUuid]);
     if (before.rows[0]) {
       skipped_add.push(keyword);
@@ -166,9 +197,7 @@ export async function manageTriggers(
     }).catch((err) => console.error('[write_events] glossary_add log failed', err));
   }
 
-  for (const raw of remove) {
-    const keyword = String(raw || '').trim();
-    if (!keyword) continue;
+  for (const keyword of normalizeGlossaryKeywords(remove, 64)) {
     const result = await sql(`DELETE FROM glossary_keywords WHERE keyword = $1 AND node_uuid = $2`, [keyword, nodeUuid]);
     if ((result.rowCount ?? 0) > 0) {
       removed.push(keyword);

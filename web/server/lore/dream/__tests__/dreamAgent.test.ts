@@ -56,7 +56,7 @@ vi.mock('../../memory/session', () => ({
   markSessionRead: vi.fn(),
 }));
 vi.mock('node:fs', () => ({
-  readFileSync: vi.fn(() => '# MCP Guidance\nlore_get_node is useful'),
+  readFileSync: vi.fn(() => '# MCP Guidance\nlore_boot\nlore_guidance\nlore_get_node is useful'),
 }));
 
 vi.mock('../../llm/provider', () => ({
@@ -121,6 +121,7 @@ function makeHealthData(overrides: Partial<HealthData> = {}): HealthData {
     deadWrites: { dead_writes: [], total_dead_writes: 0 },
     pathEffectiveness: { recommendations: [], paths: [] },
     recallStats: { summary: {}, by_path: [], noisy_nodes: [], recent_queries: { items: [], total: 0, limit: 20, offset: 0, has_more: false } },
+    recallReview: { summary: {}, reviewed_queries: [], signal_coverage: {} },
     writeStats: { summary: {}, hot_nodes: [] },
     orphanCount: 0,
     ...overrides,
@@ -408,12 +409,12 @@ describe('executeDreamTool', () => {
     });
   });
 
-  it('dispatches create_node with parsed URI', async () => {
+  it('dispatches create_node with parsed URI and glossary', async () => {
     mockCreateNode.mockResolvedValue({ uuid: 'new1' } as any);
-    await executeDreamTool('create_node', { uri: 'core://parent/child', content: 'text', priority: 3 });
+    await executeDreamTool('create_node', { uri: 'core://parent/child', content: 'text', priority: 3, glossary: ['alpha', 'beta'] });
     expect(mockValidateCreatePolicy).toHaveBeenCalledWith({ priority: 3, disclosure: null });
     expect(mockCreateNode).toHaveBeenCalledWith(
-      expect.objectContaining({ domain: 'core', parentPath: 'parent', title: 'child', content: 'text', priority: 3 }),
+      expect.objectContaining({ domain: 'core', parentPath: 'parent', title: 'child', content: 'text', priority: 3, glossary: ['alpha', 'beta'] }),
       DREAM_EVENT_CONTEXT,
     );
   });
@@ -839,6 +840,16 @@ describe('processDreamToolCalls', () => {
   });
 });
 
+describe('loadGuidanceFile', () => {
+  it('loads guidance from the real lore guidance path and remaps tool names to English placeholders', () => {
+    const prompt = loadGuidanceFile();
+    expect(prompt).toContain('preloaded boot baseline');
+    expect(prompt).toContain('preloaded guidance');
+    expect(prompt).toContain('get_node');
+    expect(prompt).not.toContain('做梦时不需要');
+  });
+});
+
 // ---------------------------------------------------------------------------
 // buildDreamSystemPrompt
 // ---------------------------------------------------------------------------
@@ -846,16 +857,16 @@ describe('processDreamToolCalls', () => {
 describe('buildDreamSystemPrompt', () => {
   it('includes health report JSON', () => {
     const prompt = buildDreamSystemPrompt(makeHealthData());
-    expect(prompt).toContain('健康报告');
+    expect(prompt).toContain('Health report');
     expect(prompt).toContain('health_summary');
   });
 
-  it('includes read-before-write evidence rules for diagnosis tools', () => {
+  it('includes read-before-write evidence workflow and diagnosis tools', () => {
     const prompt = buildDreamSystemPrompt(makeHealthData());
-    expect(prompt).toContain('诊断工具箱');
+    expect(prompt).toContain('Build evidence before acting');
     expect(prompt).toContain('get_node_recall_detail');
     expect(prompt).toContain('inspect_neighbors');
-    expect(prompt).toContain('任何写操作前');
+    expect(prompt).toContain('Before any write, read the target node in full');
   });
 
   it('reads recent_queries from the paginated stats block', () => {
@@ -892,25 +903,55 @@ describe('buildDreamSystemPrompt', () => {
   it('includes recent diary section when provided', () => {
     const diaries = [{ started_at: '2024-01-01T00:00:00Z', status: 'completed', narrative: 'Test diary', tool_calls: [] }];
     const prompt = buildDreamSystemPrompt(makeHealthData(), diaries);
-    expect(prompt).toContain('最近日记');
+    expect(prompt).toContain('Recent diaries');
     expect(prompt).toContain('Test diary');
   });
 
-  it('omits diary entries section when no diaries', () => {
-    const prompt = buildDreamSystemPrompt(makeHealthData(), []);
-    // The rules text mentions "最近日记" in passing, but the actual diary entries section
-    // "最近日记（避免重复整理）" should not appear
-    expect(prompt).not.toContain('最近日记（避免重复整理）');
+  it('includes query-level recall review and missed recall mission', () => {
+    const prompt = buildDreamSystemPrompt(makeHealthData({
+      recallReview: {
+        summary: { reviewed_queries: 1, possible_missed_recalls: 2 },
+        reviewed_queries: [
+          {
+            query_text: 'why did boot not recall',
+            merged_count: 6,
+            shown_count: 1,
+            used_count: 0,
+            flags: ['zero_use', 'high_merge_low_use'],
+            missed_recall_signals: [{ type: 'never_retrieved', uri: 'core://soul' }],
+          },
+        ],
+      } as any,
+    }));
+    expect(prompt).toContain('Review today\'s recall evidence');
+    expect(prompt).toContain('Prefer durable extraction when it is real');
+    expect(prompt).toContain('Do only necessary maintenance');
+    expect(prompt).toContain('why did boot not recall');
+    expect(prompt).toContain('possible_missed_recalls');
+    expect(prompt).toContain('high_merge_low_use');
+    expect(prompt).not.toContain('不是为了机械清噪');
   });
 
-  it('mentions fixed boot protection in the system prompt', () => {
+  it('keeps the prompt in English while requiring a Chinese diary', () => {
     const prompt = buildDreamSystemPrompt(makeHealthData());
-    expect(prompt).toContain('固定启动基线');
-    expect(prompt).toContain('core://agent');
-    expect(prompt).toContain('不要 update / delete / move core://agent、core://soul、preferences://user');
-    expect(prompt).toContain('优先处理路径分配、父子位置、拆分或迁移判断');
-    expect(prompt).toContain('最终写给人看的日记尽量使用自然中文');
-    expect(prompt).toContain('不要夹杂 query、path、view、split、move、content 这类内部英文术语');
+    expect(prompt).toContain('Write the final diary in natural Chinese');
+    expect(prompt).toContain('Use exactly five sections with Chinese titles corresponding to');
+    expect(prompt).toContain('Judge everything against the fixed baseline');
+    expect(prompt).not.toContain('Dream 的宪法层');
+    expect(prompt).not.toContain('Lore guidance 与这三个固定节点一起构成 Dream 的 baseline calibration');
+  });
+
+  it('omits recent diary section when no diaries', () => {
+    const prompt = buildDreamSystemPrompt(makeHealthData(), []);
+    expect(prompt).not.toContain('## Recent diaries');
+  });
+
+  it('mentions fixed boot protection and ordered change priorities', () => {
+    const prompt = buildDreamSystemPrompt(makeHealthData());
+    expect(prompt).toContain('Do not update, delete, or move core://agent, core://soul, or preferences://user');
+    expect(prompt).toContain('Preferred change order');
+    expect(prompt).toContain('structure / node boundary');
+    expect(prompt).toContain('Read more nodes than you modify');
   });
 });
 

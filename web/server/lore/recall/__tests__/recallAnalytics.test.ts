@@ -9,6 +9,7 @@ import {
   mergeEventsByNode,
   reshapeEventsForDebugView,
   getRecallStats,
+  getDreamRecallReview,
 } from '../recallAnalytics';
 
 const mockSql = vi.mocked(sql);
@@ -266,6 +267,110 @@ describe('reshapeEventsForDebugView', () => {
     const result = reshapeEventsForDebugView(rows, merged);
     expect(result.items[0]).toHaveProperty('client_type', 'hermes');
     expect(result.exact_hits[0]).toHaveProperty('client_type', 'hermes');
+  });
+});
+
+describe('getDreamRecallReview', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mockSql.mockReset();
+  });
+
+  it('builds query-level missed recall review with session-read signals', async () => {
+    mockSql
+      .mockResolvedValueOnce(makeResult([
+        {
+          query_id: 'q1',
+          query_text: 'where is boot guidance',
+          session_id: 's1',
+          client_type: 'claudecode',
+          merged_count: '6',
+          shown_count: '1',
+          used_count: '0',
+          created_at: '2026-04-18T09:00:00Z',
+        },
+      ]))
+      .mockResolvedValueOnce(makeResult([
+        { query_id: 'q1', node_uri: 'core://shown', selected: true, used_in_answer: false },
+        { query_id: 'q1', node_uri: 'core://hidden', selected: false, used_in_answer: false },
+      ]))
+      .mockResolvedValueOnce(makeResult([
+        { uri: 'core://shown' },
+        { uri: 'core://manual_only' },
+      ]));
+
+    const review = await getDreamRecallReview({ days: 1, limit: 5 });
+
+    expect(review.window_days).toBe(1);
+    expect(review.signal_coverage.manual_read_after_weak_recall.status).toBe('session_scoped_proxy');
+    expect(review.summary).toEqual({
+      reviewed_queries: 1,
+      zero_use_queries: 1,
+      low_use_queries: 0,
+      high_merge_low_use_queries: 1,
+      unrecalled_session_reads: 1,
+      unshown_session_reads: 0,
+      possible_missed_recalls: 3,
+    });
+    expect(review.reviewed_queries[0]).toMatchObject({
+      query_id: 'q1',
+      query_text: 'where is boot guidance',
+      session_id: 's1',
+      merged_count: 6,
+      shown_count: 1,
+      used_count: 0,
+      flags: ['zero_use', 'high_merge_low_use'],
+      selected_uris: ['core://shown'],
+      used_uris: [],
+      unrecalled_session_reads: ['core://manual_only'],
+      unshown_session_reads: [],
+    });
+    expect(review.reviewed_queries[0].missed_recall_signals).toEqual([
+      expect.objectContaining({ type: 'zero_use' }),
+      expect.objectContaining({ type: 'high_merge_low_use' }),
+      expect.objectContaining({ type: 'never_retrieved', uri: 'core://manual_only' }),
+    ]);
+  });
+
+  it('flags retrieved-not-selected and manual-read-after-weak-recall proxy signals', async () => {
+    mockSql
+      .mockResolvedValueOnce(makeResult([
+        {
+          query_id: 'q2',
+          query_text: 'user preference',
+          session_id: 's2',
+          client_type: '',
+          merged_count: '4',
+          shown_count: '1',
+          used_count: '1',
+          created_at: '2026-04-18T10:00:00Z',
+        },
+      ]))
+      .mockResolvedValueOnce(makeResult([
+        { query_id: 'q2', node_uri: 'preferences://user', selected: true, used_in_answer: true },
+        { query_id: 'q2', node_uri: 'core://agent', selected: false, used_in_answer: false },
+      ]))
+      .mockResolvedValueOnce(makeResult([
+        { uri: 'core://agent' },
+      ]));
+
+    const review = await getDreamRecallReview({ days: 1, limit: 5 });
+
+    expect(review.summary).toEqual({
+      reviewed_queries: 1,
+      zero_use_queries: 0,
+      low_use_queries: 1,
+      high_merge_low_use_queries: 0,
+      unrecalled_session_reads: 0,
+      unshown_session_reads: 1,
+      possible_missed_recalls: 3,
+    });
+    expect(review.reviewed_queries[0].flags).toEqual(['low_use']);
+    expect(review.reviewed_queries[0].missed_recall_signals).toEqual([
+      expect.objectContaining({ type: 'low_use' }),
+      expect.objectContaining({ type: 'retrieved_not_selected', uri: 'core://agent' }),
+      expect.objectContaining({ type: 'manual_read_after_weak_recall_proxy' }),
+    ]);
   });
 });
 

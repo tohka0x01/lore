@@ -102,6 +102,7 @@ export async function dispatchDreamTool(
             priority: (args.priority as number) || 2,
             title,
             disclosure: (args.disclosure as string) || null,
+            glossary: Array.isArray(args.glossary) ? args.glossary as string[] : [],
           },
           eventContext,
         ),

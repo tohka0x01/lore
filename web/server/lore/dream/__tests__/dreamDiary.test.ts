@@ -15,7 +15,7 @@ vi.mock('../../recall/feedbackAnalytics', () => ({
   getDeadWrites: vi.fn(),
   getPathEffectiveness: vi.fn(),
 }));
-vi.mock('../../recall/recallAnalytics', () => ({ getRecallStats: vi.fn() }));
+vi.mock('../../recall/recallAnalytics', () => ({ getRecallStats: vi.fn(), getDreamRecallReview: vi.fn() }));
 vi.mock('../../memory/writeEvents', () => ({ getWriteEventStats: vi.fn() }));
 vi.mock('../../ops/maintenance', () => ({ listOrphans: vi.fn() }));
 vi.mock('../../memory/write', () => ({
@@ -306,6 +306,7 @@ describe('runDream', () => {
       .mockResolvedValueOnce(makeResult());
 
     const recallStats = { summary: { merged_count: 4, query_count: 2 } };
+    const recallReview = { summary: { reviewed_queries: 2, possible_missed_recalls: 3, zero_use_queries: 1, high_merge_low_use_queries: 1 }, reviewed_queries: [{ query_text: 'q1' }] };
     const writeStats = { summary: { total_events: 7 } };
     const feedbackAnalytics = await import('../../recall/feedbackAnalytics');
     const recallAnalytics = await import('../../recall/recallAnalytics');
@@ -317,6 +318,7 @@ describe('runDream', () => {
     vi.mocked(feedbackAnalytics.getDeadWrites).mockResolvedValue({ total_dead_writes: 0 } as any);
     vi.mocked(feedbackAnalytics.getPathEffectiveness).mockResolvedValue({ recommendations: [] } as any);
     vi.mocked(recallAnalytics.getRecallStats).mockResolvedValue(recallStats as any);
+    vi.mocked(recallAnalytics.getDreamRecallReview).mockResolvedValue(recallReview as any);
     vi.mocked(writeEvents.getWriteEventStats).mockResolvedValue(writeStats as any);
     vi.mocked(maintenance.listOrphans).mockResolvedValue([] as any);
 
@@ -335,11 +337,50 @@ describe('runDream', () => {
     const updateCall = mockSql.mock.calls.find((call) => String(call[0]).includes('UPDATE dream_diary SET status = \'completed\''));
     expect(updateCall).toBeTruthy();
     const summary = JSON.parse(String(updateCall?.[1]?.[2]));
-    expect(summary.structure).toEqual({
-      moved: 2,
-      protected_blocks: 1,
-      policy_blocks: 1,
-      policy_warnings: 1,
+    const details = JSON.parse(String(updateCall?.[1]?.[5]));
+    expect(summary).toEqual({
+      recall_review: {
+        reviewed_queries: 2,
+        zero_use_queries: 1,
+        high_merge_low_use_queries: 1,
+        possible_missed_recalls: 3,
+      },
+      durable_extraction: {
+        created: 0,
+        enriched: 0,
+      },
+      maintenance: {
+        events: 2,
+        dead_writes: 0,
+        path_recommendations: 0,
+      },
+      structure: {
+        moved: 2,
+        protected_blocks: 1,
+        policy_blocks: 1,
+        policy_warnings: 1,
+      },
+      activity: {
+        recall_events: 4,
+        recall_queries: 2,
+        reviewed_queries: 2,
+        write_events: 7,
+      },
+      orphans: { count: 0 },
+      agent: { tool_calls: 0, turns: 1 },
+      index: { source_count: 1, updated_count: 0, deleted_count: 0 },
+      health: {},
+    });
+    expect(details).toMatchObject({
+      recallReview,
+      reviewed_queries: [{ query_text: 'q1' }],
+      durable_extraction: { created: 0, enriched: 0 },
+      maintenance: {
+        protected_blocks: 1,
+        policy_blocks: 1,
+        policy_warnings: 1,
+        moved: 2,
+      },
     });
   });
 });
