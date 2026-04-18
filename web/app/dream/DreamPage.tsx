@@ -206,19 +206,21 @@ function SummaryBadges({ summary, t }: SummaryBadgesProps): React.JSX.Element | 
   if (!summary) return '—';
   const parts: string[] = [];
   const agent = summary.agent;
+  const recallReview = summary.recall_review;
+  const durableExtraction = summary.durable_extraction;
+  const structure = summary.structure;
+  const activity = summary.activity;
+
+  if (recallReview?.possible_missed_recalls) parts.push(`${t('Missed recalls')} ${recallReview.possible_missed_recalls}`);
+  if (durableExtraction?.created) parts.push(`${t('Created')} ${durableExtraction.created}`);
+  if (durableExtraction?.enriched) parts.push(`${t('Enriched')} ${durableExtraction.enriched}`);
+  if (structure?.moved) parts.push(`${t('Moved')} ${structure.moved}`);
+  if (structure?.protected_blocks) parts.push(`${t('Protected')} ${structure.protected_blocks}`);
+  if (structure?.policy_blocks) parts.push(`${t('Policy blocks')} ${structure.policy_blocks}`);
+  if (structure?.policy_warnings) parts.push(`${t('Policy warnings')} ${structure.policy_warnings}`);
+  if (activity?.reviewed_queries) parts.push(`${t('Reviewed queries')} ${activity.reviewed_queries}`);
+  if (activity?.write_events) parts.push(`${t('Write events')} ${activity.write_events}`);
   if (agent?.tool_calls != null) parts.push(`${agent.tool_calls} ${t('calls')}`);
-  if (summary.paths?.recommendations_count) parts.push(`${t('Path recs')} ${summary.paths.recommendations_count}`);
-  if (summary.structure?.moved) parts.push(`${t('Moved')} ${summary.structure.moved}`);
-  if (summary.structure?.protected_blocks) parts.push(`${t('Protected')} ${summary.structure.protected_blocks}`);
-  if (summary.structure?.policy_blocks) parts.push(`${t('Policy blocks')} ${summary.structure.policy_blocks}`);
-  if (summary.structure?.policy_warnings) parts.push(`${t('Policy warnings')} ${summary.structure.policy_warnings}`);
-  const h = summary.health;
-  if (h) {
-    const items: string[] = [];
-    if (h.healthy) items.push(`${t('healthy')} ${h.healthy}`);
-    if (h.dead) items.push(`${t('dead')} ${h.dead}`);
-    if (h.noisy) items.push(`${t('noisy')} ${h.noisy}`);
-    if (items.length) parts.push(items.join(' '));
-  }
+
   return <span className="block max-w-[13rem] ml-auto text-right text-xs text-txt-tertiary">{parts.join(' · ') || '—'}</span>;
 }

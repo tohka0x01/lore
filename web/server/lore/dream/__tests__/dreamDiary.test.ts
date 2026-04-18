@@ -10,14 +10,9 @@ vi.mock('../../config/settings', () => ({
   updateSettings: vi.fn(),
 }));
 vi.mock('../../recall/recall', () => ({ ensureRecallIndex: vi.fn() }));
-vi.mock('../../recall/feedbackAnalytics', () => ({
-  getMemoryHealthReport: vi.fn(),
-  getDeadWrites: vi.fn(),
-  getPathEffectiveness: vi.fn(),
-}));
 vi.mock('../../recall/recallAnalytics', () => ({ getRecallStats: vi.fn(), getDreamRecallReview: vi.fn() }));
 vi.mock('../../memory/writeEvents', () => ({ getWriteEventStats: vi.fn() }));
-vi.mock('../../ops/maintenance', () => ({ listOrphans: vi.fn() }));
+vi.mock('../../memory/boot', () => ({ bootView: vi.fn() }));
 vi.mock('../../memory/write', () => ({
   createNode: vi.fn(),
   updateNodeByPath: vi.fn(),
@@ -30,6 +25,7 @@ vi.mock('../../search/glossary', () => ({
 }));
 vi.mock('../dreamAgent', () => ({
   loadLlmConfig: vi.fn(),
+  loadGuidanceFile: vi.fn(() => '# guidance body'),
   runDreamAgentLoop: vi.fn(),
   parseUri: vi.fn((uri: string) => {
     const value = String(uri || '').trim();
@@ -49,6 +45,7 @@ vi.mock('../dreamWorkflow', () => ({
 
 import { sql } from '../../../db';
 import { getSettings, updateSettings } from '../../config/settings';
+import { bootView } from '../../memory/boot';
 import { deleteNodeByPath, updateNodeByPath, createNode, moveNode } from '../../memory/write';
 import { addGlossaryKeyword, removeGlossaryKeyword } from '../../search/glossary';
 import { listDreamWorkflowEvents } from '../dreamWorkflow';
@@ -65,6 +62,7 @@ import {
 const mockSql = vi.mocked(sql);
 const mockGetSettings = vi.mocked(getSettings);
 const mockUpdateSettings = vi.mocked(updateSettings);
+const mockBootView = vi.mocked(bootView);
 const mockDeleteNodeByPath = vi.mocked(deleteNodeByPath);
 const mockUpdateNodeByPath = vi.mocked(updateNodeByPath);
 const mockCreateNode = vi.mocked(createNode);
@@ -291,6 +289,26 @@ describe('runDream', () => {
       api_version: '',
     } as any);
     mockRunDreamAgentLoop.mockResolvedValue({ narrative: 'done', toolCalls: [], turns: 1 } as any);
+    mockBootView.mockResolvedValue({
+      core_memories: [
+        { uri: 'core://agent', content: 'agent boot', boot_role: 'agent', boot_role_label: 'workflow constraints', boot_purpose: 'Working rules' },
+        { uri: 'core://soul', content: 'soul boot', boot_role: 'soul', boot_role_label: 'style / persona / self-definition', boot_purpose: 'Persona baseline' },
+        { uri: 'preferences://user', content: 'user boot', boot_role: 'user', boot_role_label: 'stable user definition', boot_purpose: 'User context' },
+      ],
+      nodes: [
+        { uri: 'core://agent', role_label: 'workflow constraints', purpose: 'Working rules', state: 'initialized', content: 'agent boot' },
+        { uri: 'core://soul', role_label: 'style / persona / self-definition', purpose: 'Persona baseline', state: 'initialized', content: 'soul boot' },
+        { uri: 'preferences://user', role_label: 'stable user definition', purpose: 'User context', state: 'initialized', content: 'user boot' },
+      ],
+      recent_memories: [],
+      failed: [],
+      loaded: 3,
+      total: 3,
+      overall_state: 'complete',
+      remaining_count: 0,
+      draft_generation_available: true,
+      draft_generation_reason: null,
+    } as any);
     mockListDreamWorkflowEvents.mockResolvedValue([
       { id: 1, diary_id: 1, event_type: 'policy_validation_blocked', payload: {}, created_at: '2024-01-01T00:00:10Z' },
       { id: 2, diary_id: 1, event_type: 'policy_warning_emitted', payload: {}, created_at: '2024-01-01T00:00:11Z' },
@@ -298,37 +316,41 @@ describe('runDream', () => {
     ] as any);
   });
 
-  it('passes dream session context into the agent loop and summarizes policy governance events', async () => {
+  it('passes dream session context and compact initial context into the agent loop', async () => {
     mockSql
       .mockResolvedValueOnce(makeResult([{ id: 1 }]))
       .mockResolvedValueOnce(makeResult([{ started_at: '2024-01-01T00:00:00Z', status: 'completed', narrative: 'old', tool_calls: [] }]))
       .mockResolvedValueOnce(makeResult([{ event_type: 'move', total: 2 }]))
       .mockResolvedValueOnce(makeResult());
 
-    const recallStats = { summary: { merged_count: 4, query_count: 2 } };
+    const recallStats = { summary: { merged_count: 4, query_count: 2 }, recent_queries: { items: [{ query_id: 'q-1', query_text: 'q1', merged_count: 3, shown_count: 1, used_count: 0 }], total: 1, limit: 20, offset: 0, has_more: false } };
     const recallReview = { summary: { reviewed_queries: 2, possible_missed_recalls: 3, zero_use_queries: 1, high_merge_low_use_queries: 1 }, reviewed_queries: [{ query_text: 'q1' }] };
-    const writeStats = { summary: { total_events: 7 } };
-    const feedbackAnalytics = await import('../../recall/feedbackAnalytics');
+    const writeStats = { summary: { total_events: 7 }, hot_nodes: [{ node_uri: 'core://x', total: 2, creates: 1, updates: 1, deletes: 0 }], recent_events: [] };
     const recallAnalytics = await import('../../recall/recallAnalytics');
     const writeEvents = await import('../../memory/writeEvents');
     const recall = await import('../../recall/recall');
-    const maintenance = await import('../../ops/maintenance');
     vi.mocked(recall.ensureRecallIndex).mockResolvedValue({ source_count: 1, updated_count: 0, deleted_count: 0 } as any);
-    vi.mocked(feedbackAnalytics.getMemoryHealthReport).mockResolvedValue({ classification_summary: {} } as any);
-    vi.mocked(feedbackAnalytics.getDeadWrites).mockResolvedValue({ total_dead_writes: 0 } as any);
-    vi.mocked(feedbackAnalytics.getPathEffectiveness).mockResolvedValue({ recommendations: [] } as any);
     vi.mocked(recallAnalytics.getRecallStats).mockResolvedValue(recallStats as any);
     vi.mocked(recallAnalytics.getDreamRecallReview).mockResolvedValue(recallReview as any);
     vi.mocked(writeEvents.getWriteEventStats).mockResolvedValue(writeStats as any);
-    vi.mocked(maintenance.listOrphans).mockResolvedValue([] as any);
 
     const result = await runDream();
 
     expect(result.status).toBe('completed');
     expect(mockRunDreamAgentLoop).toHaveBeenCalledWith(
       expect.anything(),
-      expect.anything(),
-      expect.any(Array),
+      expect.objectContaining({
+        guidance: '# guidance body',
+        recallReview,
+        recallStats,
+        writeActivity: writeStats,
+        recentDiaries: expect.any(Array),
+        bootBaseline: [
+          expect.objectContaining({ uri: 'core://agent', content: 'agent boot' }),
+          expect.objectContaining({ uri: 'core://soul', content: 'soul boot' }),
+          expect.objectContaining({ uri: 'preferences://user', content: 'user boot' }),
+        ],
+      }),
       expect.objectContaining({
         eventContext: { source: 'dream:auto', session_id: 'dream:1' },
       }),
@@ -351,8 +373,6 @@ describe('runDream', () => {
       },
       maintenance: {
         events: 2,
-        dead_writes: 0,
-        path_recommendations: 0,
       },
       structure: {
         moved: 2,
@@ -366,12 +386,20 @@ describe('runDream', () => {
         reviewed_queries: 2,
         write_events: 7,
       },
-      orphans: { count: 0 },
       agent: { tool_calls: 0, turns: 1 },
       index: { source_count: 1, updated_count: 0, deleted_count: 0 },
-      health: {},
     });
+    expect(summary).not.toHaveProperty('health');
+    expect(summary).not.toHaveProperty('dead_writes');
+    expect(summary).not.toHaveProperty('paths');
+    expect(summary).not.toHaveProperty('orphans');
     expect(details).toMatchObject({
+      initial_context: {
+        guidance: '# guidance body',
+        recallReview,
+        recallStats,
+        writeActivity: writeStats,
+      },
       recallReview,
       reviewed_queries: [{ query_text: 'q1' }],
       durable_extraction: { created: 0, enriched: 0 },

@@ -12,7 +12,7 @@ const noFlashScript = `(function(){try{var t=localStorage.getItem('lore-theme');
 
 export default function RootLayout({ children }: { children: ReactNode }) {
   return (
-    <html lang="zh" suppressHydrationWarning>
+    <html lang="en" suppressHydrationWarning>
       <head>
         <script dangerouslySetInnerHTML={{ __html: noFlashScript }} />
         <link rel="preconnect" href="https://fonts.googleapis.com" />

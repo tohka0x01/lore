@@ -27,6 +27,6 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
       runtime: await getRecallRuntimeConfig(),
     });
   } catch (error) {
-    return NextResponse.json({ detail: (error as Error)?.message || 'Recall stats failed' }, { status: Number((error as { status?: number })?.status || 500) });
+    return NextResponse.json({ detail: (error as Error)?.message || 'Failed to load' }, { status: Number((error as { status?: number })?.status || 500) });
   }
 }

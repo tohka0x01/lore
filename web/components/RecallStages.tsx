@@ -52,6 +52,33 @@ function lexicalWeighted(row: RecallRow): number {
   return asNumber(row?.lexical_score, 0) * asNumber(row?.weight, 1);
 }
 
+function displayViewType(viewType: unknown, t: (key: string) => string): string {
+  const key = String(viewType ?? '').trim();
+  if (!key) return '—';
+  if (key === 'gist') return t('Gist');
+  if (key === 'question') return t('Question');
+  if (key === 'unknown') return t('Unknown view');
+  return key;
+}
+
+function displayLexicalSubtype(row: RecallRow, t: (key: string) => string): string {
+  if (row.fts_hit) return t('FTS');
+  if (row.text_hit) return t('Text');
+  if (row.uri_hit) return t('URI');
+  return t('Lex');
+}
+
+function displayRetrievalPath(path: unknown, t: (key: string) => string): string {
+  const key = String(path ?? '').trim();
+  if (!key) return '—';
+  if (key === 'exact') return t('Exact');
+  if (key === 'glossary_semantic') return t('Glossary');
+  if (key === 'dense') return t('Semantic');
+  if (key === 'lexical') return t('Lexical');
+  if (key === 'content') return t('Content');
+  return key;
+}
+
 interface TableColumn {
   key: string;
   label: ReactNode;
@@ -228,25 +255,25 @@ export default function RecallStages({
 
   const exactColumns = useMemo((): TableColumn[] => [
     { key: 'uri', label: t('Entry'), render: (v, row) => uriCell(v,
-      row.path_exact_hit ? '路径完全命中' : row.glossary_exact_hit ? '术语完全命中' : row.query_contains_glossary_hit ? 'query 包含术语' : row.glossary_text_hit ? '术语文本命中' : row.glossary_fts_hit ? '术语 FTS' : '精确') },
+      row.path_exact_hit ? t('Path exact match') : row.glossary_exact_hit ? t('Glossary exact match') : row.query_contains_glossary_hit ? t('Query contains glossary term') : row.glossary_text_hit ? t('Glossary text match') : row.glossary_fts_hit ? t('Glossary FTS match') : t('Exact')) },
     { key: 'exact_score', label: t('Raw'), render: (v) => <span className="font-mono tabular-nums text-txt-primary">{fmt(v, 3)}</span> },
     { key: 'cue_terms', label: t('Cues'), render: (_, row) => <CueList item={row as { cues?: unknown[]; cue_terms?: unknown[] }} /> },
   ], [t]);
 
   const glossarySemanticColumns = useMemo((): TableColumn[] => [
-    { key: 'uri', label: t('Entry'), render: (v, row) => uriCell(v, `keyword: ${row.keyword || '—'}`) },
+    { key: 'uri', label: t('Entry'), render: (v, row) => uriCell(v, `${t('Keyword')}: ${row.keyword || '—'}`) },
     { key: 'glossary_semantic_score', label: t('Score'), render: (v) => <span className="font-mono tabular-nums text-txt-primary">{fmt(v, 3)}</span> },
   ], [t]);
 
   const denseColumns = useMemo((): TableColumn[] => [
-    { key: 'uri', label: t('Entry'), render: (v, row) => uriCell(v, `${row.view_type} · ${row.llm_refined ? row.llm_model || 'LLM refined' : 'rule-based'}`) },
+    { key: 'uri', label: t('Entry'), render: (v, row) => uriCell(v, `${displayViewType(row.view_type, t)} · ${row.llm_refined ? row.llm_model || t('LLM refined') : t('Rule-based')}`) },
     { key: 'semantic_score', label: t('Raw'), render: (v) => <span className="font-mono tabular-nums text-txt-primary">{fmt(v, 3)}</span> },
     { key: 'weight', label: t('Weight'), render: (v) => <span className="font-mono tabular-nums text-txt-tertiary">{fmt(v, 2)}</span> },
     { key: 'weighted', label: t('Weighted'), render: (_, row) => <span className="font-mono tabular-nums text-sys-blue">{fmt(denseWeighted(row), 3)}</span> },
   ], [t]);
 
   const lexicalColumns = useMemo((): TableColumn[] => [
-    { key: 'uri', label: t('Entry'), render: (v, row) => uriCell(v, `${row.view_type} · ${row.fts_hit ? 'fts' : row.text_hit ? 'text' : row.uri_hit ? 'uri' : 'lex'}`) },
+    { key: 'uri', label: t('Entry'), render: (v, row) => uriCell(v, `${displayViewType(row.view_type, t)} · ${displayLexicalSubtype(row, t)}`) },
     { key: 'lexical_score', label: t('Raw'), render: (v) => <span className="font-mono tabular-nums text-txt-primary">{fmt(v, 3)}</span> },
     { key: 'weight', label: t('Weight'), render: (v) => <span className="font-mono tabular-nums text-txt-tertiary">{fmt(v, 2)}</span> },
     { key: 'weighted', label: t('Weighted'), render: (_, row) => <span className="font-mono tabular-nums text-sys-blue">{fmt(lexicalWeighted(row), 3)}</span> },
@@ -258,7 +285,7 @@ export default function RecallStages({
         <div className="min-w-0">
           <div className="font-mono text-[12px] text-txt-primary break-all">{String(v ?? '')}</div>
           <div className="mt-1 flex flex-wrap gap-1">
-            {safeArray<string>(row.matched_on).map((p) => <Badge key={`${String(v)}-${p}`}>{p}</Badge>)}
+            {safeArray<string>(row.matched_on).map((p) => <Badge key={`${String(v)}-${p}`}>{displayRetrievalPath(p, t)}</Badge>)}
           </div>
         </div>
       ) },
@@ -269,7 +296,7 @@ export default function RecallStages({
       columns.push({
         key: 'client_type',
         label: t('Source'),
-        render: (v) => <Badge tone={clientTypeTone(v)}>{clientTypeLabel(v)}</Badge>,
+        render: (v) => <Badge tone={clientTypeTone(v)}>{t(clientTypeLabel(v))}</Badge>,
       });
     }
 
@@ -286,7 +313,7 @@ export default function RecallStages({
       <div className="min-w-0">
         <div className="font-mono text-[12px] text-txt-primary break-all">{String(v ?? '')}</div>
         <div className="mt-1 flex flex-wrap gap-1">
-          {safeArray<string>(row.matched_on).map((p) => <Badge key={`${String(v)}-${p}`} tone="blue">{p}</Badge>)}
+          {safeArray<string>(row.matched_on).map((p) => <Badge key={`${String(v)}-${p}`} tone="blue">{displayRetrievalPath(p, t)}</Badge>)}
         </div>
       </div>
     ) },
@@ -305,10 +332,10 @@ export default function RecallStages({
               <div className="text-[11px] font-medium uppercase tracking-[0.06em] text-txt-tertiary mb-2">{t('Query text')}</div>
               <p className="text-[20px] font-semibold leading-snug text-txt-primary">{data?.query || '—'}</p>
               <div className="mt-4 flex flex-wrap gap-1.5">
-                {sessionId && <Badge tone="blue">Session · {sessionId}</Badge>}
-                {minDisplayScore != null && <Badge tone="orange">Threshold · {fmt(minDisplayScore, 2)}</Badge>}
-                {maxDisplayItems != null && <Badge tone="green">Max · {maxDisplayItems}</Badge>}
-                {readNodeDisplayMode && <Badge>Read · {readNodeDisplayMode}</Badge>}
+                {sessionId && <Badge tone="blue">{t('Session label')} · {sessionId}</Badge>}
+                {minDisplayScore != null && <Badge tone="orange">{t('Threshold label')} · {fmt(minDisplayScore, 2)}</Badge>}
+                {maxDisplayItems != null && <Badge tone="green">{t('Max label')} · {maxDisplayItems}</Badge>}
+                {readNodeDisplayMode && <Badge>{t('Read label')} · {t(String(readNodeDisplayMode))}</Badge>}
               </div>
             </div>
             <div className="grid gap-3 grid-cols-2 xl:grid-cols-4">
@@ -348,8 +375,8 @@ export default function RecallStages({
             <div className="flex flex-wrap items-center gap-3 text-[12.5px] text-txt-secondary">
               <span>{safeArray(data.dense_hits).length} {t('hits')}</span>
               {runtime && <span className="text-txt-tertiary">· {t('Weight')} {fmt(runtime?.normalized_linear?.w_dense, 2)}</span>}
-              {runtime && <span className="text-txt-tertiary">· gist {fmt(runtime?.memory_views?.weights?.gist, 2)}</span>}
-              {runtime && <span className="text-txt-tertiary">· question {fmt(runtime?.memory_views?.weights?.question, 2)}</span>}
+              {runtime && <span className="text-txt-tertiary">· {t('Gist')} {fmt(runtime?.memory_views?.weights?.gist, 2)}</span>}
+              {runtime && <span className="text-txt-tertiary">· {t('Question')} {fmt(runtime?.memory_views?.weights?.question, 2)}</span>}
             </div>
             <Table columns={denseColumns} rows={safeArray<RecallRow>(data.dense_hits)} empty={t('No semantic hits.')} />
           </div>
@@ -371,7 +398,7 @@ export default function RecallStages({
           <div className="space-y-3 animate-in">
             <div className="flex items-center gap-3 text-[12.5px] text-txt-secondary">
               <span>{mergedCandidates.length} {t('candidates')}</span>
-              {topMerged && <span className="text-txt-tertiary">· top {fmt(topMerged.score, 3)}</span>}
+              {topMerged && <span className="text-txt-tertiary">· {t('Top label')} {fmt(topMerged.score, 3)}</span>}
             </div>
             <Table
               columns={mergedColumns}
@@ -401,10 +428,10 @@ export default function RecallStages({
             <div className="flex flex-wrap items-center gap-3 text-[12.5px] text-txt-secondary">
               <span>{finalItems.length} {t('Shown')}</span>
               {minDisplayScore != null && <span className="text-txt-tertiary">· ≥ {fmt(minDisplayScore, 2)}</span>}
-              {topFinal && <span className="text-txt-tertiary">· top {fmt(topFinal.score, 3)}</span>}
+              {topFinal && <span className="text-txt-tertiary">· {t('Top label')} {fmt(topFinal.score, 3)}</span>}
               {suppression && (
                 <span className="ml-auto text-txt-tertiary">
-                  {t('Suppressed')} · boot {suppression.boot ?? 0} · read {suppression.read ?? 0} · score {suppression.score ?? 0}
+                  {t('Suppressed')} · {t('Suppressed by boot')} {suppression.boot ?? 0} · {t('Suppressed by read')} {suppression.read ?? 0} · {t('Suppressed by score')} {suppression.score ?? 0}
                 </span>
               )}
             </div>

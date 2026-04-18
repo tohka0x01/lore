@@ -1,11 +1,12 @@
 'use client';
 
-import React, { useState, useEffect, useRef, useMemo, MouseEvent as ReactMouseEvent } from 'react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { createPortal } from 'react-dom';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { X } from 'lucide-react';
 import clsx from 'clsx';
+import { useT } from '../../../lib/i18n';
 
 interface GlossaryNode {
   uri?: string;
@@ -35,6 +36,7 @@ interface GlossaryPopupProps {
 }
 
 const GlossaryPopup = ({ keyword, nodes, position, onClose, onNavigate }: GlossaryPopupProps): React.JSX.Element => {
+  const { t } = useT();
   const popupRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -57,7 +59,7 @@ const GlossaryPopup = ({ keyword, nodes, position, onClose, onNavigate }: Glossa
       }}
     >
       <div className="flex flex-shrink-0 items-center gap-2 border-b border-separator-thin px-4 py-3">
-        <span className="text-[11px] font-medium uppercase tracking-[0.06em] text-txt-tertiary">Entry</span>
+        <span className="text-[11px] font-medium uppercase tracking-[0.06em] text-txt-tertiary">{t('Entry')}</span>
         <span className="text-[14px] font-semibold text-sys-yellow truncate">{keyword}</span>
         <button onClick={onClose} className="press ml-auto text-txt-tertiary hover:text-txt-primary">
           <X size={14} />
@@ -88,7 +90,7 @@ const GlossaryPopup = ({ keyword, nodes, position, onClose, onNavigate }: Glossa
                   {node.uri}
                 </code>
                 {isUnlinked && (
-                  <span className="rounded-md bg-sys-red/15 px-1.5 py-0.5 text-[9px] font-medium text-sys-red">orphan</span>
+                  <span className="rounded-md bg-sys-red/15 px-1.5 py-0.5 text-[9px] font-medium text-sys-red">{t('Orphaned')}</span>
                 )}
               </div>
               {node.content_snippet && (

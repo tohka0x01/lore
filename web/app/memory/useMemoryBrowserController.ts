@@ -235,7 +235,7 @@ export function useMemoryBrowserController({ confirmDialog, t, toast }: UseMemor
       setEditing(false);
     } catch (err) {
       const axiosErr = err as AxiosError;
-      toast(`Save failed: ${axiosErr.message}`);
+      toast(`${t('Save failed')}: ${axiosErr.message}`);
     } finally {
       setSaving(false);
     }
@@ -256,7 +256,7 @@ export function useMemoryBrowserController({ confirmDialog, t, toast }: UseMemor
       navigateTo(parentPath, currentRouteRef.current.domain);
     } catch (err) {
       const axiosErr = err as AxiosError<{ detail?: string }>;
-      toast(axiosErr.response?.data?.detail || axiosErr.message || 'Delete failed');
+      toast(axiosErr.response?.data?.detail || axiosErr.message || t('Delete failed'));
     }
   }, [confirmDialog, navigateTo, t, toast]);
 
@@ -267,7 +267,7 @@ export function useMemoryBrowserController({ confirmDialog, t, toast }: UseMemor
       await refreshData();
     } catch (err) {
       const axiosErr = err as AxiosError<{ detail?: string }>;
-      toast(axiosErr.response?.data?.detail || axiosErr.message || 'Rebuild failed');
+      toast(axiosErr.response?.data?.detail || axiosErr.message || t('Rebuild failed'));
     } finally {
       setRebuildingViews(false);
     }

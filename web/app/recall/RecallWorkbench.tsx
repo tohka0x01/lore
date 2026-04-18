@@ -44,15 +44,15 @@ interface StrategyOption {
 }
 
 const STRATEGY_OPTIONS: StrategyOption[] = [
-  { value: '', label: '默认（跟随 /settings）' },
-  { value: 'raw_plus_lex_damp', label: 'raw_plus_lex_damp — 原始分+lex长压 · 推荐 · 抗长query' },
-  { value: 'raw_score', label: 'raw_score — 原始分相加 · 最诚实 · 质量=分数' },
-  { value: 'normalized_linear', label: 'normalized_linear — 排名归一化 · 旧默认 · 长query虚高' },
-  { value: 'weighted_rrf', label: 'weighted_rrf — 加权rank融合 · 用路径权重 · 0-0.3分' },
-  { value: 'rrf', label: 'rrf — rank融合 · 0-0.2分 · 只看排名' },
-  { value: 'max_signal', label: 'max_signal — 取最强信号 · 多路径加分 · 宽容' },
-  { value: 'cascade', label: 'cascade — 信号分级 · exact>gs>dense · 可超1.0' },
-  { value: 'dense_floor', label: 'dense_floor — 语义阈值 · 余弦低砍掉 · 激进' },
+  { value: '', label: 'Default (follow /settings)' },
+  { value: 'raw_plus_lex_damp', label: 'raw_plus_lex_damp — raw score + lex damping · recommended · long-query safe' },
+  { value: 'raw_score', label: 'raw_score — raw score sum · most faithful · quality=score' },
+  { value: 'normalized_linear', label: 'normalized_linear — normalized ranks · old default · long-query inflation' },
+  { value: 'weighted_rrf', label: 'weighted_rrf — weighted rank fusion · uses path weights · 0-0.3 score' },
+  { value: 'rrf', label: 'rrf — rank fusion · 0-0.2 score · ranking only' },
+  { value: 'max_signal', label: 'max_signal — strongest signal wins · multi-path boost · tolerant' },
+  { value: 'cascade', label: 'cascade — signal tiers · exact>gs>dense · can exceed 1.0' },
+  { value: 'dense_floor', label: 'dense_floor — semantic threshold · low cosine gets cut · aggressive' },
 ];
 
 export default function RecallWorkbench(): React.JSX.Element {
@@ -131,7 +131,7 @@ export default function RecallWorkbench(): React.JSX.Element {
       setDebugData(data);
     } catch (error) {
       const axiosErr = error as AxiosError<{ detail?: string }>;
-      setDebugError(axiosErr.response?.data?.detail || axiosErr.message || 'Debug request failed');
+      setDebugError(axiosErr.response?.data?.detail || axiosErr.message || t('Debug request failed'));
     } finally {
       setDebugLoading(false);
     }
@@ -219,7 +219,7 @@ export default function RecallWorkbench(): React.JSX.Element {
                   <span className="block mb-1 text-[11px] font-medium text-txt-tertiary">{t('Scoring strategy')}</span>
                   <select value={debugForm.strategy} onChange={(e: ChangeEvent<HTMLSelectElement>) => patchForm({ strategy: e.target.value })} className={inputClass + ' cursor-pointer'}>
                     {STRATEGY_OPTIONS.map((opt) => (
-                      <option key={opt.value} value={opt.value}>{opt.label}</option>
+                      <option key={opt.value} value={opt.value}>{t(opt.label)}</option>
                     ))}
                   </select>
                 </label>
@@ -245,8 +245,8 @@ export default function RecallWorkbench(): React.JSX.Element {
                   <label className="block">
                     <span className="block mb-1 text-[11px] font-medium text-txt-tertiary">{t('Read mode')}</span>
                     <select value={debugForm.readNodeDisplayMode} onChange={(e: ChangeEvent<HTMLSelectElement>) => patchForm({ readNodeDisplayMode: e.target.value })} className={inputClass + ' cursor-pointer'}>
-                      <option value="soft">soft</option>
-                      <option value="hard">hard</option>
+                      <option value="soft">{t('soft')}</option>
+                      <option value="hard">{t('hard')}</option>
                     </select>
                   </label>
                 </div>

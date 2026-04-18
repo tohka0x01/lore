@@ -46,21 +46,28 @@ interface ChatMessage extends ProviderMessage {}
 
 interface ToolDefinition extends ProviderToolDefinition {}
 
-export interface HealthData {
-  health: Record<string, unknown>;
-  deadWrites: Record<string, unknown>;
-  pathEffectiveness: Record<string, unknown>;
-  recallStats: Record<string, unknown>;
-  recallReview: Record<string, unknown>;
-  writeStats: Record<string, unknown>;
-  orphanCount: number;
+export interface DreamBootBaselineEntry {
+  uri: string;
+  role_label: string;
+  purpose: string;
+  state: 'missing' | 'empty' | 'initialized';
+  content: string;
 }
 
-interface RecentDiary {
+export interface RecentDiary {
   started_at: string | null;
   status: string;
   narrative: string | null;
   tool_calls: Array<{ tool: string; args: Record<string, unknown> }>;
+}
+
+export interface DreamInitialContext {
+  bootBaseline: DreamBootBaselineEntry[];
+  guidance: string;
+  recallReview: Record<string, unknown>;
+  recallStats: Record<string, unknown>;
+  writeActivity: Record<string, unknown>;
+  recentDiaries: RecentDiary[];
 }
 
 // ---------------------------------------------------------------------------
@@ -167,61 +174,104 @@ export function loadGuidanceFile(): string {
   }
 }
 
-export function buildDreamSystemPrompt(healthData: HealthData, recentDiaries: RecentDiary[] = []): string {
-  const guidanceAvailable = Boolean(loadGuidanceFile());
+function buildRecentQueries(recallStats: Record<string, unknown>): Array<Record<string, unknown>> {
+  const recentQueryItems = (recallStats as any)?.recent_queries?.items;
+  if (!Array.isArray(recentQueryItems)) return [];
+  return recentQueryItems.map((item: Record<string, unknown>) => ({
+    query_id: item.query_id,
+    query_text: item.query_text,
+    merged: Number(item.merged_count ?? item.merged ?? 0),
+    shown: Number(item.shown_count ?? item.shown ?? 0),
+    used: Number(item.used_count ?? item.used ?? 0),
+    client_type: item.client_type ?? null,
+    created_at: item.created_at ?? null,
+  }));
+}
 
-  const recentQueries = Array.isArray((healthData.recallStats as any)?.recent_queries?.items)
-    ? (healthData.recallStats as any).recent_queries.items.map((item: Record<string, unknown>) => ({
-        query_text: item.query_text,
-        merged: Number(item.merged_count ?? item.merged ?? 0),
-        shown: Number(item.shown_count ?? item.shown ?? 0),
-        used: Number(item.used_count ?? item.used ?? 0),
+function buildReviewedQueries(recallReview: Record<string, unknown>): Array<Record<string, unknown>> {
+  const reviewItems = (recallReview as any)?.reviewed_queries;
+  if (!Array.isArray(reviewItems)) return [];
+  return reviewItems.map((item: Record<string, unknown>) => ({
+    query_id: item.query_id,
+    query_text: item.query_text,
+    merged: Number(item.merged_count ?? 0),
+    shown: Number(item.shown_count ?? 0),
+    used: Number(item.used_count ?? 0),
+    flags: Array.isArray(item.flags) ? item.flags : [],
+    selected_uris: Array.isArray(item.selected_uris) ? item.selected_uris : [],
+    used_uris: Array.isArray(item.used_uris) ? item.used_uris : [],
+    unrecalled_session_reads: Array.isArray(item.unrecalled_session_reads) ? item.unrecalled_session_reads : [],
+    unshown_session_reads: Array.isArray(item.unshown_session_reads) ? item.unshown_session_reads : [],
+    missed_recall_signals: Array.isArray(item.missed_recall_signals) ? item.missed_recall_signals : [],
+  }));
+}
+
+function buildWriteDigest(writeActivity: Record<string, unknown>): Record<string, unknown> {
+  const summary = (writeActivity.summary as Record<string, unknown>) || {};
+  const hotNodes = Array.isArray(writeActivity.hot_nodes)
+    ? writeActivity.hot_nodes.map((item: Record<string, unknown>) => ({
+        node_uri: item.node_uri,
+        total: Number(item.total ?? 0),
+        creates: Number(item.creates ?? 0),
+        updates: Number(item.updates ?? 0),
+        deletes: Number(item.deletes ?? 0),
+        last_event_at: item.last_event_at ?? null,
       }))
     : [];
-
-  const reviewedQueries = Array.isArray((healthData.recallReview as any)?.reviewed_queries)
-    ? (healthData.recallReview as any).reviewed_queries.map((item: Record<string, unknown>) => ({
-        query_text: item.query_text,
-        merged: Number(item.merged_count ?? 0),
-        shown: Number(item.shown_count ?? 0),
-        used: Number(item.used_count ?? 0),
-        flags: Array.isArray(item.flags) ? item.flags : [],
-        missed_recall_signals: Array.isArray(item.missed_recall_signals) ? item.missed_recall_signals : [],
+  const recentEvents = Array.isArray(writeActivity.recent_events)
+    ? writeActivity.recent_events.map((item: Record<string, unknown>) => ({
+        event_type: item.event_type,
+        node_uri: item.node_uri,
+        source: item.source,
+        created_at: item.created_at ?? null,
       }))
     : [];
+  return {
+    summary,
+    hot_nodes: hotNodes,
+    recent_events: recentEvents,
+  };
+}
 
-  const baselineLine = guidanceAvailable
-    ? 'Judge everything against the fixed baseline: core://agent, core://soul, preferences://user, and guidance.'
-    : 'Judge everything against the fixed baseline: core://agent, core://soul, and preferences://user.';
+export function buildDreamSystemPrompt(initialContext: DreamInitialContext): string {
+  const guidanceAvailable = Boolean(initialContext.guidance.trim());
+  const recentQueries = buildRecentQueries(initialContext.recallStats);
+  const reviewedQueries = buildReviewedQueries(initialContext.recallReview);
+
+  const bootContextLine = guidanceAvailable
+    ? 'Read the guidance first and apply it to every write decision and to the final diary. Use core://agent, core://soul, and preferences://user as always-available key memories throughout the review.'
+    : 'Use core://agent, core://soul, and preferences://user as always-available key memories throughout the review.';
 
   const rules = `You are running a daily dream review.
 
-Your priorities for today, in order:
-1. Identify the strongest missed recall candidates
-2. Extract or strengthen durable memory
-3. Do only necessary maintenance
+Your job today:
+1. Inspect today's real recall traffic and identify the strongest missed recall candidates
+2. Strengthen durable memory when today's evidence justifies it
+3. Make the smallest useful changes that improve recall or capture durable memory
+4. Record the work in natural Chinese using guidance-level evidence and reasoning
 
-${baselineLine}
+${bootContextLine}
+Use these three boot nodes as fixed reference memories while you judge recall problems, choose write scope, and explain decisions in the diary:
+- core://agent — workflow constraints
+- core://soul — style / persona / self-definition
+- preferences://user — stable user definition / durable user context
 
 ## Workflow
 
 ### 1. Review today's recall evidence
-Start with recall_review, then use recall_stats for supporting context.
-
-Focus first on the most suspicious items in reviewed_queries.
-Pay special attention to these signals:
+Start with reviewed_queries. These are the primary evidence for today's review.
+Use recent_queries and write_activity only to choose where to investigate next.
+Focus on the most suspicious reviewed queries first, especially ones showing:
 - zero_use
 - high_merge_low_use
 - retrieved_not_selected
 - never_retrieved
 - manual_read_after_weak_recall_proxy
 
-Answer this first:
-Which queries from today most likely failed to recall something that should have been recalled?
+For each top candidate, state what was likely missing and why that matters.
 
-### 2. Build evidence before acting
-For each suspicious query, gather evidence first, then decide whether to act.
-
+### 2. Investigate each candidate just enough
+Gather only the evidence needed to explain the candidate and support a decision.
 Prefer these tools:
 - get_query_recall_detail
 - get_node_recall_detail
@@ -231,10 +281,10 @@ Prefer these tools:
 - get_path_effectiveness_detail
 - get_node_write_history
 
-First decide whether each candidate is:
+For each candidate, decide whether it is:
 - a recall path / ranking problem
 - a memory node problem
-- a durable extraction opportunity
+- a durable extraction opportunity from today's queries
 - not actionable
 
 Then classify every candidate into exactly one outcome:
@@ -243,48 +293,47 @@ Then classify every candidate into exactly one outcome:
 - maintenance
 - no action
 
-Do not modify anything when evidence is weak.
+Act only when the evidence is strong enough to justify the classification.
 
-### 3. Handle missed recall first
-Treat something as a main problem only when the evidence supports a real missed recall.
-Noisy recall is not a problem by itself.
-Only act on noise when it directly causes missed recall or blocks durable extraction.
+### 3. Resolve the highest-value missed recalls
+Handle the strongest missed recall candidates first.
+Use the boot memories and the guidance body to judge whether the right improvement is about structure, boundary, disclosure, priority, content, or no write at all.
+Treat noisy recall as a clue only when it supports a concrete missed-recall diagnosis.
+When maintenance helps, do the maintenance that directly supports this diagnosis or fix.
 
-### 4. Prefer durable extraction when it is real
-Prefer create_node or update_node when one of these is true:
-- the same conclusion appears repeatedly across multiple queries
-- the conclusion is clearly reusable across sessions
-- the conclusion fills an important gap not covered by the fixed baseline
-- a user preference, stable fact, or collaboration rule has become durable enough to store
+### 4. Extract durable memory from today's real usage
+Start durable extraction from:
+- today's recall query texts
+- today's suspicious reviewed queries
+- nodes implicated by those queries
+- today's queried nodes
+- today's newly written or repeatedly touched nodes
 
-Do not create durable memory just to produce output.
+Use search, list_domains, get_node, inspect_neighbors, and get_node_write_history to locate the right target and gather the context required by guidance.
+Let guidance determine whether the right result is a new node, an update to an existing node, a structure-first change, or a deferral.
+Make scope, boundary, disclosure, priority, structure, and diary-treatment decisions at guidance quality rather than as a quick create-versus-merge shortcut.
+Stay local to today's evidence instead of roaming across the whole graph.
 
-### 5. Make the smallest useful change
+### 5. Make the smallest useful write
 Before any write, read the target node in full.
 
-Preferred change order:
+Prefer this improvement order:
 1. structure / node boundary
 2. disclosure / glossary
 3. priority
 4. content
 
-Every write must have a clear reason:
-- it reduces missed recall
-- or it captures durable memory
-- or it supports necessary maintenance
+Each write should do one of three things:
+- reduce a missed recall
+- capture durable memory
+- support necessary, evidence-backed maintenance
 
-### 6. Execution constraints
-- Do not update, delete, or move core://agent, core://soul, or preferences://user
-- Do not move other nodes onto those paths
-- Do not change anything without sufficient evidence
-- Do not do cleanup just to make the graph look tidy
-- Do not lower priority only because something is frequently recalled but unused
-- Prefer structure and boundary fixes before content edits
-- Read more nodes than you modify
+Read more nodes than you modify.
+Keep core://agent, core://soul, and preferences://user intact and use them as fixed key memories, not routine write targets or move destinations.
 
-### 7. Write the diary
+### 6. Write the diary
 Write the final diary in natural Chinese.
-
+Follow guidance for diary structure, evidence standard, and how to justify actions and deferrals.
 Use exactly five sections with Chinese titles corresponding to:
 1. reviewed recall requests
 2. likely missed recalls and evidence
@@ -292,44 +341,55 @@ Use exactly five sections with Chinese titles corresponding to:
 4. maintenance-only changes
 5. deferred issues and why
 
-Requirements:
-- Every change must map back to the evidence gathered earlier
-- If no credible missed recall was found, explicitly say so in Chinese
-- If no credible durable extraction opportunity was found, explicitly say so in Chinese
-- Do not force changes just to appear productive`;
+Within those sections, explain:
+- which recall requests you reviewed
+- which missed recalls look credible and why
+- what durable memory you created or strengthened
+- what maintenance you performed and why it helped
+- what you deferred and why
 
-  const recentDiariesSection = recentDiaries.length
-    ? `\n\n## Recent diaries\n${JSON.stringify(recentDiaries, null, 2)}`
-    : '';
+If no credible missed recall was found, say so clearly in Chinese.
+If no credible durable extraction opportunity was found, say so clearly in Chinese.`;
 
-  return `${rules}\n\n## Health report\n${JSON.stringify({
-    health_summary: healthData.health,
-    dead_writes: healthData.deadWrites,
-    path_effectiveness: healthData.pathEffectiveness,
-    recall_stats: {
-      ...(healthData.recallStats || {}),
-      recent_queries: recentQueries,
-    },
+  return `${rules}
+
+## Key boot memories
+${JSON.stringify(initialContext.bootBaseline, null, 2)}
+
+## Guidance
+${initialContext.guidance || '(guidance unavailable)'}
+
+## Today's working context
+${JSON.stringify({
     recall_review: {
-      ...(healthData.recallReview || {}),
+      ...initialContext.recallReview,
       reviewed_queries: reviewedQueries,
     },
-    write_stats: healthData.writeStats,
-    orphan_count: healthData.orphanCount,
-  }, null, 2)}${recentDiariesSection}`;
+    recall_stats: {
+      summary: (initialContext.recallStats.summary as Record<string, unknown>) || {},
+      recent_queries: recentQueries,
+    },
+    write_activity: buildWriteDigest(initialContext.writeActivity),
+    recent_diaries: initialContext.recentDiaries,
+  }, null, 2)}`;
 }
 
 export async function runDreamAgentLoop(
   config: LlmConfig,
-  healthData: HealthData,
-  recentDiaries: RecentDiary[] = [],
+  initialContext: DreamInitialContext,
   options: DreamAgentRunOptions = {},
 ): Promise<DreamAgentResult> {
   const onEvent = options.onEvent;
   const eventContext = buildDreamEventContext(options.eventContext);
-  const systemPrompt = buildDreamSystemPrompt(healthData, recentDiaries);
+  const systemPrompt = buildDreamSystemPrompt(initialContext);
   const tools = buildDreamTools();
-  const messages: ChatMessage[] = [{ role: 'system', content: systemPrompt }];
+  const messages: ChatMessage[] = [
+    { role: 'system', content: systemPrompt },
+    {
+      role: 'user',
+      content: 'Begin the dream review. Inspect today\'s recall evidence first, gather evidence before acting, and only then decide whether any durable extraction or maintenance is justified.',
+    },
+  ];
   const toolCalls: ToolCallLogEntry[] = [];
 
   for (let turn = 0; turn < 12; turn += 1) {

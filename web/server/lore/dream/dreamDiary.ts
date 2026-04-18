@@ -2,18 +2,18 @@ import { sql } from '../../db';
 import { clampLimit } from '../core/utils';
 import { getSettings as getSettingsBatch, updateSettings } from '../config/settings';
 import { ensureRecallIndex } from '../recall/recall';
-import { getMemoryHealthReport, getDeadWrites, getPathEffectiveness } from '../recall/feedbackAnalytics';
 import { getRecallStats, getDreamRecallReview } from '../recall/recallAnalytics';
 import { getWriteEventStats } from '../memory/writeEvents';
-import { listOrphans } from '../ops/maintenance';
+import { bootView } from '../memory/boot';
 import { createNode, updateNodeByPath, deleteNodeByPath, moveNode } from '../memory/write';
 import { addGlossaryKeyword, removeGlossaryKeyword } from '../search/glossary';
 import {
   loadLlmConfig,
+  loadGuidanceFile,
   runDreamAgentLoop,
   parseUri,
   DREAM_EVENT_CONTEXT,
-  type HealthData,
+  type DreamInitialContext,
   type ToolCallLogEntry,
 } from './dreamAgent';
 import { appendDreamWorkflowEvent, listDreamWorkflowEvents, type DreamWorkflowEvent } from './dreamWorkflow';
@@ -94,39 +94,25 @@ export async function runDream(): Promise<DreamResult> {
     // Step 2: Data collection
     console.log('[dream] step 2: data collection');
     await appendDreamWorkflowEvent(diaryId, 'phase_started', { phase: 'data_collection', label: 'Data collection' });
-    const [health, deadWrites, pathEffectiveness, recallStats, recallReview, writeStats] = await Promise.all([
-      getMemoryHealthReport({ days: 7, limit: 50 }),
-      getDeadWrites({ days: 30, limit: 50 }),
-      getPathEffectiveness({ days: 7 }),
+    const [boot, recallStats, recallReview, writeStats] = await Promise.all([
+      bootView(),
       getRecallStats({ days: 1, limit: 20 }),
       getDreamRecallReview({ days: 1, limit: 12 }),
       getWriteEventStats({ days: 1, limit: 20 }),
     ]);
     const recallReviewRecord = recallReview as unknown as Record<string, unknown>;
     const recallReviewSummaryRecord = (recallReviewRecord.summary as Record<string, unknown>) || {};
-    let orphanCount = 0;
-    try { orphanCount = (await listOrphans()).length; } catch {}
     await appendDreamWorkflowEvent(diaryId, 'phase_completed', {
       phase: 'data_collection',
       label: 'Data collection',
       summary: {
-        orphan_count: orphanCount,
+        boot_loaded: (boot.core_memories || []).length,
         recall_queries: ((recallStats as Record<string, unknown>).summary as Record<string, unknown>)?.query_count || 0,
         reviewed_queries: recallReviewSummaryRecord.reviewed_queries || 0,
         possible_missed_recalls: recallReviewSummaryRecord.possible_missed_recalls || 0,
         write_events: ((writeStats as unknown as Record<string, unknown>).summary as Record<string, unknown>)?.total_events || 0,
       },
     });
-
-    const healthData: HealthData = {
-      health: health as unknown as Record<string, unknown>,
-      deadWrites: deadWrites as unknown as Record<string, unknown>,
-      pathEffectiveness: pathEffectiveness as unknown as Record<string, unknown>,
-      recallStats: recallStats as unknown as Record<string, unknown>,
-      recallReview: recallReview as unknown as Record<string, unknown>,
-      writeStats: writeStats as unknown as Record<string, unknown>,
-      orphanCount,
-    };
 
     // Fetch recent diaries so the agent knows what was already done
     const recentDiariesResult = await sql(
@@ -142,6 +128,21 @@ export async function runDream(): Promise<DreamResult> {
       tool_calls: ((r.tool_calls as Array<{ tool: string; args: Record<string, unknown> }>) || []).slice(0, 20),
     }));
 
+    const initialContext: DreamInitialContext = {
+      bootBaseline: (boot.nodes || []).map((node) => ({
+        uri: node.uri,
+        role_label: node.role_label,
+        purpose: node.purpose,
+        state: node.state,
+        content: node.content || '',
+      })),
+      guidance: loadGuidanceFile(),
+      recallReview: recallReview as unknown as Record<string, unknown>,
+      recallStats: recallStats as unknown as Record<string, unknown>,
+      writeActivity: writeStats as unknown as Record<string, unknown>,
+      recentDiaries,
+    };
+
     // Step 3: LLM agent loop
     console.log('[dream] step 3: agent loop');
     await appendDreamWorkflowEvent(diaryId, 'phase_started', { phase: 'agent_loop', label: 'Agent loop' });
@@ -152,7 +153,7 @@ export async function runDream(): Promise<DreamResult> {
       turns: 0,
     };
     if (llmConfig) {
-      agentResult = await runDreamAgentLoop(llmConfig, healthData, recentDiaries, {
+      agentResult = await runDreamAgentLoop(llmConfig, initialContext, {
         onEvent: async (eventType, payload) => {
           await appendDreamWorkflowEvent(diaryId, eventType, payload || {});
         },
@@ -204,7 +205,6 @@ export async function runDream(): Promise<DreamResult> {
     const indexResultTyped = indexResult as Record<string, unknown>;
     const summary: Record<string, unknown> = {
       index: { source_count: indexResultTyped.source_count, updated_count: indexResultTyped.updated_count, deleted_count: indexResultTyped.deleted_count },
-      health: (health as unknown as Record<string, unknown>).classification_summary,
       recall_review: {
         reviewed_queries: recallReviewSummary?.reviewed_queries || 0,
         zero_use_queries: recallReviewSummary?.zero_use_queries || 0,
@@ -217,8 +217,6 @@ export async function runDream(): Promise<DreamResult> {
       },
       maintenance: {
         events: maintenanceEvents,
-        dead_writes: (deadWrites as unknown as Record<string, unknown>).total_dead_writes,
-        path_recommendations: ((pathEffectiveness as unknown as Record<string, unknown>).recommendations as unknown[] || []).length,
       },
       structure: {
         moved: Number(memoryChangeCounts.move || 0),
@@ -232,7 +230,6 @@ export async function runDream(): Promise<DreamResult> {
         reviewed_queries: recallReviewSummary?.reviewed_queries || 0,
         write_events: writeSummary?.total_events || 0,
       },
-      orphans: { count: orphanCount },
       agent: { tool_calls: agentResult.toolCalls.length, turns: agentResult.turns },
     };
 
@@ -243,10 +240,7 @@ export async function runDream(): Promise<DreamResult> {
        WHERE id = $1`,
       [diaryId, durationMs, JSON.stringify(summary), agentResult.narrative, JSON.stringify(agentResult.toolCalls), JSON.stringify({
         index: indexResult,
-        health,
-        deadWrites,
-        pathEffectiveness,
-        recallStats,
+        initial_context: initialContext,
         recallReview,
         reviewed_queries: reviewedQueryItems.slice(0, 12),
         writeStats,

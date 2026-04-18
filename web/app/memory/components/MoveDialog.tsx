@@ -32,7 +32,7 @@ export default function MoveDialog({ domain, path, onMoved, onCancel }: MoveDial
       }
     } catch (err) {
       const axiosErr = err as AxiosError<{ detail?: string }>;
-      setError(axiosErr.response?.data?.detail || axiosErr.message || 'Move failed');
+      setError(axiosErr.response?.data?.detail || axiosErr.message || t('Move failed'));
     } finally { setSaving(false); }
   };
 

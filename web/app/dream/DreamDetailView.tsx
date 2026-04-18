@@ -47,24 +47,62 @@ function changeTone(type: string): ChangeTone {
   return 'blue';
 }
 
-function formatProtectedNodeBlockedDetail(payload: Record<string, unknown> | undefined): string {
+function getSummaryBadges(entry: DreamEntry, t: (key: string) => string): Array<{ key: string; label: string; tone: 'green' | 'red' | 'orange' | 'blue' | 'default' }> {
+  const summary = entry.summary;
+  if (!summary) return [];
+
+  const badges: Array<{ key: string; label: string; tone: 'green' | 'red' | 'orange' | 'blue' | 'default' }> = [];
+  if (summary.recall_review?.possible_missed_recalls) {
+    badges.push({ key: 'missed_recalls', label: `${t('Missed recalls')} ${summary.recall_review.possible_missed_recalls}`, tone: 'orange' });
+  }
+  if (summary.recall_review?.reviewed_queries) {
+    badges.push({ key: 'reviewed_queries', label: `${t('Reviewed queries')} ${summary.recall_review.reviewed_queries}`, tone: 'blue' });
+  }
+  if (summary.activity?.recall_queries) {
+    badges.push({ key: 'recall_queries', label: `${t('Recall queries')} ${summary.activity.recall_queries}`, tone: 'blue' });
+  }
+  if (summary.activity?.write_events) {
+    badges.push({ key: 'write_events', label: `${t('Write events')} ${summary.activity.write_events}`, tone: 'default' });
+  }
+  if (summary.durable_extraction?.created) {
+    badges.push({ key: 'durable_created', label: `${t('Created')} ${summary.durable_extraction.created}`, tone: 'green' });
+  }
+  if (summary.durable_extraction?.enriched) {
+    badges.push({ key: 'durable_enriched', label: `${t('Enriched')} ${summary.durable_extraction.enriched}`, tone: 'orange' });
+  }
+  if (summary.maintenance?.events) {
+    badges.push({ key: 'maintenance_events', label: `${t('Maintenance events')} ${summary.maintenance.events}`, tone: 'default' });
+  }
+  if (summary.index?.updated_count) {
+    badges.push({ key: 'index_updated', label: `${t('Index updated')} ${summary.index.updated_count}`, tone: 'blue' });
+  }
+  if (summary.index?.deleted_count) {
+    badges.push({ key: 'index_deleted', label: `${t('Index deleted')} ${summary.index.deleted_count}`, tone: 'default' });
+  }
+  if (summary.agent?.tool_calls != null) {
+    badges.push({ key: 'tool_calls', label: `${summary.agent.tool_calls} ${t('calls')}`, tone: 'blue' });
+  }
+  return badges;
+}
+
+function formatProtectedNodeBlockedDetail(payload: Record<string, unknown> | undefined, t: (key: string) => string): string {
   if (!payload) return '';
   const blockedUri = typeof payload.blocked_uri === 'string' ? payload.blocked_uri : '';
   const requestedOldUri = typeof payload.requested_old_uri === 'string' ? payload.requested_old_uri : '';
   const requestedNewUri = typeof payload.requested_new_uri === 'string' ? payload.requested_new_uri : '';
   const tool = typeof payload.tool === 'string' ? payload.tool : '';
 
-  if (tool === 'update_node' && blockedUri) return `固定启动节点 ${blockedUri} 不允许更新`;
-  if (tool === 'delete_node' && blockedUri) return `固定启动节点 ${blockedUri} 不允许删除`;
+  if (tool === 'update_node' && blockedUri) return `${t('Protected boot node')} ${blockedUri} ${t('cannot be updated')}`;
+  if (tool === 'delete_node' && blockedUri) return `${t('Protected boot node')} ${blockedUri} ${t('cannot be deleted')}`;
   if (tool === 'move_node' && blockedUri) {
     if (requestedNewUri && requestedNewUri === blockedUri) {
       return requestedOldUri
-        ? `不能把 ${requestedOldUri} 移动到固定启动路径 ${blockedUri}`
-        : `不能把其他节点移动到固定启动路径 ${blockedUri}`;
+        ? `${t('Cannot move')} ${requestedOldUri} ${t('to protected boot path')} ${blockedUri}`
+        : `${t('Cannot move')} ${t('another node')} ${t('to protected boot path')} ${blockedUri}`;
     }
-    return `固定启动节点 ${blockedUri} 不允许移动`;
+    return `${t('Protected boot node')} ${blockedUri} ${t('cannot be moved')}`;
   }
-  if (blockedUri) return `固定启动节点 ${blockedUri} 已拦截`;
+  if (blockedUri) return `${t('Protected boot node')} ${blockedUri} ${t('blocked the action')}`;
   return '';
 }
 
@@ -137,7 +175,10 @@ function workflowEventTone(eventType: string): 'green' | 'red' | 'orange' | 'blu
   return 'blue';
 }
 
-function buildWorkflowRows(workflowEvents: DreamWorkflowEvent[]): Array<{ key: string; label: string; tone: 'green' | 'red' | 'orange' | 'blue' | 'default'; detail: string; time: string | null; }> {
+function buildWorkflowRows(
+  workflowEvents: DreamWorkflowEvent[],
+  t: (key: string) => string,
+): Array<{ key: string; label: string; tone: 'green' | 'red' | 'orange' | 'blue' | 'default'; detail: string; time: string | null; }> {
   const rows: Array<{ key: string; label: string; tone: 'green' | 'red' | 'orange' | 'blue' | 'default'; detail: string; time: string | null; }> = [];
   const pendingTools = new Map<string, DreamWorkflowEvent>();
 
@@ -185,7 +226,7 @@ function buildWorkflowRows(workflowEvents: DreamWorkflowEvent[]): Array<{ key: s
       detail: event.event_type === 'assistant_note'
         ? String(event.payload?.message || '')
         : event.event_type === 'protected_node_blocked'
-          ? formatProtectedNodeBlockedDetail(event.payload)
+          ? formatProtectedNodeBlockedDetail(event.payload, t)
           : event.event_type === 'policy_validation_blocked' || event.event_type === 'policy_warning_emitted'
             ? formatPolicySignalDetail(event.payload)
             : '',
@@ -295,16 +336,12 @@ export function DreamDetailView({ entry, loading, canRollback, rollingBack, onBa
         <ToolCallsSection toolCalls={entry.tool_calls} t={t} />
       )}
 
-      {entry.summary?.health && (
-        <Section title={t('Health Report')} className="mt-5">
+      {entry.summary && (
+        <Section title={t('Dream Summary')} className="mt-5">
           <div className="flex gap-2 flex-wrap">
-            {Object.entries(entry.summary.health).map(([key, value]) => (
-              <Badge key={key} tone={key === 'healthy' ? 'green' : key === 'dead' ? 'red' : key === 'noisy' ? 'orange' : 'yellow'}>
-                {t(key)} {value}
-              </Badge>
+            {getSummaryBadges(entry, t).map((badge) => (
+              <Badge key={badge.key} tone={badge.tone}>{badge.label}</Badge>
             ))}
-            {entry.summary.dead_writes && <Badge tone="red">{t('dead writes')} {entry.summary.dead_writes.total}</Badge>}
-            {entry.summary.orphans && <Badge tone="default">{t('Orphans')} {entry.summary.orphans.count}</Badge>}
           </div>
         </Section>
       )}
@@ -326,7 +363,7 @@ interface AgentWorkflowSectionProps {
 
 function AgentWorkflowSection({ workflowEvents, defaultExpanded, t }: AgentWorkflowSectionProps): React.JSX.Element {
   const [expanded, setExpanded] = useState(defaultExpanded);
-  const rows = useMemo(() => buildWorkflowRows(workflowEvents), [workflowEvents]);
+  const rows = useMemo(() => buildWorkflowRows(workflowEvents, t), [workflowEvents, t]);
 
   useEffect(() => {
     setExpanded(defaultExpanded);
@@ -338,7 +375,7 @@ function AgentWorkflowSection({ workflowEvents, defaultExpanded, t }: AgentWorkf
       subtitle={`${rows.length}`}
       right={
         <Button variant="ghost" size="sm" onClick={() => setExpanded(!expanded)}>
-          {expanded ? '▲' : '▼'}
+          <span aria-hidden>{expanded ? '▲' : '▼'}</span>
         </Button>
       }
       className="mb-5"
@@ -378,7 +415,7 @@ function ToolCallsSection({ toolCalls, t }: ToolCallsSectionProps): React.JSX.El
       subtitle={`${toolCalls.length}`}
       right={
         <Button variant="ghost" size="sm" onClick={() => setExpanded(!expanded)}>
-          {expanded ? '▲' : '▼'}
+          <span aria-hidden>{expanded ? '▲' : '▼'}</span>
         </Button>
       }
       className="mt-5"
@@ -451,7 +488,7 @@ function MemoryChangesSection({ changes, t }: MemoryChangesSectionProps): React.
                 )}
                 {change.type === 'update' && change.before?.disclosure !== change.after?.disclosure && (
                   <div className="mt-1 text-xs text-txt-tertiary">
-                    disclosure: <span className="line-through opacity-60">{change.before?.disclosure || '(none)'}</span> → <span className="text-txt-primary">{change.after?.disclosure || '(none)'}</span>
+                    {t('Disclosure changed')}: <span className="line-through opacity-60">{change.before?.disclosure || t('(none)')}</span> → <span className="text-txt-primary">{change.after?.disclosure || t('(none)')}</span>
                   </div>
                 )}
               </div>

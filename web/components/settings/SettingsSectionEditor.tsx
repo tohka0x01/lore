@@ -135,6 +135,7 @@ interface BooleanInputProps {
 }
 
 function BooleanInput({ value, onChange, disabled }: BooleanInputProps): React.JSX.Element {
+  const { t } = useT();
   const checked = Boolean(value);
   return (
     <label className="inline-flex items-center gap-3 text-[13px] text-txt-primary">
@@ -158,7 +159,7 @@ function BooleanInput({ value, onChange, disabled }: BooleanInputProps): React.J
           )}
         />
       </button>
-      <span>{checked ? 'true' : 'false'}</span>
+      <span>{checked ? t('true') : t('false')}</span>
     </label>
   );
 }
@@ -214,7 +215,7 @@ export function FieldRow({ schema, value, source, dirty, secretConfigured, onCha
         )}
         <p className="mt-1 text-[11px] text-txt-quaternary font-mono">
           {schema.key}
-          {(schema.min !== undefined || schema.max !== undefined) && <> · range [{schema.min ?? '∞'}, {schema.max ?? '∞'}]</>}
+          {(schema.min !== undefined || schema.max !== undefined) && <> · {t('range')} [{schema.min ?? '∞'}, {schema.max ?? '∞'}]</>}
         </p>
       </div>
       <div className={isString ? '' : 'shrink-0'}>

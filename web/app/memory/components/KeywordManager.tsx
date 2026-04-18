@@ -30,7 +30,7 @@ const KeywordManager = ({ keywords, nodeUuid, onUpdate }: KeywordManagerProps): 
       setNewKeyword(''); setAdding(false); onUpdate();
     } catch (err) {
       const axiosErr = err as AxiosError<{ detail?: string }>;
-      toast(axiosErr.response?.data?.detail || axiosErr.message || 'Failed');
+      toast(axiosErr.response?.data?.detail || axiosErr.message || t('Failed'));
     }
   };
 
@@ -41,7 +41,7 @@ const KeywordManager = ({ keywords, nodeUuid, onUpdate }: KeywordManagerProps): 
       onUpdate();
     } catch (err) {
       const axiosErr = err as AxiosError<{ detail?: string }>;
-      toast(axiosErr.response?.data?.detail || axiosErr.message || 'Failed');
+      toast(axiosErr.response?.data?.detail || axiosErr.message || t('Failed'));
     }
   };
 
@@ -56,7 +56,7 @@ const KeywordManager = ({ keywords, nodeUuid, onUpdate }: KeywordManagerProps): 
       {keywords.map((kw) => (
         <span key={kw} className="glossary-tag">
           {kw}
-          <button onClick={() => handleRemove(kw)} className="ml-0.5 opacity-60 hover:opacity-100" aria-label="remove">
+          <button onClick={() => handleRemove(kw)} className="ml-0.5 opacity-60 hover:opacity-100" aria-label={t('Remove')}>
             <X size={10} />
           </button>
         </span>

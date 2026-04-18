@@ -87,7 +87,7 @@ import {
   runDreamAgentLoop,
   DREAM_EVENT_CONTEXT,
   type LlmConfig,
-  type HealthData,
+  type DreamInitialContext,
 } from '../dreamAgent';
 import { processDreamToolCalls } from '../dreamLoopToolCalls';
 
@@ -115,15 +115,36 @@ const mockValidateDeletePolicy = vi.mocked(validateDeletePolicy);
 const mockMarkSessionRead = vi.mocked(markSessionRead);
 const mockListMemoryViewsByNode = vi.mocked(listMemoryViewsByNode);
 
-function makeHealthData(overrides: Partial<HealthData> = {}): HealthData {
+function makeInitialContext(overrides: Partial<DreamInitialContext> = {}): DreamInitialContext {
   return {
-    health: { classification_summary: {}, nodes: [] },
-    deadWrites: { dead_writes: [], total_dead_writes: 0 },
-    pathEffectiveness: { recommendations: [], paths: [] },
+    bootBaseline: [
+      {
+        uri: 'core://agent',
+        role_label: 'workflow constraints',
+        purpose: 'Working rules, collaboration constraints, and execution protocol.',
+        state: 'initialized',
+        content: 'Agent boot body',
+      },
+      {
+        uri: 'core://soul',
+        role_label: 'style / persona / self-definition',
+        purpose: 'Agent style, persona, and self-cognition baseline.',
+        state: 'initialized',
+        content: 'Soul boot body',
+      },
+      {
+        uri: 'preferences://user',
+        role_label: 'stable user definition',
+        purpose: 'Stable user information, user preferences, and durable collaboration context.',
+        state: 'initialized',
+        content: 'User boot body',
+      },
+    ],
+    guidance: '# MCP Guidance\npreloaded boot baseline\npreloaded guidance\nget_node is useful',
     recallStats: { summary: {}, by_path: [], noisy_nodes: [], recent_queries: { items: [], total: 0, limit: 20, offset: 0, has_more: false } },
     recallReview: { summary: {}, reviewed_queries: [], signal_coverage: {} },
-    writeStats: { summary: {}, hot_nodes: [] },
-    orphanCount: 0,
+    writeActivity: { summary: {}, hot_nodes: [], recent_events: [] },
+    recentDiaries: [],
     ...overrides,
   };
 }
@@ -855,28 +876,69 @@ describe('loadGuidanceFile', () => {
 // ---------------------------------------------------------------------------
 
 describe('buildDreamSystemPrompt', () => {
-  it('includes health report JSON', () => {
-    const prompt = buildDreamSystemPrompt(makeHealthData());
-    expect(prompt).toContain('Health report');
-    expect(prompt).toContain('health_summary');
+  it('includes key boot memories and guidance instead of the old health report framing', () => {
+    const prompt = buildDreamSystemPrompt(makeInitialContext());
+    expect(prompt).toContain('## Key boot memories');
+    expect(prompt).toContain('Agent boot body');
+    expect(prompt).toContain('Soul boot body');
+    expect(prompt).toContain('User boot body');
+    expect(prompt).toContain('## Guidance');
+    expect(prompt).not.toContain('## Health report');
+    expect(prompt).not.toContain('health_summary');
+  });
+
+  it('includes key boot memories and action-first guidance-driven workflow', () => {
+    const prompt = buildDreamSystemPrompt(makeInitialContext());
+    expect(prompt).toContain('Read the guidance first and apply it to every write decision and to the final diary');
+    expect(prompt).toContain('Use core://agent, core://soul, and preferences://user as always-available key memories throughout the review');
+    expect(prompt).toContain('Use these three boot nodes as fixed reference memories while you judge recall problems, choose write scope, and explain decisions in the diary');
+    expect(prompt).toContain('core://agent — workflow constraints');
+    expect(prompt).toContain('core://soul — style / persona / self-definition');
+    expect(prompt).toContain('preferences://user — stable user definition / durable user context');
+    expect(prompt).toContain('## Key boot memories');
+    expect(prompt).toContain('## Guidance');
+    expect(prompt).toContain('## Today\'s working context');
+    expect(prompt).not.toContain('## Preloaded boot baseline');
+    expect(prompt).not.toContain('## Preloaded guidance');
+    expect(prompt).not.toContain('## Today\'s compact context');
   });
 
   it('includes read-before-write evidence workflow and diagnosis tools', () => {
-    const prompt = buildDreamSystemPrompt(makeHealthData());
-    expect(prompt).toContain('Build evidence before acting');
+    const prompt = buildDreamSystemPrompt(makeInitialContext());
+    expect(prompt).toContain('Investigate each candidate just enough');
     expect(prompt).toContain('get_node_recall_detail');
     expect(prompt).toContain('inspect_neighbors');
     expect(prompt).toContain('Before any write, read the target node in full');
   });
 
-  it('reads recent_queries from the paginated stats block', () => {
-    const prompt = buildDreamSystemPrompt(makeHealthData({
+  it('uses guidance to drive write shape and diary reasoning instead of simplistic shortcuts', () => {
+    const prompt = buildDreamSystemPrompt(makeInitialContext());
+    expect(prompt).toContain('Let guidance determine whether the right result is a new node, an update to an existing node, a structure-first change, or a deferral');
+    expect(prompt).toContain('Make scope, boundary, disclosure, priority, structure, and diary-treatment decisions at guidance quality');
+    expect(prompt).toContain('Follow guidance for diary structure, evidence standard, and how to justify actions and deferrals');
+    expect(prompt).toContain('Within those sections, explain');
+    expect(prompt).toContain('which recall requests you reviewed');
+    expect(prompt).toContain('what you deferred and why');
+  });
+
+  it('uses guidance to drive write shape and diary reasoning instead of simplistic shortcuts', () => {
+    const prompt = buildDreamSystemPrompt(makeInitialContext());
+    expect(prompt).toContain('Let guidance determine whether the right result is a new node, an update to an existing node, a structure-first change, or a deferral');
+    expect(prompt).toContain('Make scope, boundary, disclosure, priority, structure, and diary-treatment decisions at guidance quality');
+    expect(prompt).toContain('Follow guidance for diary structure, evidence standard, and how to justify actions and deferrals');
+    expect(prompt).toContain('Within those sections, explain');
+    expect(prompt).toContain('which recall requests you reviewed');
+    expect(prompt).toContain('what you deferred and why');
+  });
+
+  it('reads recent_queries from the compact stats block', () => {
+    const prompt = buildDreamSystemPrompt(makeInitialContext({
       recallStats: {
         summary: {},
         by_path: [],
         noisy_nodes: [],
         recent_queries: {
-          items: [{ query_text: 'long query text', merged_count: 3, shown_count: 2, used_count: 1 }],
+          items: [{ query_id: 'q-1', query_text: 'long query text', merged_count: 3, shown_count: 2, used_count: 1 }],
           total: 1,
           limit: 20,
           offset: 0,
@@ -889,7 +951,7 @@ describe('buildDreamSystemPrompt', () => {
   });
 
   it('tolerates missing recent_queries items', () => {
-    const prompt = buildDreamSystemPrompt(makeHealthData({
+    const prompt = buildDreamSystemPrompt(makeInitialContext({
       recallStats: {
         summary: {},
         by_path: [],
@@ -900,67 +962,82 @@ describe('buildDreamSystemPrompt', () => {
     expect(prompt).toContain('"recent_queries": []');
   });
 
-  it('includes recent diary section when provided', () => {
-    const diaries = [{ started_at: '2024-01-01T00:00:00Z', status: 'completed', narrative: 'Test diary', tool_calls: [] }];
-    const prompt = buildDreamSystemPrompt(makeHealthData(), diaries);
-    expect(prompt).toContain('Recent diaries');
+  it('includes recent diary section in today context when provided', () => {
+    const prompt = buildDreamSystemPrompt(makeInitialContext({
+      recentDiaries: [{ started_at: '2024-01-01T00:00:00Z', status: 'completed', narrative: 'Test diary', tool_calls: [] }],
+    }));
+    expect(prompt).toContain('recent_diaries');
     expect(prompt).toContain('Test diary');
   });
 
-  it('includes query-level recall review and missed recall mission', () => {
-    const prompt = buildDreamSystemPrompt(makeHealthData({
+  it('includes query-level recall review and today-first mission', () => {
+    const prompt = buildDreamSystemPrompt(makeInitialContext({
       recallReview: {
         summary: { reviewed_queries: 1, possible_missed_recalls: 2 },
         reviewed_queries: [
           {
+            query_id: 'q-1',
             query_text: 'why did boot not recall',
             merged_count: 6,
             shown_count: 1,
             used_count: 0,
             flags: ['zero_use', 'high_merge_low_use'],
+            selected_uris: ['core://agent'],
+            used_uris: [],
+            unrecalled_session_reads: ['core://soul'],
+            unshown_session_reads: [],
             missed_recall_signals: [{ type: 'never_retrieved', uri: 'core://soul' }],
           },
         ],
       } as any,
     }));
     expect(prompt).toContain('Review today\'s recall evidence');
-    expect(prompt).toContain('Prefer durable extraction when it is real');
-    expect(prompt).toContain('Do only necessary maintenance');
+    expect(prompt).toContain('Extract durable memory from today\'s real usage');
+    expect(prompt).toContain('Handle the strongest missed recall candidates first');
     expect(prompt).toContain('why did boot not recall');
     expect(prompt).toContain('possible_missed_recalls');
     expect(prompt).toContain('high_merge_low_use');
-    expect(prompt).not.toContain('不是为了机械清噪');
   });
 
   it('keeps the prompt in English while requiring a Chinese diary', () => {
-    const prompt = buildDreamSystemPrompt(makeHealthData());
+    const prompt = buildDreamSystemPrompt(makeInitialContext());
     expect(prompt).toContain('Write the final diary in natural Chinese');
     expect(prompt).toContain('Use exactly five sections with Chinese titles corresponding to');
-    expect(prompt).toContain('Judge everything against the fixed baseline');
+    expect(prompt).toContain('Use core://agent, core://soul, and preferences://user as always-available key memories throughout the review');
     expect(prompt).not.toContain('Dream 的宪法层');
     expect(prompt).not.toContain('Lore guidance 与这三个固定节点一起构成 Dream 的 baseline calibration');
   });
 
-  it('omits recent diary section when no diaries', () => {
-    const prompt = buildDreamSystemPrompt(makeHealthData(), []);
-    expect(prompt).not.toContain('## Recent diaries');
-  });
-
   it('mentions fixed boot protection and ordered change priorities', () => {
-    const prompt = buildDreamSystemPrompt(makeHealthData());
-    expect(prompt).toContain('Do not update, delete, or move core://agent, core://soul, or preferences://user');
-    expect(prompt).toContain('Preferred change order');
+    const prompt = buildDreamSystemPrompt(makeInitialContext());
+    expect(prompt).toContain('Keep core://agent, core://soul, and preferences://user intact and use them as fixed key memories');
+    expect(prompt).toContain('Prefer this improvement order');
     expect(prompt).toContain('structure / node boundary');
     expect(prompt).toContain('Read more nodes than you modify');
   });
 });
 
 describe('runDreamAgentLoop', () => {
-  beforeEach(() => {
-    vi.clearAllMocks();
-    mockGenerateTextWithTools.mockReset();
-    mockListDomains.mockResolvedValue(['core'] as any);
-    mockGetBootNodeSpec.mockReturnValue(null);
+  it('starts with a user kickoff message so providers do not receive an empty prompt', async () => {
+    mockGenerateTextWithTools.mockResolvedValueOnce(makeTextResponse('Final narrative'));
+
+    const config: LlmConfig = {
+      provider: 'anthropic',
+      base_url: 'http://localhost:1234',
+      api_key: 'test-key',
+      model: 'claude-sonnet-4-6',
+      timeout_ms: 5000,
+      temperature: 0.3,
+      api_version: '2023-06-01',
+    };
+
+    await runDreamAgentLoop(config, makeInitialContext());
+
+    expect(mockGenerateTextWithTools).toHaveBeenCalledTimes(1);
+    const [, messages] = mockGenerateTextWithTools.mock.calls[0];
+    expect(messages[0]).toMatchObject({ role: 'system' });
+    expect(messages[1]).toMatchObject({ role: 'user' });
+    expect(String((messages[1] as { content?: unknown }).content || '')).toContain('Begin the dream review');
   });
 
   it('emits workflow events for turns, tool calls, and final note', async () => {
@@ -979,7 +1056,7 @@ describe('runDreamAgentLoop', () => {
       api_version: '',
     };
 
-    const result = await runDreamAgentLoop(config, makeHealthData(), [], {
+    const result = await runDreamAgentLoop(config, makeInitialContext(), {
       onEvent: async (type, payload) => {
         events.push({ type, payload });
       },
@@ -1037,7 +1114,7 @@ describe('runDreamAgentLoop', () => {
       api_version: '',
     };
 
-    const result = await runDreamAgentLoop(config, makeHealthData(), [], {
+    const result = await runDreamAgentLoop(config, makeInitialContext(), {
       onEvent: async (type, payload) => {
         events.push({ type, payload });
       },
@@ -1086,7 +1163,7 @@ describe('runDreamAgentLoop', () => {
       api_version: '2023-06-01',
     };
 
-    const result = await runDreamAgentLoop(config, makeHealthData(), []);
+    const result = await runDreamAgentLoop(config, makeInitialContext());
     expect(result.narrative).toBe('Anthropic final narrative');
     expect(result.toolCalls).toHaveLength(1);
   });
@@ -1106,7 +1183,7 @@ describe('runDreamAgentLoop', () => {
       api_version: '',
     };
 
-    const result = await runDreamAgentLoop(config, makeHealthData(), []);
+    const result = await runDreamAgentLoop(config, makeInitialContext());
     expect(result.narrative).toBe('Responses final narrative');
     expect(result.toolCalls).toHaveLength(1);
   });

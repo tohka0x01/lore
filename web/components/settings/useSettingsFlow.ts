@@ -119,10 +119,10 @@ export function useSettingsFlow({
         return rest;
       });
       if (onAfterReset) await onAfterReset();
-      notify(`Reset ${key}`, 'success');
+      notify(`${t('Reset completed')} · ${key}`, 'success');
     } catch (e) {
       const axiosErr = e as AxiosError<{ detail?: string }>;
-      setError(axiosErr.response?.data?.detail || axiosErr.message || 'Reset failed');
+      setError(axiosErr.response?.data?.detail || axiosErr.message || t('Reset failed'));
     } finally {
       setSaving(false);
     }
@@ -142,7 +142,7 @@ export function useSettingsFlow({
       }
     } catch (e) {
       const axiosErr = e as AxiosError<{ detail?: string }>;
-      setError(axiosErr.response?.data?.detail || axiosErr.message || 'Rebuild failed');
+      setError(axiosErr.response?.data?.detail || axiosErr.message || t('Rebuild failed'));
     } finally {
       setRebuilding(false);
     }
@@ -169,13 +169,13 @@ export function useSettingsFlow({
         await handleRebuild(false);
       }
       if (onAfterSave) await onAfterSave();
-      notify(`Saved ${dirtyKeys.length} change${dirtyKeys.length === 1 ? '' : 's'}`, 'success');
+      notify(t('Changes saved'), 'success');
       if (embeddingChanged && !awaitEmbeddingRebuildOnSave) {
         void handleRebuild();
       }
     } catch (e) {
       const axiosErr = e as AxiosError<{ detail?: string }>;
-      setError(axiosErr.response?.data?.detail || axiosErr.message || 'Save failed');
+      setError(axiosErr.response?.data?.detail || axiosErr.message || t('Save failed'));
     } finally {
       setSaving(false);
     }

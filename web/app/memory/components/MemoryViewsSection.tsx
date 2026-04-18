@@ -26,11 +26,11 @@ export default function MemoryViewsSection({ memoryViews, t }: MemoryViewsSectio
                 <Badge tone="blue">{view.view_type}</Badge>
                 <Badge tone="default">w {Number(view.weight || 0).toFixed(2)}</Badge>
                 <Badge tone="default">{view.status}</Badge>
-                <Badge tone={llmRefined ? 'purple' : 'default'}>{llmRefined ? 'LLM' : 'rule'}</Badge>
+                <Badge tone={llmRefined ? 'purple' : 'default'}>{llmRefined ? t('LLM refined') : t('Rule')}</Badge>
                 {llmModel && <span className="text-[10px] font-mono text-sys-green">{llmModel}</span>}
               </div>
               <div className="mb-2 text-[10px] font-mono text-txt-quaternary">
-                {view.embedding_model || 'pending'}
+                {view.embedding_model || t('Pending')}
                 {view.updated_at ? <> · {new Date(view.updated_at).toLocaleString()}</> : null}
               </div>
               <pre className="overflow-x-auto whitespace-pre-wrap text-[12.5px] leading-relaxed text-txt-secondary">{view.text_content}</pre>

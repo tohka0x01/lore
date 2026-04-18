@@ -35,7 +35,7 @@ export default function CreateNodeForm({ domain, parentPath, onCreated, onCancel
       onCreated();
     } catch (err) {
       const axiosErr = err as AxiosError<{ detail?: string }>;
-      setError(axiosErr.response?.data?.detail || axiosErr.message || 'Create failed');
+      setError(axiosErr.response?.data?.detail || axiosErr.message || t('Create failed'));
     } finally { setSaving(false); }
   };
 
@@ -53,7 +53,7 @@ export default function CreateNodeForm({ domain, parentPath, onCreated, onCancel
       {error && <p className="text-[13px] text-sys-red">{error}</p>}
       <div className="grid gap-4 sm:grid-cols-[1fr_auto] items-start">
         <label className="block">
-          <span className="block mb-1 text-[11px] font-medium text-txt-tertiary">{t('Title')} (path segment)</span>
+          <span className="block mb-1 text-[11px] font-medium text-txt-tertiary">{t('Title')} ({t('Path segment')})</span>
           <input
             type="text" value={title}
             onChange={(e: ChangeEvent<HTMLInputElement>) => setTitle(e.target.value)}

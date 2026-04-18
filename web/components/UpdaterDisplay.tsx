@@ -4,6 +4,7 @@ import React, { useMemo, useState } from 'react';
 import * as Popover from '@radix-ui/react-popover';
 import clsx from 'clsx';
 import { Badge } from './ui';
+import { useT } from '../lib/i18n';
 import {
   clientTypeAssetPath,
   clientTypeInitials,
@@ -123,13 +124,13 @@ function resolveUpdaters({
   return fallback ? [fallback] : [];
 }
 
-function formatUpdatedAt(updatedAt: string | null): string {
-  if (!updatedAt) return 'Unknown time';
+function formatUpdatedAt(updatedAt: string | null, t: (key: string) => string): string {
+  if (!updatedAt) return t('Unknown time');
   return new Date(updatedAt).toLocaleString();
 }
 
-function formatEventCount(eventCount: number): string {
-  return eventCount === 1 ? '1 update' : `${eventCount} updates`;
+function formatEventCount(eventCount: number, t: (key: string) => string): string {
+  return eventCount === 1 ? t('1 update') : `${eventCount} ${t('updates')}`;
 }
 
 export function ChannelAvatar({
@@ -141,9 +142,10 @@ export function ChannelAvatar({
   size: number;
   elevated?: boolean;
 }): React.JSX.Element {
+  const { t } = useT();
   const normalizedClientType = typeof clientType === 'string' ? clientType.trim().toLowerCase() : '';
   const tone = clientTypeTone(clientType);
-  const label = clientTypeLabel(clientType);
+  const label = t(clientTypeLabel(clientType));
   const src = clientTypeAssetPath(clientType);
   const initials = clientTypeInitials(clientType);
   const isHermes = normalizedClientType === 'hermes';
@@ -203,6 +205,7 @@ export default function UpdaterDisplay({
   showTimestamp = false,
   className,
 }: UpdaterDisplayProps): React.JSX.Element | null {
+  const { t } = useT();
   const [open, setOpen] = useState(false);
   const resolvedUpdaters = useMemo(() => resolveUpdaters({
     updaters,
@@ -262,7 +265,7 @@ export default function UpdaterDisplay({
           </span>
           {showTimestamp && latestUpdater.updated_at && (
             <span className="text-[11px] text-txt-quaternary">
-              {formatUpdatedAt(latestUpdater.updated_at)}
+              {formatUpdatedAt(latestUpdater.updated_at, t)}
             </span>
           )}
         </span>
@@ -277,10 +280,10 @@ export default function UpdaterDisplay({
         >
           <div className="flex items-center gap-2 border-b border-separator-thin px-4 py-3">
             <span className="text-[11px] font-medium uppercase tracking-[0.06em] text-txt-tertiary">
-              {resolvedUpdaters.length > 1 ? 'Updaters' : 'Updater'}
+              {resolvedUpdaters.length > 1 ? t('Updaters') : t('Updater')}
             </span>
             <span className="text-[12px] text-txt-tertiary">
-              {formatUpdatedAt(latestUpdater.updated_at)}
+              {formatUpdatedAt(latestUpdater.updated_at, t)}
             </span>
           </div>
           <div className="p-1.5">
@@ -293,15 +296,15 @@ export default function UpdaterDisplay({
                 <div className="min-w-0 flex-1">
                   <div className="flex flex-wrap items-center gap-2">
                     <span className="text-[13px] font-medium text-txt-primary">
-                      {clientTypeLabel(updater.client_type)}
+                      {t(clientTypeLabel(updater.client_type))}
                     </span>
-                    <Badge tone={clientTypeTone(updater.client_type)}>{formatEventCount(updater.event_count)}</Badge>
+                    <Badge tone={clientTypeTone(updater.client_type)}>{formatEventCount(updater.event_count, t)}</Badge>
                   </div>
                   <div className="mt-1 break-all font-mono text-[11px] text-txt-tertiary">
-                    {updater.source || 'Unknown source'}
+                    {updater.source || t('Unknown source')}
                   </div>
                   <div className="mt-1 text-[11px] text-txt-quaternary">
-                    {formatUpdatedAt(updater.updated_at)}
+                    {formatUpdatedAt(updater.updated_at, t)}
                   </div>
                 </div>
               </div>

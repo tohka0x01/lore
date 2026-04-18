@@ -48,7 +48,8 @@ interface RecentQueriesBlock {
 }
 
 function ClientAvatarLabel({ clientType, compact = false }: { clientType: unknown; compact?: boolean }): React.JSX.Element {
-  const label = clientTypeLabel(clientType);
+  const { t } = useT();
+  const label = t(clientTypeLabel(clientType));
   const size = compact ? 22 : 24;
   return (
     <span className="inline-flex min-w-0 items-center gap-2">
@@ -61,6 +62,26 @@ function ClientAvatarLabel({ clientType, compact = false }: { clientType: unknow
 function formatRangeLabel(offset: number, count: number, total: number): string {
   if (total <= 0 || count <= 0) return '0–0';
   return `${offset + 1}–${offset + count}`;
+}
+
+function displayViewType(viewType: unknown, t: (key: string) => string): string {
+  const key = String(viewType ?? '').trim();
+  if (!key) return '—';
+  if (key === 'gist') return t('Gist');
+  if (key === 'question') return t('Question');
+  if (key === 'unknown') return t('Unknown view');
+  return key;
+}
+
+function displayRetrievalPath(path: unknown, t: (key: string) => string): string {
+  const key = String(path ?? '').trim();
+  if (!key) return '—';
+  if (key === 'exact') return t('Exact');
+  if (key === 'glossary_semantic') return t('Glossary');
+  if (key === 'dense') return t('Semantic');
+  if (key === 'lexical') return t('Lexical');
+  if (key === 'content') return t('Content');
+  return key;
 }
 
 export default function RecallDrilldown(): React.JSX.Element {
@@ -158,7 +179,7 @@ export default function RecallDrilldown(): React.JSX.Element {
   const thresholdReady = thresholdStatus === 'ready';
   const thresholdUnsafe = thresholdStatusDetail === 'ready_but_unsafe' || thresholdExecutionStatus === 'blocked';
   const thresholdEligible = thresholdStatusDetail === 'ready_to_review' && thresholdExecutionStatus === 'eligible';
-  const thresholdBasis = String(displayThresholdAnalysis?.basis || 'insufficient_data').split('_').join(' ');
+  const thresholdBasisKey = `Threshold basis · ${String(displayThresholdAnalysis?.basis || 'insufficient_data').split('_').join(' ')}`;
   const currentMinDisplayScore = runtimeDisplay?.min_display_score;
   const suggestedMinDisplayScore = displayThresholdAnalysis?.suggested_min_display_score;
   const currentMinDisplayScoreNumber = Number(currentMinDisplayScore);
@@ -197,8 +218,8 @@ export default function RecallDrilldown(): React.JSX.Element {
     { key: 'node_uri', label: t('Entry'), render: (v: unknown) => <div className="max-w-[18rem] break-all font-mono text-[11px] text-txt-primary">{String(v ?? '—')}</div> },
     { key: 'retrieval_path', label: t('Path'), render: (v: unknown, row: RowData) => (
       <div className="flex items-center gap-1.5 text-[11px]">
-        <Badge tone="default">{String(v ?? '')}</Badge>
-        {!!row.view_type && <span className="text-txt-tertiary">{String(row.view_type)}</span>}
+        <Badge tone="default">{displayRetrievalPath(v, t)}</Badge>
+        {!!row.view_type && <span className="text-txt-tertiary">{displayViewType(row.view_type, t)}</span>}
         {!!row.selected && <Badge tone="blue">{t('Shown')}</Badge>}
         {!!row.used_in_answer && <Badge tone="green">{t('Used')}</Badge>}
       </div>
@@ -221,26 +242,31 @@ export default function RecallDrilldown(): React.JSX.Element {
   const recentQueries = recentQueriesBlock.items || [];
   const recentQueriesRange = formatRangeLabel(recentQueriesBlock.offset, recentQueries.length, recentQueriesBlock.total);
   const sourceOptions = useMemo(() => [
-    { value: '__legacy__', label: clientTypeLabel('__legacy__') },
-    ...KNOWN_CLIENT_TYPES.map((value) => ({ value, label: clientTypeLabel(value) })),
-  ], []);
-  const thresholdClientRows = useMemo<RowData[]>(() => clientTypeThresholdAnalysis.map((row) => {
-    const clientType = typeof row.client_type === 'string' && row.client_type.trim() ? row.client_type.trim() : '__legacy__';
-    const analysis = (row.analysis as RowData) || {};
-    return {
-      client_type: clientType,
-      label: clientType === '__legacy__' ? t('Legacy') : clientTypeLabel(clientType),
-      shown_candidate_count: analysis.shown_candidate_count,
-      used_candidate_count: analysis.used_candidate_count,
-      used_p25_score: analysis.used_p25_score,
-      unused_shown_p75_score: analysis.unused_shown_p75_score,
-      separation_gap: analysis.separation_gap,
-      threshold_gap: analysis.threshold_gap,
-      suggested_min_display_score: analysis.suggested_min_display_score,
-      status_detail: analysis.status_detail,
-      execution_status: analysis.execution_status,
-    };
-  }), [clientTypeThresholdAnalysis, t]);
+    { value: '__legacy__', label: t(clientTypeLabel('__legacy__')) },
+    ...KNOWN_CLIENT_TYPES.map((value) => ({ value, label: t(clientTypeLabel(value)) })),
+  ], [t]);
+  const thresholdClientRows = useMemo<RowData[]>(() => clientTypeThresholdAnalysis
+    .filter((row) => {
+      const clientType = typeof row.client_type === 'string' && row.client_type.trim() ? row.client_type.trim() : '__legacy__';
+      return clientType !== '__legacy__' && clientType !== 'admin';
+    })
+    .map((row) => {
+      const clientType = typeof row.client_type === 'string' && row.client_type.trim() ? row.client_type.trim() : '__legacy__';
+      const analysis = (row.analysis as RowData) || {};
+      return {
+        client_type: clientType,
+        label: t(clientTypeLabel(clientType)),
+        shown_candidate_count: analysis.shown_candidate_count,
+        used_candidate_count: analysis.used_candidate_count,
+        used_p25_score: analysis.used_p25_score,
+        unused_shown_p75_score: analysis.unused_shown_p75_score,
+        separation_gap: analysis.separation_gap,
+        threshold_gap: analysis.threshold_gap,
+        suggested_min_display_score: analysis.suggested_min_display_score,
+        status_detail: analysis.status_detail,
+        execution_status: analysis.execution_status,
+      };
+    }), [clientTypeThresholdAnalysis, t]);
   const thresholdClientCols = useMemo(() => [
     {
       key: 'label',
@@ -274,7 +300,7 @@ export default function RecallDrilldown(): React.JSX.Element {
       case 'path':
         return (
           <Table columns={[
-            { key: 'retrieval_path', label: t('Path'), render: (v: unknown) => <Badge tone="default">{String(v ?? '')}</Badge> },
+            { key: 'retrieval_path', label: t('Path'), render: (v: unknown) => <Badge tone="default">{displayRetrievalPath(v, t)}</Badge> },
             { key: 'total', label: t('Events'), render: (v: unknown) => <span className="font-mono tabular-nums text-txt-secondary">{String(v ?? '—')}</span> },
             { key: 'selected', label: t('Shown'), render: (v: unknown) => <span className="font-mono tabular-nums text-sys-blue">{String(v ?? '—')}</span> },
             { key: 'avg_final_rank_score', label: t('Avg'), render: (v: unknown) => <span className="font-mono tabular-nums text-txt-secondary">{fmt(v)}</span> },
@@ -283,7 +309,7 @@ export default function RecallDrilldown(): React.JSX.Element {
       case 'view':
         return (
           <Table columns={[
-            { key: 'view_type', label: t('View'), render: (v: unknown) => <Badge tone="default">{String(v ?? '')}</Badge> },
+            { key: 'view_type', label: t('View'), render: (v: unknown) => <Badge tone="default">{displayViewType(v, t)}</Badge> },
             { key: 'total', label: t('Events'), render: (v: unknown) => <span className="font-mono tabular-nums text-txt-secondary">{String(v ?? '—')}</span> },
             { key: 'selected', label: t('Shown'), render: (v: unknown) => <span className="font-mono tabular-nums text-sys-blue">{String(v ?? '—')}</span> },
             { key: 'avg_final_rank_score', label: t('Avg'), render: (v: unknown) => <span className="font-mono tabular-nums text-txt-secondary">{fmt(v)}</span> },
@@ -420,7 +446,7 @@ export default function RecallDrilldown(): React.JSX.Element {
                 <Badge tone={!thresholdReady ? 'default' : thresholdUnsafe ? 'orange' : 'green'}>
                   {!thresholdReady ? t('Insufficient data') : thresholdUnsafe ? t('Ready, unsafe to apply') : t('Ready to review')}
                 </Badge>
-                <span className="text-[12px] text-txt-secondary">{t('Basis')}: {thresholdBasis}</span>
+                <span className="text-[12px] text-txt-secondary">{t('Basis')}: {t(thresholdBasisKey)}</span>
               </div>
             </div>
             <div className="grid grid-cols-2 gap-x-4 gap-y-2 text-[12px] text-txt-secondary md:text-right">

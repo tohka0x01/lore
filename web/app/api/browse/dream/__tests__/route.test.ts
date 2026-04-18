@@ -100,6 +100,69 @@ describe('/api/browse/dream route', () => {
     expect(body.code).toBe('validation_error');
   });
 
+  it('returns the diary list payload unchanged, including the recall-first summary shape', async () => {
+    mockGetDreamDiary.mockResolvedValueOnce({
+      entries: [
+        {
+          id: 1,
+          status: 'completed',
+          summary: {
+            recall_review: { reviewed_queries: 2, possible_missed_recalls: 1 },
+            durable_extraction: { created: 1, enriched: 2 },
+            maintenance: { events: 3 },
+            structure: { moved: 1, protected_blocks: 1, policy_blocks: 0, policy_warnings: 1 },
+            activity: { recall_queries: 4, reviewed_queries: 2, write_events: 5 },
+            agent: { tool_calls: 6, turns: 2 },
+            index: { source_count: 10, updated_count: 2, deleted_count: 1 },
+          },
+        },
+      ],
+      total: 1,
+      limit: 20,
+      offset: 0,
+    } as any);
+
+    const response = await GET(new Request('http://localhost/api/browse/dream?limit=20&offset=0') as any);
+    const body = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(body.entries[0].summary.recall_review.possible_missed_recalls).toBe(1);
+    expect(body.entries[0].summary.durable_extraction.created).toBe(1);
+    expect(body.entries[0].summary.activity.write_events).toBe(5);
+    expect(body.entries[0].summary).not.toHaveProperty('health');
+    expect(body.entries[0].summary).not.toHaveProperty('dead_writes');
+    expect(body.entries[0].summary).not.toHaveProperty('paths');
+    expect(body.entries[0].summary).not.toHaveProperty('orphans');
+  });
+
+  it('returns the entry payload unchanged, including the recall-first summary shape', async () => {
+    mockGetDreamEntry.mockResolvedValueOnce({
+      id: 1,
+      status: 'completed',
+      summary: {
+        recall_review: { reviewed_queries: 3, possible_missed_recalls: 2 },
+        durable_extraction: { created: 0, enriched: 1 },
+        maintenance: { events: 2 },
+        structure: { moved: 1, protected_blocks: 0, policy_blocks: 1, policy_warnings: 1 },
+        activity: { recall_queries: 6, reviewed_queries: 3, write_events: 4 },
+        agent: { tool_calls: 5, turns: 2 },
+        index: { source_count: 9, updated_count: 1, deleted_count: 0 },
+      },
+    } as any);
+
+    const response = await GET(new Request('http://localhost/api/browse/dream?action=entry&id=1') as any);
+    const body = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(body.summary.recall_review.reviewed_queries).toBe(3);
+    expect(body.summary.durable_extraction.enriched).toBe(1);
+    expect(body.summary.agent.tool_calls).toBe(5);
+    expect(body.summary).not.toHaveProperty('health');
+    expect(body.summary).not.toHaveProperty('dead_writes');
+    expect(body.summary).not.toHaveProperty('paths');
+    expect(body.summary).not.toHaveProperty('orphans');
+  });
+
   it('returns config payload from config GET', async () => {
     mockGetDreamConfig.mockResolvedValueOnce({ enabled: true, schedule_hour: 3, timezone: 'UTC', last_run_date: null } as any);
 

@@ -54,7 +54,7 @@ export default function MemoryNodeHeader({
         ? `${data.children.length} ${t(isRoot ? 'Clusters' : 'Children')}`
         : null;
 
-  const titleText = path ? path.split('/').pop() || 'root' : 'root';
+  const titleText = path ? path.split('/').pop() || t('root') : t('root');
 
   return (
     <PageTitle
@@ -100,14 +100,14 @@ export default function MemoryNodeHeader({
           {!editing && !moving && !creating && !node.is_virtual && (
             <>
               <Button variant="ghost" size="sm" onClick={startEditing}>
-                Edit
+                {t('Edit')}
               </Button>
               <Button variant="ghost" size="sm" onClick={() => setCreating(true)}>
-                New
+                {t('New')}
               </Button>
               {!isRoot && (
                 <Button variant="ghost" size="sm" onClick={() => setMoving(true)}>
-                  Move
+                  {t('Move')}
                 </Button>
               )}
               <Button variant="ghost" size="sm" onClick={() => void handleRebuildViews()} disabled={rebuildingViews}>
@@ -115,7 +115,7 @@ export default function MemoryNodeHeader({
               </Button>
               {!isRoot && (
                 <Button variant="destructive" size="sm" onClick={() => void handleDelete()}>
-                  Delete
+                  {t('Delete')}
                 </Button>
               )}
             </>

@@ -42,13 +42,25 @@ export interface MemoryChange {
 export interface DreamSummary {
   agent?: {
     tool_calls?: number;
+    turns?: number;
   };
-  health?: Record<string, number>;
-  dead_writes?: {
-    total?: number;
+  index?: {
+    source_count?: number;
+    updated_count?: number;
+    deleted_count?: number;
   };
-  paths?: {
-    recommendations_count?: number;
+  recall_review?: {
+    reviewed_queries?: number;
+    zero_use_queries?: number;
+    high_merge_low_use_queries?: number;
+    possible_missed_recalls?: number;
+  };
+  durable_extraction?: {
+    created?: number;
+    enriched?: number;
+  };
+  maintenance?: {
+    events?: number;
   };
   structure?: {
     moved?: number;
@@ -56,8 +68,11 @@ export interface DreamSummary {
     policy_blocks?: number;
     policy_warnings?: number;
   };
-  orphans?: {
-    count?: number;
+  activity?: {
+    recall_events?: number;
+    recall_queries?: number;
+    reviewed_queries?: number;
+    write_events?: number;
   };
 }
 
