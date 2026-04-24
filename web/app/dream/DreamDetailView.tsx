@@ -5,7 +5,7 @@ import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import DiffViewer from '../../components/DiffViewer';
 import { Section, Button, Badge, StatCard, Notice } from '../../components/ui';
-import type { DreamEntry, DreamWorkflowEvent, MemoryChange, ToolCall } from './useDreamPageController';
+import type { DreamEntry, DreamWorkflowEvent, MemoryChange } from './useDreamPageController';
 
 function fmtDuration(ms: number | null | undefined): string {
   if (!ms) return '—';
@@ -332,10 +332,6 @@ export function DreamDetailView({ entry, loading, canRollback, rollingBack, onBa
         <MemoryChangesSection changes={entry.memory_changes} t={t} />
       )}
 
-      {entry.tool_calls && entry.tool_calls.length > 0 && (
-        <ToolCallsSection toolCalls={entry.tool_calls} t={t} />
-      )}
-
       {entry.summary && (
         <Section title={t('Dream Summary')} className="mt-5">
           <div className="flex gap-2 flex-wrap">
@@ -396,39 +392,6 @@ function AgentWorkflowSection({ workflowEvents, defaultExpanded, t }: AgentWorkf
         ) : (
           <div className="text-sm text-txt-tertiary">{t('Waiting for workflow events…')}</div>
         )
-      )}
-    </Section>
-  );
-}
-
-interface ToolCallsSectionProps {
-  toolCalls: ToolCall[];
-  t: (key: string) => string;
-}
-
-function ToolCallsSection({ toolCalls, t }: ToolCallsSectionProps): React.JSX.Element {
-  const [expanded, setExpanded] = useState(false);
-
-  return (
-    <Section
-      title={t('Tool Calls')}
-      subtitle={`${toolCalls.length}`}
-      right={
-        <Button variant="ghost" size="sm" onClick={() => setExpanded(!expanded)}>
-          <span aria-hidden>{expanded ? '▲' : '▼'}</span>
-        </Button>
-      }
-      className="mt-5"
-    >
-      {expanded && (
-        <div className="space-y-1 max-h-[300px] overflow-y-auto sm:max-h-[500px]">
-          {toolCalls.map((toolCall, index) => (
-            <div key={index} className="flex items-start gap-2 rounded-lg border border-[var(--separator-thin)] bg-[var(--bg-primary)] px-3 py-2 text-xs font-mono">
-              <Badge tone="blue">{toolCall.tool}</Badge>
-              <span className="text-txt-secondary truncate flex-1">{JSON.stringify(toolCall.args).slice(0, 150)}</span>
-            </div>
-          ))}
-        </div>
       )}
     </Section>
   );

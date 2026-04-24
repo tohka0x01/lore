@@ -50,6 +50,7 @@ import { deleteNodeByPath, updateNodeByPath, createNode, moveNode } from '../../
 import { addGlossaryKeyword, removeGlossaryKeyword } from '../../search/glossary';
 import { listDreamWorkflowEvents } from '../dreamWorkflow';
 import { loadLlmConfig, runDreamAgentLoop } from '../dreamAgent';
+import { ensureRecallIndex } from '../../recall/recall';
 import {
   getDreamDiary,
   getDreamEntry,
@@ -336,6 +337,7 @@ describe('runDream', () => {
 
     const result = await runDream();
 
+    expect(ensureRecallIndex).not.toHaveBeenCalled();
     expect(result.status).toBe('completed');
     expect(mockRunDreamAgentLoop).toHaveBeenCalledWith(
       expect.anything(),
@@ -387,7 +389,6 @@ describe('runDream', () => {
         write_events: 7,
       },
       agent: { tool_calls: 0, turns: 1 },
-      index: { source_count: 1, updated_count: 0, deleted_count: 0 },
     });
     expect(summary).not.toHaveProperty('health');
     expect(summary).not.toHaveProperty('dead_writes');

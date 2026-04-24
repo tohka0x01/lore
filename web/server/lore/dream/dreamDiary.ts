@@ -1,7 +1,6 @@
 import { sql } from '../../db';
 import { clampLimit } from '../core/utils';
 import { getSettings as getSettingsBatch, updateSettings } from '../config/settings';
-import { ensureRecallIndex } from '../recall/recall';
 import { getRecallStats, getDreamRecallReview } from '../recall/recallAnalytics';
 import { getWriteEventStats } from '../memory/writeEvents';
 import { bootView } from '../memory/boot';
@@ -81,18 +80,8 @@ export async function runDream(): Promise<DreamResult> {
   await appendDreamWorkflowEvent(diaryId, 'run_started', { diary_id: diaryId });
 
   try {
-    // Step 1: Index refresh
-    console.log('[dream] step 1: index refresh');
-    await appendDreamWorkflowEvent(diaryId, 'phase_started', { phase: 'index_refresh', label: 'Index refresh' });
-    const indexResult = await ensureRecallIndex();
-    await appendDreamWorkflowEvent(diaryId, 'phase_completed', {
-      phase: 'index_refresh',
-      label: 'Index refresh',
-      summary: indexResult as Record<string, unknown>,
-    });
-
-    // Step 2: Data collection
-    console.log('[dream] step 2: data collection');
+    // Step 1: Data collection
+    console.log('[dream] step 1: data collection');
     await appendDreamWorkflowEvent(diaryId, 'phase_started', { phase: 'data_collection', label: 'Data collection' });
     const [boot, recallStats, recallReview, writeStats] = await Promise.all([
       bootView({ client_type: 'admin' }),
@@ -145,8 +134,8 @@ export async function runDream(): Promise<DreamResult> {
       recentDiaries,
     };
 
-    // Step 3: LLM agent loop
-    console.log('[dream] step 3: agent loop');
+    // Step 2: LLM agent loop
+    console.log('[dream] step 2: agent loop');
     await appendDreamWorkflowEvent(diaryId, 'phase_started', { phase: 'agent_loop', label: 'Agent loop' });
     const llmConfig = await loadLlmConfig();
     let agentResult: { narrative: string; toolCalls: ToolCallLogEntry[]; turns: number } = {
@@ -203,10 +192,8 @@ export async function runDream(): Promise<DreamResult> {
     const durableEnrichments = Number(memoryChangeCounts.update || 0) + Number(memoryChangeCounts.glossary_add || 0);
     const maintenanceEvents = memoryEventsTotal - durableCreates - durableEnrichments;
 
-    // Step 4: Save diary
-    const indexResultTyped = indexResult as Record<string, unknown>;
+    // Step 3: Save diary
     const summary: Record<string, unknown> = {
-      index: { source_count: indexResultTyped.source_count, updated_count: indexResultTyped.updated_count, deleted_count: indexResultTyped.deleted_count },
       recall_review: {
         reviewed_queries: recallReviewSummary?.reviewed_queries || 0,
         zero_use_queries: recallReviewSummary?.zero_use_queries || 0,
@@ -241,7 +228,6 @@ export async function runDream(): Promise<DreamResult> {
        summary = $3::jsonb, narrative = $4, tool_calls = $5::jsonb, details = $6::jsonb
        WHERE id = $1`,
       [diaryId, durationMs, JSON.stringify(summary), agentResult.narrative, JSON.stringify(agentResult.toolCalls), JSON.stringify({
-        index: indexResult,
         initial_context: initialContext,
         recallReview,
         reviewed_queries: reviewedQueryItems.slice(0, 12),
