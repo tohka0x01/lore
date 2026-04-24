@@ -1,5 +1,5 @@
 import React, { useState, ChangeEvent } from 'react';
-import { Button } from '../../../components/ui';
+import { AppInput, Button } from '../../../components/ui';
 import { useT } from '../../../lib/i18n';
 import { api } from '../../../lib/api';
 import { AxiosError } from 'axios';
@@ -54,11 +54,11 @@ export default function CreateNodeForm({ domain, parentPath, onCreated, onCancel
       <div className="grid gap-4 sm:grid-cols-[1fr_auto] items-start">
         <label className="block">
           <span className="block mb-1 text-[11px] font-medium text-txt-tertiary">{t('Title')} ({t('Path segment')})</span>
-          <input
+          <AppInput
             type="text" value={title}
             onChange={(e: ChangeEvent<HTMLInputElement>) => setTitle(e.target.value)}
             placeholder="snake_case_name"
-            className="w-full rounded-lg border border-separator-thin bg-bg-raised px-3 py-2 font-mono text-[14px] text-txt-primary focus:border-sys-green/60 focus:outline-none"
+            className="font-mono text-[14px]"
             autoFocus
           />
         </label>
@@ -73,11 +73,11 @@ export default function CreateNodeForm({ domain, parentPath, onCreated, onCancel
       </div>
       <label className="block">
         <span className="block mb-1 text-[11px] font-medium text-txt-tertiary">{t('Disclosure')}</span>
-        <input
+        <AppInput
           type="text" value={disclosure}
           onChange={(e: ChangeEvent<HTMLInputElement>) => setDisclosure(e.target.value)}
           placeholder={t('When should this memory be recalled?')}
-          className="w-full rounded-lg border border-separator-thin bg-bg-raised px-3 py-2 text-[14px] text-txt-primary placeholder:text-txt-quaternary focus:border-sys-green/60 focus:outline-none"
+          className="text-[14px]"
         />
       </label>
       <textarea

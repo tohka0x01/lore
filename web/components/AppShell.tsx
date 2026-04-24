@@ -3,6 +3,8 @@
 import React, { useState, useEffect, useCallback, useRef, useMemo, ReactNode } from 'react';
 import { useRouter, usePathname } from 'next/navigation';
 import { Sun, Moon } from 'lucide-react';
+import { ConfigProvider } from '@lobehub/ui';
+import { motion } from 'motion/react';
 import clsx from 'clsx';
 import { getDomains, getSetupFlowStatus, AUTH_ERROR_EVENT } from '../lib/api';
 import { getSetupFlowDecision, SETUP_STATUS_CHANGED_EVENT, type SetupFlowStatus } from '@/lib/bootSetup';
@@ -419,11 +421,13 @@ interface AppShellProps {
 export default function AppShell({ children }: AppShellProps): React.JSX.Element {
   return (
     <ThemeProvider>
-      <LanguageProvider>
-        <ConfirmProvider>
-          <AppShellInner>{children}</AppShellInner>
-        </ConfirmProvider>
-      </LanguageProvider>
+      <ConfigProvider motion={motion}>
+        <LanguageProvider>
+          <ConfirmProvider>
+            <AppShellInner>{children}</AppShellInner>
+          </ConfirmProvider>
+        </LanguageProvider>
+      </ConfigProvider>
     </ThemeProvider>
   );
 }

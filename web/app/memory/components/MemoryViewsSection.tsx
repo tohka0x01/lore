@@ -27,7 +27,7 @@ export default function MemoryViewsSection({ memoryViews, t }: MemoryViewsSectio
                 <Badge tone="default">w {Number(view.weight || 0).toFixed(2)}</Badge>
                 <Badge tone="default">{view.status}</Badge>
                 <Badge tone={llmRefined ? 'purple' : 'default'}>{llmRefined ? t('LLM refined') : t('Rule')}</Badge>
-                {llmModel && <span className="text-[10px] font-mono text-sys-green">{llmModel}</span>}
+                {llmModel && <Badge tone="green" className="font-mono text-[10px]">{llmModel}</Badge>}
               </div>
               <div className="mb-2 text-[10px] font-mono text-txt-quaternary">
                 {view.embedding_model || t('Pending')}

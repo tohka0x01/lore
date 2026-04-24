@@ -1,11 +1,11 @@
 'use client';
 
-import React, { useEffect, useMemo, useState, ReactNode, useCallback } from 'react';
+import React, { useEffect, useMemo, useState, ReactNode, useCallback, type ChangeEvent } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import clsx from 'clsx';
 import { api } from '../../lib/api';
 import {
-  PageCanvas, PageTitle, Card, Section, Button, Badge, Table, StatCard, Notice, inputClass, AppSelect, Disclosure, SegmentedTabs,
+  PageCanvas, PageTitle, Card, Section, Button, Badge, Table, StatCard, Notice, inputClass, AppInput, AppSelect, Disclosure, SegmentedTabs,
   fmt, trunc, asNumber,
 } from '../../components/ui';
 import RecallStages from '../../components/RecallStages';
@@ -417,11 +417,11 @@ export default function RecallDrilldown(): React.JSX.Element {
               </label>
               <label className="block">
                 <span className="block mb-1 text-[11px] font-medium text-txt-tertiary">{t('Query text')}</span>
-                <input value={filters.queryText} onChange={(e) => applyFilters({ queryText: e.target.value, queryId: '' }, 'replace')} placeholder={t('Fragment…')} className={inputClass} />
+                <AppInput value={filters.queryText} onChange={(e: ChangeEvent<HTMLInputElement>) => applyFilters({ queryText: e.target.value, queryId: '' }, 'replace')} placeholder={t('Fragment…')} />
               </label>
               <label className="block">
                 <span className="block mb-1 text-[11px] font-medium text-txt-tertiary">{t('Node URI')}</span>
-                <input value={filters.nodeUri} onChange={(e) => applyFilters({ nodeUri: e.target.value, queryId: '' }, 'replace')} placeholder={t('uri…')} className={inputClass} />
+                <AppInput value={filters.nodeUri} onChange={(e: ChangeEvent<HTMLInputElement>) => applyFilters({ nodeUri: e.target.value, queryId: '' }, 'replace')} placeholder={t('uri…')} />
               </label>
             </div>
             <div className="px-5 pb-4 flex justify-end">

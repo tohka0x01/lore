@@ -7,6 +7,7 @@ import remarkGfm from 'remark-gfm';
 import { X } from 'lucide-react';
 import clsx from 'clsx';
 import { useT } from '../../../lib/i18n';
+import { Badge } from '../../../components/ui';
 
 interface GlossaryNode {
   uri?: string;
@@ -90,7 +91,7 @@ const GlossaryPopup = ({ keyword, nodes, position, onClose, onNavigate }: Glossa
                   {node.uri}
                 </code>
                 {isUnlinked && (
-                  <span className="rounded-md bg-sys-red/15 px-1.5 py-0.5 text-[9px] font-medium text-sys-red">{t('Orphaned')}</span>
+                  <Badge tone="red" className="text-[9px]">{t('Orphaned')}</Badge>
                 )}
               </div>
               {node.content_snippet && (

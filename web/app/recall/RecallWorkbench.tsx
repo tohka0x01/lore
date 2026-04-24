@@ -4,7 +4,7 @@ import React, { useState, useCallback, KeyboardEvent, ChangeEvent, useMemo, useE
 import { useRouter, useSearchParams } from 'next/navigation';
 import { api } from '../../lib/api';
 import {
-  PageCanvas, PageTitle, Section, Button, EmptyState, inputClass,
+  PageCanvas, PageTitle, Section, Button, EmptyState, inputClass, AppInput,
   fmt, asNumber,
 } from '../../components/ui';
 import RecallStages from '../../components/RecallStages';
@@ -226,7 +226,7 @@ export default function RecallWorkbench(): React.JSX.Element {
                 <div className="grid gap-x-6 gap-y-3 grid-cols-2 md:grid-cols-3 lg:grid-cols-6">
                   <label className="block">
                     <span className="block mb-1 text-[11px] font-medium text-txt-tertiary">{t('Session')}</span>
-                    <input value={debugForm.sessionId} onChange={(e: ChangeEvent<HTMLInputElement>) => patchForm({ sessionId: e.target.value })} className={inputClass} />
+                    <AppInput value={debugForm.sessionId} onChange={(e: ChangeEvent<HTMLInputElement>) => patchForm({ sessionId: e.target.value })} />
                   </label>
                   {(
                     [

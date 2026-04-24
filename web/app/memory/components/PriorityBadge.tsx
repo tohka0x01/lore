@@ -2,6 +2,7 @@
 
 import React from 'react';
 import clsx from 'clsx';
+import { Badge, type BadgeTone } from '../../../components/ui';
 
 interface PriorityBadgeProps {
   priority: number | null | undefined;
@@ -11,20 +12,22 @@ interface PriorityBadgeProps {
 const PriorityBadge = ({ priority, size = 'sm' }: PriorityBadgeProps): React.JSX.Element | null => {
   if (priority === null || priority === undefined) return null;
 
-  const tone =
-    priority === 0 ? 'bg-sys-red/15 text-sys-red'
-    : priority <= 2 ? 'bg-sys-orange/15 text-sys-orange'
-    : priority <= 5 ? 'bg-sys-teal/15 text-sys-teal'
-    : 'bg-fill-tertiary text-txt-tertiary';
+  const tone: BadgeTone =
+    priority === 0 ? 'red'
+    : priority <= 2 ? 'orange'
+    : priority <= 5 ? 'teal'
+    : 'soft';
 
   return (
-    <span className={clsx(
-      'inline-flex items-center gap-1 rounded-md font-mono tabular-nums',
-      tone,
-      size === 'lg' ? 'px-2 py-0.5 text-[11px]' : 'px-1.5 py-0.5 text-[10px]',
-    )}>
+    <Badge
+      tone={tone}
+      className={clsx(
+        'font-mono tabular-nums',
+        size === 'lg' ? 'px-2 py-0.5 text-[11px]' : 'px-1.5 py-0.5 text-[10px]',
+      )}
+    >
       <span className="opacity-70">P</span>{priority}
-    </span>
+    </Badge>
   );
 };
 

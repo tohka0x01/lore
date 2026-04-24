@@ -4,7 +4,7 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { AxiosError } from 'axios';
 import { Bot, RefreshCw, Save, Sparkles, User } from 'lucide-react';
 import { usePathname, useRouter } from 'next/navigation';
-import { Badge, Button, Card, Notice } from '@/components/ui';
+import { AppInput, Badge, Button, Card, Notice } from '@/components/ui';
 import { SetupBackButton, SetupFlowShell } from '@/components/setup/SetupFlowShell';
 import { useConfirm } from '@/components/ConfirmDialog';
 import { generateBootStatusDrafts, getBootStatus, getSetupFlowStatus, saveBootStatus } from '@/lib/api';
@@ -241,12 +241,12 @@ export default function BootSetupStep({ setupSlug }: BootSetupStepProps): React.
 
           <div>
             <label className="mb-2 block text-[12px] font-medium uppercase tracking-[0.06em] text-txt-tertiary">{t('Draft prompt')}</label>
-            <input
+            <AppInput
               type="text"
               value={nodeContext}
               onChange={(event) => setNodeContext(event.target.value)}
               placeholder={t('Optional extra guidance for this node')}
-              className="w-full rounded-lg border border-separator bg-bg-raised px-3 py-2 text-[13px] text-txt-primary placeholder:text-txt-quaternary focus:border-sys-blue focus:outline-none"
+              className="text-[13px]"
             />
           </div>
 

@@ -53,7 +53,7 @@ export function CueList({ item }: CueListProps): React.JSX.Element {
   return (
     <div className="flex flex-wrap gap-1">
       {cues.map((cue) => (
-        <span key={cue} className="inline-flex rounded-md bg-fill-quaternary px-1.5 py-[2px] text-[11px] text-txt-secondary">{cue}</span>
+        <Badge key={cue} tone="soft" className="text-[11px] text-txt-secondary">{cue}</Badge>
       ))}
     </div>
   );

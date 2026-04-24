@@ -1,7 +1,9 @@
 'use client';
 
 import React, { useState, useEffect, useRef, KeyboardEvent, ChangeEvent } from 'react';
+import type { InputRef } from 'antd';
 import { X } from 'lucide-react';
+import { AppInput, Badge } from '../../../components/ui';
 import { api } from '../../../lib/api';
 import { useT } from '../../../lib/i18n';
 import { useConfirm } from '../../../components/ConfirmDialog';
@@ -18,7 +20,7 @@ const KeywordManager = ({ keywords, nodeUuid, onUpdate }: KeywordManagerProps): 
   const { toast } = useConfirm();
   const [adding, setAdding] = useState(false);
   const [newKeyword, setNewKeyword] = useState('');
-  const inputRef = useRef<HTMLInputElement>(null);
+  const inputRef = useRef<InputRef>(null);
 
   useEffect(() => { if (adding && inputRef.current) inputRef.current.focus(); }, [adding]);
 
@@ -54,21 +56,21 @@ const KeywordManager = ({ keywords, nodeUuid, onUpdate }: KeywordManagerProps): 
     <div className="flex items-center gap-2 flex-wrap">
       <span className="text-[11px] font-medium uppercase tracking-[0.06em] text-txt-tertiary">{t('Glossary')}</span>
       {keywords.map((kw) => (
-        <span key={kw} className="glossary-tag">
+        <Badge key={kw} tone="yellow" className="glossary-tag">
           {kw}
           <button onClick={() => handleRemove(kw)} className="ml-0.5 opacity-60 hover:opacity-100" aria-label={t('Remove')}>
             <X size={10} />
           </button>
-        </span>
+        </Badge>
       ))}
       {adding ? (
-        <input
+        <AppInput
           ref={inputRef} type="text" value={newKeyword}
           onChange={(e: ChangeEvent<HTMLInputElement>) => setNewKeyword(e.target.value)}
           onKeyDown={handleKeyDown}
           onBlur={() => { if (!newKeyword.trim()) setAdding(false); }}
           placeholder={t('keyword')}
-          className="w-28 rounded-md border border-sys-yellow/40 bg-sys-yellow/10 px-2 py-0.5 font-mono text-[11px] text-sys-yellow focus:border-sys-yellow focus:outline-none"
+          className="w-28 font-mono text-[11px]"
         />
       ) : (
         <button
