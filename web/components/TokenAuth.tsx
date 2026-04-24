@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useState, useCallback, FormEvent, ChangeEvent } from 'react';
+import { AppPasswordInput } from '@/components/ui';
 import { getDomains } from '../lib/api';
 import { useT } from '../lib/i18n';
 import { AxiosError } from 'axios';
@@ -52,14 +53,13 @@ const TokenAuth = ({ onAuthenticated }: TokenAuthProps): React.JSX.Element => {
           <div className="rounded-2xl border border-separator-thin bg-bg-elevated p-5 space-y-4">
             <label className="block">
               <span className="mb-2 block text-[13px] font-medium text-txt-secondary">{t('API Token')}</span>
-              <input
-                type="password"
+              <AppPasswordInput
                 value={token}
                 onChange={(e: ChangeEvent<HTMLInputElement>) => { setToken(e.target.value); if (error) setError(''); }}
                 placeholder={t('Enter your token')}
                 disabled={loading}
                 autoFocus
-                className="w-full rounded-xl border border-separator-thin bg-bg-raised px-4 py-3 text-[15px] text-txt-primary placeholder:text-txt-quaternary focus:border-sys-blue/60 focus:outline-none transition-colors"
+                className="rounded-xl px-4 py-3 text-[15px] transition-colors"
               />
             </label>
 

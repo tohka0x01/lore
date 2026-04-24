@@ -1,14 +1,17 @@
 'use client';
 
-import React, { type ComponentPropsWithoutRef, type ElementType, type ReactNode } from 'react';
+import React, { type ComponentPropsWithoutRef, type ElementType, type Key, type ReactNode } from 'react';
 import clsx from 'clsx';
-import * as Accordion from '@radix-ui/react-accordion';
-import * as Tabs from '@radix-ui/react-tabs';
+import type { AccordionProps as LobeAccordionProps } from '@lobehub/ui/es/Accordion/type';
+import { Accordion as LobeAccordion, AccordionItem as LobeAccordionItem } from '@lobehub/ui/es/Accordion/index';
 import LobeAvatar from '@lobehub/ui/es/Avatar/index';
 import type { AvatarProps as LobeAvatarProps } from '@lobehub/ui/es/Avatar/type';
 import LobeInput from '@lobehub/ui/es/Input/Input';
-import type { InputProps as LobeInputProps } from '@lobehub/ui/es/Input/type';
+import LobeInputPassword from '@lobehub/ui/es/Input/InputPassword';
+import LobeTextArea from '@lobehub/ui/es/Input/TextArea';
+import type { InputPasswordProps as LobeInputPasswordProps, InputProps as LobeInputProps, TextAreaProps as LobeTextAreaProps } from '@lobehub/ui/es/Input/type';
 import LobeSelect from '@lobehub/ui/es/Select/Select';
+import LobeSegmented from '@lobehub/ui/es/Segmented/index';
 import LobeTag from '@lobehub/ui/es/Tag/Tag';
 
 export type ButtonVariant = 'primary' | 'secondary' | 'ghost' | 'destructive';
@@ -156,6 +159,18 @@ export function AppInput({ className, variant = 'filled', ...rest }: AppInputPro
   return <LobeInput className={className} variant={variant} {...rest} />;
 }
 
+type AppPasswordInputProps = LobeInputPasswordProps;
+
+export function AppPasswordInput({ className, variant = 'filled', ...rest }: AppPasswordInputProps): React.JSX.Element {
+  return <LobeInputPassword className={className} variant={variant} {...rest} />;
+}
+
+type AppTextAreaProps = LobeTextAreaProps;
+
+export function AppTextArea({ className, resize = true, variant = 'filled', ...rest }: AppTextAreaProps): React.JSX.Element {
+  return <LobeTextArea className={className} resize={resize} variant={variant} {...rest} />;
+}
+
 type AppAvatarProps = LobeAvatarProps;
 
 export function AppAvatar(props: AppAvatarProps): React.JSX.Element {
@@ -198,15 +213,23 @@ interface DisclosureProps {
 }
 
 export function Disclosure({ open, onOpenChange, trigger, children, className }: DisclosureProps): React.JSX.Element {
+  const expandedKeys: Key[] = open ? ['open'] : [];
+  const handleExpandedChange: NonNullable<LobeAccordionProps['onExpandedChange']> = (keys) => {
+    onOpenChange(keys.includes('open'));
+  };
+
   return (
-    <Accordion.Root type="single" collapsible value={open ? 'open' : undefined} onValueChange={(value) => onOpenChange(value === 'open')} className={className}>
-      <Accordion.Item value="open" className="border-none">
-        <Accordion.Trigger asChild>
-          <button type="button" className="w-full text-left">{trigger}</button>
-        </Accordion.Trigger>
-        <Accordion.Content>{children}</Accordion.Content>
-      </Accordion.Item>
-    </Accordion.Root>
+    <LobeAccordion
+      accordion
+      className={className}
+      expandedKeys={expandedKeys}
+      onExpandedChange={handleExpandedChange}
+      variant="borderless"
+    >
+      <LobeAccordionItem itemKey="open" title={trigger} variant="borderless">
+        {children}
+      </LobeAccordionItem>
+    </LobeAccordion>
   );
 }
 
@@ -224,18 +247,13 @@ interface SegmentedTabsProps {
 
 export function SegmentedTabs({ value, onValueChange, options, className }: SegmentedTabsProps): React.JSX.Element {
   return (
-    <Tabs.Root value={value} onValueChange={onValueChange} className={className}>
-      <Tabs.List className="flex items-center gap-1">
-        {options.map((option) => (
-          <Tabs.Trigger
-            key={option.value}
-            value={option.value}
-            className="press rounded-full border px-3 py-1 text-[12px] font-medium text-txt-secondary transition-all data-[state=active]:border-sys-blue/15 data-[state=active]:bg-bg-elevated data-[state=active]:text-sys-blue data-[state=active]:shadow-sm hover:bg-fill-quaternary hover:text-txt-primary"
-          >
-            {option.label}
-          </Tabs.Trigger>
-        ))}
-      </Tabs.List>
-    </Tabs.Root>
+    <LobeSegmented
+      className={className}
+      options={options.map((option) => ({ label: option.label, value: option.value }))}
+      shape="round"
+      value={value}
+      variant="filled"
+      onChange={(next) => onValueChange(String(next))}
+    />
   );
 }

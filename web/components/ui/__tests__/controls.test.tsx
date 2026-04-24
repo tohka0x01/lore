@@ -18,11 +18,28 @@ vi.mock('@lobehub/ui/es/Select/Select', () => ({
   ),
 }));
 
+vi.mock('@lobehub/ui/es/Segmented/index', () => ({
+  default: ({ options = [], value }: { options?: Array<{ label: React.ReactNode; value: string }>; value?: string }) => (
+    <div data-lobe-segmented="true" data-value={value}>
+      {options.map((option) => <button key={option.value} type="button">{option.label}</button>)}
+    </div>
+  ),
+}));
+
+vi.mock('@lobehub/ui/es/Accordion/index', () => ({
+  Accordion: ({ children, expandedKeys }: { children: React.ReactNode; expandedKeys?: React.Key[] }) => (
+    <div data-lobe-accordion="true" data-expanded-keys={(expandedKeys || []).join(',')}>{children}</div>
+  ),
+  AccordionItem: ({ children, title }: { children: React.ReactNode; title: React.ReactNode }) => (
+    <section><div>{title}</div>{children}</section>
+  ),
+}));
+
 vi.mock('@lobehub/ui/es/Tag/Tag', () => ({
   default: ({ children }: { children: React.ReactNode }) => <span>{children}</span>,
 }));
 
-import { AppAvatar, AppInput, Badge } from '../controls';
+import { AppAvatar, AppInput, Badge, Disclosure, SegmentedTabs } from '../controls';
 
 describe('ui controls Lobe wrappers', () => {
   it('exports an AppInput wrapper that renders an input control', () => {
@@ -41,5 +58,35 @@ describe('ui controls Lobe wrappers', () => {
     const html = renderToStaticMarkup(<Badge dot>Active</Badge>);
 
     expect(html).toContain('Active');
+  });
+
+  it('renders SegmentedTabs through Lobe Segmented', () => {
+    const html = renderToStaticMarkup(
+      <SegmentedTabs
+        value="view"
+        onValueChange={() => undefined}
+        options={[
+          { value: 'path', label: 'By path' },
+          { value: 'view', label: 'By view' },
+        ]}
+      />,
+    );
+
+    expect(html).toContain('data-lobe-segmented="true"');
+    expect(html).toContain('data-value="view"');
+    expect(html).toContain('By path');
+  });
+
+  it('renders Disclosure through Lobe Accordion', () => {
+    const html = renderToStaticMarkup(
+      <Disclosure open onOpenChange={() => undefined} trigger={<span>Filters</span>}>
+        <div>Filter content</div>
+      </Disclosure>,
+    );
+
+    expect(html).toContain('data-lobe-accordion="true"');
+    expect(html).toContain('data-expanded-keys="open"');
+    expect(html).toContain('Filters');
+    expect(html).toContain('Filter content');
   });
 });

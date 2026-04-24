@@ -10,6 +10,10 @@ vi.mock('@lobehub/ui/es/Input/Input', () => ({
   default: (props: React.InputHTMLAttributes<HTMLInputElement>) => <input data-app-input="true" {...props} />,
 }));
 
+vi.mock('@lobehub/ui/es/Input/InputPassword', () => ({
+  default: (props: React.InputHTMLAttributes<HTMLInputElement>) => <input data-app-password-input="true" type="password" {...props} />,
+}));
+
 vi.mock('@lobehub/ui/es/Input/TextArea', () => ({
   default: (props: React.TextareaHTMLAttributes<HTMLTextAreaElement>) => <textarea data-app-text-area="true" {...props} />,
 }));
@@ -32,55 +36,24 @@ vi.mock('@lobehub/ui/es/Segmented/index', () => ({
 }));
 
 vi.mock('@lobehub/ui/es/Tag/Tag', () => ({
-  default: ({ children }: { children: React.ReactNode }) => <span data-badge="true">{children}</span>,
+  default: ({ children }: { children: React.ReactNode }) => <span>{children}</span>,
 }));
 
-vi.mock('../../../../../lib/i18n', () => ({
+vi.mock('../lib/i18n', () => ({
   useT: () => ({ t: (key: string) => key }),
 }));
 
-import MemoryEditor from '../MemoryEditor';
-import MemoryViewsSection from '../MemoryViewsSection';
+vi.mock('../lib/api', () => ({
+  getDomains: vi.fn(),
+}));
 
-describe('memory detail Lobe wrappers', () => {
-  it('renders disclosure editing through AppInput', () => {
-    const html = renderToStaticMarkup(
-      <MemoryEditor
-        editContent="body"
-        setEditContent={() => undefined}
-        editDisclosure="when useful"
-        setEditDisclosure={() => undefined}
-        editPriority={2}
-        setEditPriority={() => undefined}
-        saving={false}
-        onSave={() => undefined}
-        onCancel={() => undefined}
-      />,
-    );
+import TokenAuth from '../TokenAuth';
 
-    expect(html).toContain('data-app-input="true"');
-    expect(html).toContain('data-app-text-area="true"');
-    expect(html).toContain('when useful');
-  });
+describe('TokenAuth Lobe wrappers', () => {
+  it('renders the token field through AppPasswordInput', () => {
+    const html = renderToStaticMarkup(<TokenAuth onAuthenticated={() => undefined} />);
 
-  it('renders LLM model metadata through Badge', () => {
-    const html = renderToStaticMarkup(
-      <MemoryViewsSection
-        t={(key) => key}
-        memoryViews={[
-          {
-            id: 1,
-            view_type: 'summary',
-            weight: 1,
-            status: 'active',
-            text_content: 'view text',
-            metadata: { llm_refined: true, llm_model: 'claude-opus-4-7' },
-          } as any,
-        ]}
-      />,
-    );
-
-    expect(html).toContain('data-badge="true"');
-    expect(html).toContain('claude-opus-4-7');
+    expect(html).toContain('data-app-password-input="true"');
+    expect(html).toContain('Enter your token');
   });
 });

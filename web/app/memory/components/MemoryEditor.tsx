@@ -1,5 +1,5 @@
 import React, { ChangeEvent } from 'react';
-import { AppInput, Button } from '../../../components/ui';
+import { AppInput, AppTextArea, Button } from '../../../components/ui';
 import { useT } from '../../../lib/i18n';
 
 interface MemoryEditorProps {
@@ -51,10 +51,10 @@ export default function MemoryEditor({
           />
         </label>
       </div>
-      <textarea
+      <AppTextArea
         value={editContent}
         onChange={(e: ChangeEvent<HTMLTextAreaElement>) => setEditContent(e.target.value)}
-        className="h-80 w-full resize-y rounded-xl border border-separator-thin bg-bg-raised p-4 text-[15px] leading-relaxed text-txt-primary focus:border-sys-blue/60 focus:outline-none"
+        className="h-80 text-[15px] leading-relaxed"
         spellCheck={false}
       />
     </div>

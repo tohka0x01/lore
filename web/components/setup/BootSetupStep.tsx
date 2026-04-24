@@ -4,7 +4,7 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { AxiosError } from 'axios';
 import { Bot, RefreshCw, Save, Sparkles, User } from 'lucide-react';
 import { usePathname, useRouter } from 'next/navigation';
-import { AppInput, Badge, Button, Card, Notice } from '@/components/ui';
+import { AppInput, AppTextArea, Badge, Button, Card, Notice } from '@/components/ui';
 import { SetupBackButton, SetupFlowShell } from '@/components/setup/SetupFlowShell';
 import { useConfirm } from '@/components/ConfirmDialog';
 import { generateBootStatusDrafts, getBootStatus, getSetupFlowStatus, saveBootStatus } from '@/lib/api';
@@ -252,14 +252,14 @@ export default function BootSetupStep({ setupSlug }: BootSetupStepProps): React.
 
           <div>
             <label className="mb-2 block text-[12px] font-medium uppercase tracking-[0.06em] text-txt-tertiary">{t('Content')}</label>
-            <textarea
+            <AppTextArea
               value={draft}
               onChange={(event) => {
                 setDraft(event.target.value);
                 setDirty(true);
               }}
               placeholder={t('Write the final memory content here')}
-              className="min-h-[320px] w-full rounded-lg border border-separator bg-bg-raised px-3 py-3 text-[14px] leading-relaxed text-txt-primary placeholder:text-txt-quaternary focus:border-sys-blue focus:outline-none"
+              className="min-h-[320px] text-[14px] leading-relaxed"
             />
           </div>
 

@@ -1,5 +1,5 @@
 import React, { useState, ChangeEvent } from 'react';
-import { AppInput, Button } from '../../../components/ui';
+import { AppInput, AppTextArea, Button } from '../../../components/ui';
 import { useT } from '../../../lib/i18n';
 import { api } from '../../../lib/api';
 import { AxiosError } from 'axios';
@@ -80,11 +80,11 @@ export default function CreateNodeForm({ domain, parentPath, onCreated, onCancel
           className="text-[14px]"
         />
       </label>
-      <textarea
+      <AppTextArea
         value={content}
         onChange={(e: ChangeEvent<HTMLTextAreaElement>) => setContent(e.target.value)}
         placeholder={t('Memory content…')}
-        className="h-40 w-full resize-y rounded-xl border border-separator-thin bg-bg-raised p-4 text-[15px] leading-relaxed text-txt-primary placeholder:text-txt-quaternary focus:border-sys-green/60 focus:outline-none"
+        className="h-40 text-[15px] leading-relaxed"
         spellCheck={false}
       />
       <p className="text-[11px] text-txt-quaternary">

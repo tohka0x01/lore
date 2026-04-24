@@ -3,7 +3,7 @@
 import React, { useMemo, useState } from 'react';
 import * as Popover from '@radix-ui/react-popover';
 import clsx from 'clsx';
-import { Badge } from './ui';
+import { AppAvatar, Badge } from './ui';
 import { useT } from '../lib/i18n';
 import {
   clientTypeAssetPath,
@@ -151,21 +151,10 @@ export function ChannelAvatar({
   const isHermes = normalizedClientType === 'hermes';
 
   return (
-    <span
-      className={clsx(
-        'flex shrink-0 items-center justify-center overflow-hidden rounded-full border border-separator-thin shadow-sm',
-        AVATAR_SURFACE,
-        AVATAR_TEXT[tone],
-      )}
-      style={{
-        width: size,
-        height: size,
-        boxShadow: elevated ? '0 0 0 2px var(--bg-elevated)' : '0 0 0 1px rgba(255,255,255,0.08)',
-      }}
+    <AppAvatar
+      alt={label}
       aria-label={label}
-      title={label}
-    >
-      {isHermes ? (
+      avatar={isHermes ? (
         <span
           aria-hidden="true"
           className="block h-[72%] w-[72%] shrink-0 bg-current select-none"
@@ -180,19 +169,20 @@ export function ChannelAvatar({
             maskSize: 'contain',
           }}
         />
-      ) : src ? (
-        <img
-          src={src}
-          alt={label}
-          className="h-[72%] w-[72%] object-contain select-none"
-          draggable={false}
-        />
-      ) : (
-        <span className="font-semibold" style={{ fontSize: Math.max(10, Math.floor(size * 0.38)) }}>
-          {initials}
-        </span>
+      ) : src || initials}
+      className={clsx(
+        'shrink-0 overflow-hidden border-separator-thin',
+        AVATAR_SURFACE,
+        AVATAR_TEXT[tone],
       )}
-    </span>
+      size={size}
+      style={{
+        boxShadow: elevated ? '0 0 0 2px var(--bg-elevated)' : '0 0 0 1px rgba(255,255,255,0.08)',
+        fontSize: Math.max(10, Math.floor(size * 0.38)),
+      }}
+      title={label}
+      variant="outlined"
+    />
   );
 }
 

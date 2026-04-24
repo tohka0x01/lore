@@ -10,12 +10,25 @@ vi.mock('@lobehub/ui/es/Input/Input', () => ({
   default: (props: React.InputHTMLAttributes<HTMLInputElement>) => <input data-app-input="true" {...props} />,
 }));
 
+vi.mock('@lobehub/ui/es/Input/TextArea', () => ({
+  default: (props: React.TextareaHTMLAttributes<HTMLTextAreaElement>) => <textarea data-app-text-area="true" {...props} />,
+}));
+
 vi.mock('@lobehub/ui/es/Select/Select', () => ({
   default: ({ options = [], value }: { options?: Array<{ label: React.ReactNode; value: string }>; value?: string }) => (
     <select value={value} readOnly>
       {options.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
     </select>
   ),
+}));
+
+vi.mock('@lobehub/ui/es/Accordion/index', () => ({
+  Accordion: ({ children }: { children: React.ReactNode }) => <div>{children}</div>,
+  AccordionItem: ({ children, title }: { children: React.ReactNode; title: React.ReactNode }) => <section><div>{title}</div>{children}</section>,
+}));
+
+vi.mock('@lobehub/ui/es/Segmented/index', () => ({
+  default: ({ options = [] }: { options?: Array<{ label: React.ReactNode; value: string }> }) => <div>{options.map((option) => option.label)}</div>,
 }));
 
 vi.mock('@lobehub/ui/es/Tag/Tag', () => ({
@@ -43,6 +56,7 @@ describe('memory form Lobe input wrappers', () => {
     expect((html.match(/data-app-input="true"/g) || []).length).toBe(2);
     expect(html).toContain('snake_case_name');
     expect(html).toContain('When should this memory be recalled?');
+    expect(html).toContain('data-app-text-area="true"');
   });
 
   it('renders the new URI field through AppInput', () => {

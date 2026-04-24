@@ -18,6 +18,15 @@ vi.mock('@lobehub/ui/es/Select/Select', () => ({
   ),
 }));
 
+vi.mock('@lobehub/ui/es/Accordion/index', () => ({
+  Accordion: ({ children }: { children: React.ReactNode }) => <div>{children}</div>,
+  AccordionItem: ({ children, title }: { children: React.ReactNode; title: React.ReactNode }) => <section><div>{title}</div>{children}</section>,
+}));
+
+vi.mock('@lobehub/ui/es/Segmented/index', () => ({
+  default: ({ options = [] }: { options?: Array<{ label: React.ReactNode; value: string }> }) => <div>{options.map((option) => option.label)}</div>,
+}));
+
 vi.mock('@lobehub/ui/es/Tag/Tag', () => ({
   default: ({ children }: { children: React.ReactNode }) => <span data-badge="true">{children}</span>,
 }));
