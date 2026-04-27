@@ -1,6 +1,6 @@
 'use client';
 
-import React, { type ElementType, type Key, type ReactNode } from 'react';
+import React, { type Key, type ReactNode } from 'react';
 import clsx from 'clsx';
 import type { AccordionProps as LobeAccordionProps } from '@lobehub/ui/es/Accordion/type';
 import { Accordion as LobeAccordion, AccordionItem as LobeAccordionItem } from '@lobehub/ui/es/Accordion/index';
@@ -18,6 +18,11 @@ import type { InputPasswordProps as LobeInputPasswordProps, InputProps as LobeIn
 import LobeSelect from '@lobehub/ui/es/Select/Select';
 import LobeSegmented from '@lobehub/ui/es/Segmented/index';
 import LobeTag from '@lobehub/ui/es/Tag/Tag';
+import LobeEmpty from '@lobehub/ui/es/Empty/index';
+import LobeCopyButton from '@lobehub/ui/es/CopyButton/index';
+import LobeActionIcon from '@lobehub/ui/es/ActionIcon/index';
+import { CodeDiff as LobeCodeDiff } from '@lobehub/ui/es/CodeDiff/index';
+import { Tooltip as LobeTooltip } from '@lobehub/ui';
 
 export type ButtonVariant = 'primary' | 'secondary' | 'ghost' | 'destructive';
 export type ButtonSize = 'sm' | 'md' | 'lg';
@@ -36,10 +41,10 @@ const BUTTON_SIZE_MAP: Record<ButtonSize, LobeButtonProps['size']> = {
 };
 
 const BUTTON_VARIANT_CLASSNAMES: Record<ButtonVariant, string> = {
-  primary: 'bg-sys-blue text-white hover:bg-[#1E90FF]',
-  secondary: 'border border-sys-green/20 bg-sys-green/15 text-sys-green hover:bg-sys-green/20',
-  ghost: 'bg-transparent text-txt-secondary hover:bg-fill-quaternary hover:text-txt-primary',
-  destructive: 'bg-sys-red/15 !text-sys-red hover:bg-sys-red/25',
+  primary: '',
+  secondary: '',
+  ghost: '',
+  destructive: '',
 };
 
 export function Button({ variant = 'secondary', size = 'md', children, className, ...rest }: ButtonProps): React.JSX.Element {
@@ -49,11 +54,11 @@ export function Button({ variant = 'secondary', size = 'md', children, className
     : variant === 'ghost'
       ? 'text'
       : 'default';
-  const lobeVariant = variant === 'secondary' ? 'filled' : variant === 'ghost' ? 'text' : undefined;
+  const lobeVariant = variant === 'ghost' ? 'text' : undefined;
 
   return (
     <LobeButton
-      className={clsx('press inline-flex items-center justify-center gap-1.5 font-medium rounded-full whitespace-nowrap', BUTTON_VARIANT_CLASSNAMES[variant], className)}
+      className={clsx('press inline-flex items-center justify-center gap-1.5 font-medium rounded-full whitespace-nowrap', className)}
       danger={danger}
       size={BUTTON_SIZE_MAP[size]}
       type={type}
@@ -152,7 +157,7 @@ export function Notice({ tone = 'info', icon, title, children, className }: Noti
       className={className}
       description={children}
       icon={icon}
-      message={title}
+      title={title}
       showIcon={Boolean(icon)}
       type={NOTICE_TYPES[tone]}
       variant="filled"
@@ -160,19 +165,30 @@ export function Notice({ tone = 'info', icon, title, children, className }: Noti
   );
 }
 
-interface EmptyStateProps {
+interface EmptyProps {
   text: string;
-  icon?: ElementType<{ size?: number; className?: string }>;
+  title?: ReactNode;
+  icon?: React.FC<any>;
+  emoji?: string;
+  action?: ReactNode;
+  className?: string;
 }
 
-export function EmptyState({ text, icon: Icon }: EmptyStateProps): React.JSX.Element {
+export function Empty({ text, title, icon: Icon, emoji, action, className }: EmptyProps): React.JSX.Element {
   return (
-    <div className="flex flex-col items-center justify-center gap-3 rounded-2xl border border-dashed border-separator-thin py-14 text-center">
-      {Icon && <Icon size={24} className="text-txt-quaternary" />}
-      <p className="text-[14px] text-txt-tertiary">{text}</p>
-    </div>
+    <LobeEmpty
+      action={action}
+      className={clsx('flex flex-col items-center justify-center text-center', className)}
+      description={text}
+      emoji={emoji}
+      icon={Icon}
+      title={title}
+    />
   );
 }
+
+/** @deprecated use Empty instead */
+export { Empty as EmptyState };
 
 export const inputClass = 'w-full rounded-lg border border-separator bg-bg-raised px-3 py-2 text-[13px] font-mono text-txt-primary placeholder:text-txt-quaternary shadow-[inset_0_1px_0_rgba(255,255,255,0.02)] hover:border-separator hover:bg-bg-surface focus:border-sys-blue focus:bg-bg-elevated focus:ring-2 focus:ring-sys-blue/20 focus:outline-none';
 
@@ -291,6 +307,89 @@ export function SegmentedTabs({ value, onValueChange, options, className }: Segm
       value={value}
       variant="filled"
       onChange={(next) => onValueChange(String(next))}
+    />
+  );
+}
+
+interface CopyButtonProps {
+  content: string;
+  className?: string;
+}
+
+export function CopyButton({ content, className }: CopyButtonProps): React.JSX.Element {
+  return <LobeCopyButton className={className} content={content} />;
+}
+
+type ActionIconSize = 'small' | 'middle' | 'large';
+type ActionIconVariant = 'borderless' | 'filled' | 'outlined';
+
+interface ActionIconProps {
+  icon: React.FC<any>;
+  title: string;
+  size?: ActionIconSize;
+  variant?: ActionIconVariant;
+  disabled?: boolean;
+  loading?: boolean;
+  onClick?: () => void;
+  className?: string;
+}
+
+const ACTION_ICON_SIZE_MAP: Record<ActionIconSize, string> = {
+  small: 'small',
+  middle: 'middle',
+  large: 'large',
+};
+
+export function ActionIcon({ icon: Icon, title, size = 'small', variant = 'borderless', disabled, loading, onClick, className }: ActionIconProps): React.JSX.Element {
+  return (
+    <LobeActionIcon
+      className={className}
+      disabled={disabled}
+      icon={Icon}
+      loading={loading}
+      size={ACTION_ICON_SIZE_MAP[size] as 'small' | 'middle' | 'large'}
+      title={title}
+      variant={variant}
+      onClick={onClick}
+    />
+  );
+}
+
+interface TooltipProps {
+  title: ReactNode;
+  children: ReactNode;
+  className?: string;
+  placement?: 'top' | 'bottom' | 'left' | 'right';
+}
+
+export function Tooltip({ title, children, className, placement = 'top' }: TooltipProps): React.JSX.Element {
+  return (
+    <LobeTooltip className={className} placement={placement} title={title}>
+      {children}
+    </LobeTooltip>
+  );
+}
+
+interface CodeDiffProps {
+  oldContent: string;
+  newContent: string;
+  language?: string;
+  fileName?: string;
+  showHeader?: boolean;
+  viewMode?: 'split' | 'unified';
+  className?: string;
+}
+
+export function CodeDiff({ oldContent, newContent, language, fileName, showHeader = true, viewMode = 'split', className }: CodeDiffProps): React.JSX.Element {
+  return (
+    <LobeCodeDiff
+      className={className}
+      fileName={fileName}
+      language={language}
+      newContent={newContent}
+      oldContent={oldContent}
+      showHeader={showHeader}
+      viewMode={viewMode}
     />
   );
 }
