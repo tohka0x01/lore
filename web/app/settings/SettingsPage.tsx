@@ -124,7 +124,7 @@ export default function SettingsPage(): React.JSX.Element {
         <div className="space-y-5">
           {grouped.map((section, index) => (
             <div key={section.id} className={clsx('animate-in', `stagger-${Math.min(index + 1, 6)}`)}>
-              <Section title={section.label} subtitle={section.description}>
+              <Section>
                 <SettingsSectionEditor
                   section={section}
                   data={data}
