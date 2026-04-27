@@ -6,17 +6,22 @@ vi.mock('../../../../server/auth', () => ({
 vi.mock('../../../../server/lore/jobs/registry', () => ({
   runJobNow: vi.fn(),
 }));
+vi.mock('../../../../server/lore/jobs/jobDefinitions', () => ({
+  registerBuiltInJobs: vi.fn(),
+}));
 vi.mock('../../../../server/lore/ops/backup', () => ({
   restoreDatabase: vi.fn(),
   readLocalBackup: vi.fn(),
 }));
 
 import { requireBearerAuth } from '../../../../server/auth';
+import { registerBuiltInJobs } from '../../../../server/lore/jobs/jobDefinitions';
 import { runJobNow } from '../../../../server/lore/jobs/registry';
 import { readLocalBackup, restoreDatabase } from '../../../../server/lore/ops/backup';
 import { POST } from '../route';
 
 const mockRequireBearerAuth = vi.mocked(requireBearerAuth);
+const mockRegisterBuiltInJobs = vi.mocked(registerBuiltInJobs);
 const mockRunJobNow = vi.mocked(runJobNow);
 const mockRestoreDatabase = vi.mocked(restoreDatabase);
 const mockReadLocalBackup = vi.mocked(readLocalBackup);
@@ -41,6 +46,7 @@ describe('/api/backup route', () => {
     const body = await response.json();
 
     expect(mockRunJobNow).toHaveBeenCalledWith('backup');
+    expect(mockRegisterBuiltInJobs).toHaveBeenCalledTimes(1);
     expect(response.status).toBe(200);
     expect(body).toEqual({ results: backupResult });
     expect(body.results).not.toHaveProperty('webdav');

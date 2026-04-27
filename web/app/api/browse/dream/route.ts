@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { requireApiAuth, requireBearerAuth } from '../../../../server/auth';
 import { jsonContractError } from '../../../../server/lore/contracts';
 import { getDreamDiary, getDreamEntry, getDreamConfig, updateDreamConfig, rollbackDream } from '../../../../server/lore/dream/dreamDiary';
+import { registerBuiltInJobs } from '../../../../server/lore/jobs/jobDefinitions';
 import { runJobNow } from '../../../../server/lore/jobs/registry';
 import {
   isDreamWorkflowTerminalEvent,
@@ -115,6 +116,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
       return NextResponse.json(await rollbackDream(body.id));
     }
     // Default: run dream
+    registerBuiltInJobs();
     const result = await runJobNow('dream');
     return NextResponse.json(result.result);
   } catch (error) {

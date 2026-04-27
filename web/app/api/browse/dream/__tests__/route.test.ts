@@ -16,6 +16,9 @@ vi.mock('../../../../../server/lore/jobs/registry', () => ({
   registerJob: vi.fn(),
   runJobNow: vi.fn(),
 }));
+vi.mock('../../../../../server/lore/jobs/jobDefinitions', () => ({
+  registerBuiltInJobs: vi.fn(),
+}));
 vi.mock('../../../../../server/lore/dream/dreamWorkflow', () => ({
   isDreamWorkflowTerminalEvent: vi.fn(),
   listDreamWorkflowEvents: vi.fn(),
@@ -30,11 +33,13 @@ import {
   updateDreamConfig,
   rollbackDream,
 } from '../../../../../server/lore/dream/dreamDiary';
+import { registerBuiltInJobs } from '../../../../../server/lore/jobs/jobDefinitions';
 import { runJobNow } from '../../../../../server/lore/jobs/registry';
 import { GET, POST } from '../route';
 
 const mockRequireBearerAuth = vi.mocked(requireBearerAuth);
 const mockRequireApiAuth = vi.mocked(requireApiAuth);
+const mockRegisterBuiltInJobs = vi.mocked(registerBuiltInJobs);
 const mockRunJobNow = vi.mocked(runJobNow);
 const mockGetDreamDiary = vi.mocked(getDreamDiary);
 const mockGetDreamEntry = vi.mocked(getDreamEntry);
@@ -83,6 +88,7 @@ describe('/api/browse/dream route', () => {
     const body = await response.json();
 
     expect(mockRunJobNow).toHaveBeenCalledWith('dream');
+    expect(mockRegisterBuiltInJobs).toHaveBeenCalledTimes(1);
     expect(response.status).toBe(200);
     expect(body).toEqual(dreamResult);
   });

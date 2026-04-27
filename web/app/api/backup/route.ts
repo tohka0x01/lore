@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { requireBearerAuth } from '../../../server/auth';
+import { registerBuiltInJobs } from '../../../server/lore/jobs/jobDefinitions';
 import { runJobNow } from '../../../server/lore/jobs/registry';
 
 export const runtime = 'nodejs';
@@ -102,6 +103,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     }
 
     // Default: run backup
+    registerBuiltInJobs();
     const result = await runJobNow('backup');
     return NextResponse.json({ results: result.result });
   } catch (error) {
