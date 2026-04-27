@@ -4,7 +4,7 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import clsx from 'clsx';
 import { AxiosError } from 'axios';
 import { api } from '@/lib/api';
-import { PageCanvas, PageTitle, Section, Badge, Button, Card } from '@/components/ui';
+import { PageCanvas, PageTitle, Section, Badge, Button } from '@/components/ui';
 import { useT } from '@/lib/i18n';
 import { useConfirm } from '@/components/ConfirmDialog';
 import {
@@ -124,7 +124,7 @@ export default function SettingsPage(): React.JSX.Element {
         <div className="space-y-5">
           {grouped.map((section, index) => (
             <div key={section.id} className={clsx('animate-in', `stagger-${Math.min(index + 1, 6)}`)}>
-              <Card className="overflow-hidden p-0">
+              <Section title={section.label} subtitle={section.description}>
                 <SettingsSectionEditor
                   section={section}
                   data={data}
@@ -134,7 +134,7 @@ export default function SettingsPage(): React.JSX.Element {
                   onReset={(key) => void handleReset(key)}
                   right={sectionRight(section)}
                 />
-              </Card>
+              </Section>
             </div>
           ))}
           <BackupActionPanel />

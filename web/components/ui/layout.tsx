@@ -87,7 +87,6 @@ export function Card({ children, className, padded = true, interactive = false }
       )}
       clickable={interactive}
       padding={padded ? 16 : 0}
-      variant="borderless"
     >
       {children}
     </LobeBlock>
