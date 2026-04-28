@@ -468,7 +468,7 @@ export async function rollbackDream(id: number | string): Promise<{
 // ---------------------------------------------------------------------------
 
 export async function getDreamConfig(): Promise<DreamConfig> {
-  const s = await getSettingsBatch(['dream.enabled', 'dream.schedule_hour', 'dream.timezone']);
+  const s = await getSettingsBatch(['dream.enabled', 'dream.cron', 'dream.timezone']);
   let lastRunDate: string | null = null;
   try {
     const r = await sql(`SELECT value FROM app_settings WHERE key = 'dream.last_run_date'`);
@@ -476,7 +476,7 @@ export async function getDreamConfig(): Promise<DreamConfig> {
   } catch {}
   return {
     enabled: s['dream.enabled'] !== false,
-    schedule_hour: Number(s['dream.schedule_hour'] ?? 3),
+    schedule_hour: Number(String(s['dream.cron'] || '0 3 * * *').trim().split(/\s+/)[1] ?? 3),
     timezone: String(s['dream.timezone'] || 'Asia/Shanghai'),
     last_run_date: lastRunDate,
   };
@@ -489,7 +489,7 @@ export async function updateDreamConfig({ enabled, schedule_hour, timezone }: {
 } = {}): Promise<DreamConfig> {
   const patch: Record<string, unknown> = {};
   if (enabled !== undefined) patch['dream.enabled'] = enabled;
-  if (schedule_hour !== undefined) patch['dream.schedule_hour'] = Number(schedule_hour);
+  if (schedule_hour !== undefined) patch['dream.cron'] = `0 ${Number(schedule_hour)} * * *`;
   if (timezone !== undefined) patch['dream.timezone'] = String(timezone);
   if (Object.keys(patch).length > 0) await updateSettings(patch);
   return getDreamConfig();

@@ -15,7 +15,7 @@ let registered = false;
 async function preserveLegacyLastRunDate(context: JobRunContext, key: string): Promise<void> {
   if (context.trigger !== 'scheduled') return;
 
-  const value = context.slot_key?.match(/^daily:(\d{4}-\d{2}-\d{2})/)?.[1] ?? new Date().toISOString().slice(0, 10);
+  const value = context.slot_key?.match(/^(?:daily:|cron:)(\d{4}-\d{2}-\d{2})/)?.[1] ?? new Date().toISOString().slice(0, 10);
   try {
     await sql(
       `INSERT INTO app_settings (key, value, updated_at) VALUES ($1, $2::jsonb, NOW())
@@ -35,11 +35,11 @@ export function registerBuiltInJobs(): void {
     id: 'dream',
     label: 'Dream memory consolidation',
     schedule: {
-      type: 'daily',
+      type: 'cron',
       enabledKey: 'dream.enabled',
-      hourKey: 'dream.schedule_hour',
+      cronKey: 'dream.cron',
       timezoneKey: 'dream.timezone',
-      defaultHour: 3,
+      defaultCron: '0 3 * * *',
       defaultTimezone: 'Asia/Shanghai',
     },
     run: async (context) => {
@@ -53,11 +53,11 @@ export function registerBuiltInJobs(): void {
     id: 'backup',
     label: 'Database backup',
     schedule: {
-      type: 'daily',
+      type: 'cron',
       enabledKey: 'backup.enabled',
-      hourKey: 'backup.schedule_hour',
+      cronKey: 'backup.cron',
       timezoneKey: 'backup.timezone',
-      defaultHour: 4,
+      defaultCron: '0 4 * * *',
       defaultTimezone: 'Asia/Shanghai',
     },
     run: async (context) => {

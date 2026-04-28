@@ -46,7 +46,7 @@ describe('built-in job definitions', () => {
     vi.clearAllMocks();
   });
 
-  it('registers dream and backup jobs in order with daily schedules', () => {
+  it('registers dream and backup jobs in order with cron schedules', () => {
     registerBuiltInJobs();
 
     expect(listRegisteredJobs().map((job) => ({
@@ -58,11 +58,11 @@ describe('built-in job definitions', () => {
         id: 'dream',
         label: 'Dream memory consolidation',
         schedule: {
-          type: 'daily',
+          type: 'cron',
           enabledKey: 'dream.enabled',
-          hourKey: 'dream.schedule_hour',
+          cronKey: 'dream.cron',
           timezoneKey: 'dream.timezone',
-          defaultHour: 3,
+          defaultCron: '0 3 * * *',
           defaultTimezone: 'Asia/Shanghai',
         },
       },
@@ -70,11 +70,11 @@ describe('built-in job definitions', () => {
         id: 'backup',
         label: 'Database backup',
         schedule: {
-          type: 'daily',
+          type: 'cron',
           enabledKey: 'backup.enabled',
-          hourKey: 'backup.schedule_hour',
+          cronKey: 'backup.cron',
           timezoneKey: 'backup.timezone',
-          defaultHour: 4,
+          defaultCron: '0 4 * * *',
           defaultTimezone: 'Asia/Shanghai',
         },
       },
@@ -187,7 +187,7 @@ describe('built-in job definitions', () => {
     registerBuiltInJobs();
 
     const dreamJob = listRegisteredJobs()[0];
-    const result = await dreamJob.run({ job_id: 'dream', trigger: 'scheduled', run_id: 6, slot_key: 'daily:2026-04-26' });
+    const result = await dreamJob.run({ job_id: 'dream', trigger: 'scheduled', run_id: 6, slot_key: 'cron:2026-04-26T03:00' });
 
     expect(result).toEqual({ diary_id: 11 });
     expect(mockSql).toHaveBeenCalledWith(
@@ -216,7 +216,7 @@ describe('built-in job definitions', () => {
     registerBuiltInJobs();
 
     const backupJob = listRegisteredJobs()[1];
-    const result = await backupJob.run({ job_id: 'backup', trigger: 'scheduled', run_id: 4, slot_key: 'daily:2026-04-26' });
+    const result = await backupJob.run({ job_id: 'backup', trigger: 'scheduled', run_id: 4, slot_key: 'cron:2026-04-26T03:00' });
 
     expect(result).toEqual({});
     expect(mockSql).toHaveBeenCalledWith(
@@ -247,7 +247,7 @@ describe('built-in job definitions', () => {
     registerBuiltInJobs();
 
     const dreamJob = listRegisteredJobs()[0];
-    const result = await dreamJob.run({ job_id: 'dream', trigger: 'scheduled', run_id: 8, slot_key: 'daily:2026-04-26' });
+    const result = await dreamJob.run({ job_id: 'dream', trigger: 'scheduled', run_id: 8, slot_key: 'cron:2026-04-26T03:00' });
 
     expect(result).toEqual({ diary_id: 13 });
     expect(consoleErrorSpy).toHaveBeenCalledOnce();
@@ -267,7 +267,7 @@ describe('built-in job definitions', () => {
     registerBuiltInJobs();
 
     const backupJob = listRegisteredJobs()[1];
-    const result = await backupJob.run({ job_id: 'backup', trigger: 'scheduled', run_id: 9, slot_key: 'daily:2026-04-26' });
+    const result = await backupJob.run({ job_id: 'backup', trigger: 'scheduled', run_id: 9, slot_key: 'cron:2026-04-26T03:00' });
 
     expect(result).toEqual({
       local: { filename: 'local.json', path: '/tmp/local.json', size: 10, stats: {} },

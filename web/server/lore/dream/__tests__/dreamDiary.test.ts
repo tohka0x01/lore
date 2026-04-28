@@ -432,7 +432,7 @@ describe('getDreamConfig', () => {
   });
 
   it('reads last_run_date from app_settings', async () => {
-    mockGetSettings.mockResolvedValue({ 'dream.enabled': true, 'dream.schedule_hour': 4, 'dream.timezone': 'UTC' });
+    mockGetSettings.mockResolvedValue({ 'dream.enabled': true, 'dream.cron': '0 4 * * *', 'dream.timezone': 'UTC' });
     mockSql.mockResolvedValueOnce(makeResult([{ value: { value: '2024-01-15' } }]));
     const config = await getDreamConfig();
     expect(config.schedule_hour).toBe(4);
@@ -450,12 +450,12 @@ describe('updateDreamConfig', () => {
 
   it('patches settings and returns updated config', async () => {
     mockUpdateSettings.mockResolvedValue({} as any);
-    mockGetSettings.mockResolvedValue({ 'dream.enabled': false, 'dream.schedule_hour': 5 });
+    mockGetSettings.mockResolvedValue({ 'dream.enabled': false, 'dream.cron': '0 5 * * *' });
     mockSql.mockRejectedValueOnce(new Error('no table'));
 
     const config = await updateDreamConfig({ enabled: false, schedule_hour: 5 });
     expect(mockUpdateSettings).toHaveBeenCalledWith(
-      expect.objectContaining({ 'dream.enabled': false, 'dream.schedule_hour': 5 }),
+      expect.objectContaining({ 'dream.enabled': false, 'dream.cron': '0 5 * * *' }),
     );
     expect(config.enabled).toBe(false);
     expect(config.schedule_hour).toBe(5);

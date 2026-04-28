@@ -300,13 +300,13 @@ export function useDreamPageController({ confirmDialog, t }: UseDreamPageControl
     setRunning(true);
     try {
       const runRequest = api.post('/browse/dream', { action: 'run' }).then((response) => response.data as DreamEntry);
+      const result = await runRequest;
       let openedEntryId: string | number | null = null;
       const nextRunningEntry = await waitForNewRunningEntry(knownIds);
       if (nextRunningEntry) {
         openedEntryId = nextRunningEntry.id;
         navigateToEntry(nextRunningEntry.id);
       }
-      const result = await runRequest;
       if (openedEntryId == null && result?.id != null) {
         navigateToEntry(result.id);
       }

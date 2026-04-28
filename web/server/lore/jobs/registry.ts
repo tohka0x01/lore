@@ -8,7 +8,7 @@ import {
   startManualJobRun,
 } from './history';
 import { toJsonSafeValue } from './jsonSafe';
-import { shouldRunDailySchedule } from './schedule';
+import { shouldRunCronSchedule } from './schedule';
 import type { JobRunContext, RegisteredJob } from './types';
 
 const CHECK_INTERVAL_MS = 60_000;
@@ -57,13 +57,13 @@ export async function runDueJobsForTest(now: Date = new Date()): Promise<void> {
       const enabled = await getSetting(job.schedule.enabledKey);
       if (enabled === false || enabled === 'false') continue;
 
-      const settings = await getSettings([job.schedule.hourKey, job.schedule.timezoneKey]);
-      const scheduleHour = Number(settings[job.schedule.hourKey] ?? job.schedule.defaultHour);
+      const settings = await getSettings([job.schedule.cronKey, job.schedule.timezoneKey]);
+      const cron = String(settings[job.schedule.cronKey] || job.schedule.defaultCron);
       const timeZone = String(settings[job.schedule.timezoneKey] || job.schedule.defaultTimezone || 'UTC');
-      const schedule = shouldRunDailySchedule(now, timeZone, scheduleHour);
+      const schedule = shouldRunCronSchedule(now, timeZone, cron);
       if (!schedule.due) continue;
 
-      const claim = await claimScheduledJobRun(job.id, schedule.slotKey, { date: schedule.date, hour: schedule.hour });
+      const claim = await claimScheduledJobRun(job.id, schedule.slotKey, { date: schedule.date, hour: schedule.hour, minute: schedule.minute });
       if (!claim.claimed || claim.runId === null) continue;
 
       await executeJob(job, {
@@ -90,6 +90,22 @@ export async function runJobNow(jobId: string): Promise<{ job_id: string; run_id
     slot_key: null,
   });
   return { job_id: job.id, run_id: runId, result };
+}
+
+export async function runJobNowInBackground(jobId: string): Promise<{ job_id: string; run_id: number }> {
+  const job = jobs.get(jobId);
+  if (!job) throw Object.assign(new Error(`Unknown job: ${jobId}`), { status: 404 });
+
+  const { runId } = await startManualJobRun(jobId);
+  void executeJob(job, {
+    job_id: job.id,
+    trigger: 'manual',
+    run_id: runId,
+    slot_key: null,
+  }).catch((error: unknown) => {
+    console.error('[job-scheduler] background job failed', job.id, (error as Error)?.message || String(error));
+  });
+  return { job_id: job.id, run_id: runId };
 }
 
 export async function listJobsWithRuns(): Promise<{ jobs: RegisteredJob[]; recent_runs: Awaited<ReturnType<typeof listJobRuns>> }> {

@@ -371,11 +371,11 @@ export const SETTINGS_SCHEMA: SettingDef[] = [
     description: '启用后，系统每天在指定时间自动执行记忆整理（需配置 View LLM）',
   },
   {
-    key: 'dream.schedule_hour',
+    key: 'dream.cron',
     section: 'dream',
-    label: '做梦时间（小时）',
-    type: 'integer', default: 3, min: 0, max: 23, step: 1,
-    description: '每天自动做梦的小时（0-23，按时区设置）',
+    label: '做梦 Cron',
+    type: 'string', default: '0 3 * * *',
+    description: '定时做梦的 5 段 cron 表达式（分 时 日 月 周，按时区设置）',
   },
   {
     key: 'dream.timezone',
@@ -394,11 +394,11 @@ export const SETTINGS_SCHEMA: SettingDef[] = [
     description: '启用后，系统每天在指定时间自动执行数据库备份',
   },
   {
-    key: 'backup.schedule_hour',
+    key: 'backup.cron',
     section: 'backup',
-    label: '备份时间（小时）',
-    type: 'integer', default: 4, min: 0, max: 23, step: 1,
-    description: '每天自动备份的小时（0-23，按时区设置）',
+    label: '备份 Cron',
+    type: 'string', default: '0 4 * * *',
+    description: '定时备份的 5 段 cron 表达式（分 时 日 月 周；每小时可填 0 * * * *）',
   },
   {
     key: 'backup.timezone',

@@ -3,7 +3,7 @@ import { requireApiAuth, requireBearerAuth } from '../../../../server/auth';
 import { jsonContractError } from '../../../../server/lore/contracts';
 import { getDreamDiary, getDreamEntry, getDreamConfig, updateDreamConfig, rollbackDream } from '../../../../server/lore/dream/dreamDiary';
 import { registerBuiltInJobs } from '../../../../server/lore/jobs/jobDefinitions';
-import { runJobNow } from '../../../../server/lore/jobs/registry';
+import { runJobNowInBackground } from '../../../../server/lore/jobs/registry';
 import {
   isDreamWorkflowTerminalEvent,
   listDreamWorkflowEvents,
@@ -117,8 +117,8 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     }
     // Default: run dream
     registerBuiltInJobs();
-    const result = await runJobNow('dream');
-    return NextResponse.json(result.result);
+    const result = await runJobNowInBackground('dream');
+    return NextResponse.json({ id: result.run_id, status: 'running', job_id: result.job_id });
   } catch (error) {
     return jsonContractError(error, 'Dream failed');
   }

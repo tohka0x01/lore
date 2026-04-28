@@ -75,11 +75,20 @@ export default function MemoryNodeMeta({
 }: MemoryNodeMetaProps): React.JSX.Element | null {
   if (editing) return null;
 
+  const hasProperties = Boolean(
+    node.disclosure
+    || node.last_updated_at
+    || node.created_at
+    || (!node.is_virtual && (node.glossary_keywords?.length ?? 0) > 0)
+  );
+
   return (
     <div className="mb-6 space-y-4">
-      <div className="rounded-2xl border border-separator-thin bg-bg-elevated px-4 py-4 shadow-card md:px-6 md:py-5">
-        <MemoryNodeProperties node={node} refreshData={refreshData} navigateToHistory={navigateToHistory} t={t} />
-      </div>
+      {hasProperties && (
+        <div className="rounded-2xl border border-separator-thin bg-bg-elevated px-4 py-4 shadow-card md:px-6 md:py-5">
+          <MemoryNodeProperties node={node} refreshData={refreshData} navigateToHistory={navigateToHistory} t={t} />
+        </div>
+      )}
       {Array.isArray(node.memory_views) && node.memory_views.length > 0 && (
         <MemoryViewsSection memoryViews={node.memory_views} t={t} />
       )}

@@ -1,12 +1,12 @@
 export type JobTrigger = 'scheduled' | 'manual';
 export type JobRunStatus = 'claimed' | 'running' | 'completed' | 'error' | 'skipped';
 
-export interface DailyJobSchedule {
-  type: 'daily';
+export interface CronJobSchedule {
+  type: 'cron';
   enabledKey: string;
-  hourKey: string;
+  cronKey: string;
   timezoneKey: string;
-  defaultHour: number;
+  defaultCron: string;
   defaultTimezone?: string;
 }
 
@@ -20,7 +20,7 @@ export interface JobRunContext {
 export interface RegisteredJob {
   id: string;
   label: string;
-  schedule: DailyJobSchedule;
+  schedule: CronJobSchedule;
   run: (context: JobRunContext) => Promise<unknown>;
 }
 
