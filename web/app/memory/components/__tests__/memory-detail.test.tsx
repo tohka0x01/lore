@@ -28,7 +28,7 @@ vi.mock('@lobehub/ui/es/Input/TextArea', () => ({
 
 vi.mock('@lobehub/ui/es/Select/Select', () => ({
   default: ({ options = [], value }: { options?: Array<{ label: React.ReactNode; value: string }>; value?: string }) => (
-    <select value={value} readOnly>
+    <select value={value}>
       {options.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
     </select>
   ),
@@ -56,6 +56,7 @@ vi.mock('../../../../../lib/i18n', () => ({
 }));
 
 import MemoryEditor from '../MemoryEditor';
+import MemoryNodeHeader from '../MemoryNodeHeader';
 import MemoryViewsSection from '../MemoryViewsSection';
 
 describe('memory detail Lobe wrappers', () => {
@@ -78,6 +79,33 @@ describe('memory detail Lobe wrappers', () => {
     expect(html).toContain('type="number"');
     expect(html).toContain('data-app-text-area="true"');
     expect(html).toContain('when useful');
+  });
+
+  it('does not render history action in the node header', () => {
+    const html = renderToStaticMarkup(
+      <MemoryNodeHeader
+        node={{ content: 'body', priority: 1 }}
+        data={{ node: null, children: [], breadcrumbs: [{ label: 'Memory', path: '' }, { label: 'agent', path: 'agent' }] }}
+        domain="core"
+        path="agent"
+        isRoot={false}
+        editing={false}
+        moving={false}
+        creating={false}
+        sidebarOpen
+        setSidebarOpen={() => undefined}
+        startEditing={() => undefined}
+        setCreating={() => undefined}
+        setMoving={() => undefined}
+        handleRebuildViews={async () => undefined}
+        rebuildingViews={false}
+        handleDelete={async () => undefined}
+        navigateTo={() => undefined}
+        t={(key) => key}
+      />,
+    );
+
+    expect(html).not.toContain('History');
   });
 
   it('renders LLM model metadata through Badge', () => {

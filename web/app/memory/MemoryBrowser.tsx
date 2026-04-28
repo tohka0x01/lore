@@ -56,6 +56,7 @@ export default function MemoryBrowser(): React.JSX.Element {
     handleSave,
     handleDelete,
     handleRebuildViews,
+    navigateToHistory,
   } = useMemoryBrowserController({ confirmDialog: confirm, t, toast });
   const hasEmptyState = !data.children?.length && !node?.content && !node?.memory_views?.length;
 
@@ -119,6 +120,7 @@ export default function MemoryBrowser(): React.JSX.Element {
                       editing={editing}
                       refreshData={refreshData}
                       navigateTo={navigateTo}
+                      navigateToHistory={navigateToHistory}
                       t={t}
                     />
                   </>
@@ -146,7 +148,7 @@ export default function MemoryBrowser(): React.JSX.Element {
                 />
 
                 <div className="space-y-6">
-                  <MemoryChildrenList childItems={data.children as ChildItem[]} domain={domain} isRoot={isRoot} navigateTo={navigateTo} />
+                  <MemoryChildrenList childItems={data.children as ChildItem[]} domain={domain} isRoot={isRoot} navigateTo={navigateTo} navigateToHistory={navigateToHistory} />
 
                   {hasEmptyState && (
                     <div className="py-16 text-center">
