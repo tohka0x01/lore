@@ -41,7 +41,7 @@ jobs:
           git fetch origin plugin 2>/dev/null && git checkout plugin || git checkout --orphan plugin
 
           git rm -rf . 2>/dev/null || true
-          find . -mindepth 1 ! -name .git -exec rm -rf {} +
+          find . -mindepth 1 -maxdepth 1 ! -name .git -exec rm -rf {} +
 
           cp -a /tmp/lore-plugin-staging/claudecode-plugin/.claude-plugin .
           cp -a /tmp/lore-plugin-staging/claudecode-plugin/.mcp.json .
