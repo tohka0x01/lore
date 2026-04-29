@@ -24,6 +24,7 @@ describe('normalizeClientType', () => {
     expect(normalizeClientType('openclaw')).toBe('openclaw');
     expect(normalizeClientType(' hermes ')).toBe('hermes');
     expect(normalizeClientType('Codex')).toBe('codex');
+    expect(normalizeClientType('Pi')).toBe('pi');
     expect(normalizeClientType('mcp')).toBe('mcp');
     expect(normalizeClientType('Admin')).toBe('admin');
   });

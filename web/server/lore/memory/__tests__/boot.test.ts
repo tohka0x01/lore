@@ -309,6 +309,34 @@ describe('bootView', () => {
     });
   });
 
+  it('loads the Pi-specific agent boot node when client_type is pi', async () => {
+    mockSql
+      .mockResolvedValueOnce({ rows: [{ node_uuid: 'agent-uuid', priority: 0, disclosure: null, content: 'Agent rules' }], rowCount: 1 } as any)
+      .mockResolvedValueOnce({ rows: [{ node_uuid: 'soul-uuid', priority: 1, disclosure: null, content: 'Soul baseline' }], rowCount: 1 } as any)
+      .mockResolvedValueOnce({ rows: [{ node_uuid: 'user-uuid', priority: 2, disclosure: null, content: 'User profile' }], rowCount: 1 } as any)
+      .mockResolvedValueOnce({ rows: [{ node_uuid: 'pi-uuid', priority: 1, disclosure: null, content: 'Pi rules' }], rowCount: 1 } as any)
+      .mockResolvedValueOnce({ rows: [], rowCount: 0 } as any);
+
+    const result = await bootView({ client_type: 'pi' });
+
+    expect(result.total).toBe(4);
+    expect(result.loaded).toBe(4);
+    expect(result.selected_client_type).toBe('pi');
+    expect(result.includes_all_clients).toBe(false);
+    expect(result.core_memories.map((memory) => memory.uri)).toEqual([
+      'core://agent',
+      'core://soul',
+      'preferences://user',
+      'core://agent/pi',
+    ]);
+    expect(result.nodes[3]).toMatchObject({
+      uri: 'core://agent/pi',
+      scope: 'client',
+      client_type: 'pi',
+      state: 'initialized',
+    });
+  });
+
   it('returns the full protected boot manifest for admin/setup views', async () => {
     mockSql
       .mockResolvedValueOnce({ rows: [{ node_uuid: 'agent-uuid', priority: 0, disclosure: null, content: 'Agent rules' }], rowCount: 1 } as any)
@@ -318,12 +346,13 @@ describe('bootView', () => {
       .mockResolvedValueOnce({ rows: [{ node_uuid: 'openclaw-uuid', priority: 1, disclosure: null, content: 'OpenClaw rules' }], rowCount: 1 } as any)
       .mockResolvedValueOnce({ rows: [{ node_uuid: 'hermes-uuid', priority: 1, disclosure: null, content: 'Hermes rules' }], rowCount: 1 } as any)
       .mockResolvedValueOnce({ rows: [{ node_uuid: 'codex-uuid', priority: 1, disclosure: null, content: 'Codex rules' }], rowCount: 1 } as any)
+      .mockResolvedValueOnce({ rows: [{ node_uuid: 'pi-uuid', priority: 1, disclosure: null, content: 'Pi rules' }], rowCount: 1 } as any)
       .mockResolvedValueOnce({ rows: [], rowCount: 0 } as any);
 
     const result = await bootView({ client_type: 'admin' });
 
-    expect(result.total).toBe(7);
-    expect(result.loaded).toBe(7);
+    expect(result.total).toBe(8);
+    expect(result.loaded).toBe(8);
     expect(result.selected_client_type).toBe('admin');
     expect(result.includes_all_clients).toBe(true);
     expect(result.core_memories.map((memory) => memory.uri)).toEqual(getBootUris());

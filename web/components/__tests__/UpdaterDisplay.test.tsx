@@ -34,6 +34,17 @@ describe('UpdaterDisplay', () => {
     expect(html).toContain('data-alt="Codex"');
   });
 
+  it('renders Pi avatar alt text', () => {
+    const html = renderToStaticMarkup(
+      <UpdaterDisplay
+        updaters={[{ client_type: 'pi', source: 'api:test', updated_at: '2026-04-29T10:00:00.000Z', event_count: 1 }]}
+        compact
+      />,
+    );
+
+    expect(html).toContain('data-alt="Pi"');
+  });
+
   it('renders history entry click target when history handler is provided', () => {
     const html = renderToStaticMarkup(
       <UpdaterDisplay
