@@ -65,25 +65,31 @@ describe('Pi extension hooks', () => {
 
   it('before_agent_start injects guidance and recall as a message', async () => {
     const pi = makeMockPi();
-    vi.stubGlobal('fetch', vi.fn()
-      .mockResolvedValueOnce({
-        ok: true,
-        status: 200,
-        statusText: 'OK',
-        text: async () => JSON.stringify({
-          core_memories: [{ uri: 'core://agent/pi', content: 'Pi runtime rules', priority: 1 }],
-          recent_memories: [],
-        }),
-      })
-      .mockResolvedValueOnce({
-        ok: true,
-        status: 200,
-        statusText: 'OK',
-        text: async () => JSON.stringify({
-          event_log: { query_id: 'qid-2' },
-          items: [{ uri: 'core://project', score: 0.7, matched_on: ['lexical'] }],
-        }),
-      }));
+    vi.stubGlobal('fetch', vi.fn(async (url: string, init: any) => {
+      const body = init?.body ? JSON.parse(String(init.body)) : {};
+      if (String(url).includes('/browse/boot')) {
+        return {
+          ok: true, status: 200, statusText: 'OK',
+          text: async () => JSON.stringify({
+            core_memories: [{ uri: 'core://agent/pi', content: 'Pi runtime rules', priority: 1 }],
+            recent_memories: [],
+          }),
+        };
+      }
+      if (String(url).includes('/browse/recall') && body?.query === 'what now?') {
+        return {
+          ok: true, status: 200, statusText: 'OK',
+          text: async () => JSON.stringify({
+            event_log: { query_id: 'qid-2' },
+            items: [{ uri: 'core://project', score: 0.7, matched_on: ['lexical'] }],
+          }),
+        };
+      }
+      return {
+        ok: true, status: 200, statusText: 'OK',
+        text: async () => JSON.stringify({ items: [] }),
+      };
+    }));
 
     registerHooks(pi as any, {
       baseUrl: 'http://host',

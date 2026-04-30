@@ -184,7 +184,7 @@ async function fetchStartupRecallSection(pluginCfg: any, sessionId: string | und
 
     const recallResults = await Promise.all(recallQueries.map(q => q.promise));
     const blocks = recallQueries
-      .map((q, i) => formatRecallBlock(recallResults[i]?.items || [], 2, sessionId, recallResults[i]?.event_log?.query_id))
+      .map((_, i) => formatRecallBlock(recallResults[i]?.items || [], 2, sessionId, recallResults[i]?.event_log?.query_id))
       .filter(Boolean);
 
     const recallText = blocks.length > 0
@@ -269,7 +269,8 @@ export function registerHooks(pi: any, pluginCfg: any, guidance: string) {
         }
       }
 
-      out.systemPrompt = [event?.systemPrompt || '', guidance, cachedBootSection]
+      const startupRecall = await fetchStartupRecallSection(pluginCfg, sessionId);
+      out.systemPrompt = [event?.systemPrompt || '', guidance, cachedBootSection, startupRecall]
         .filter(Boolean)
         .join('\n\n');
     }
