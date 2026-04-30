@@ -73,11 +73,11 @@ export function registerTools(pi: any, pluginCfg: any) {
     label: 'Lore get node',
     description: 'Open a memory node to inspect its full content, metadata, and nearby structure. Pass session_id and query_id from the <recall> tag to enable read tracking and adoption.',
     parameters: Type.Object({
-      uri: Type.String({ description: 'Full memory URI such as core://agent/pi.' }),
-      nav_only: Type.Optional(Type.Boolean()),
-      session_id: Type.Optional(Type.String()),
-      query_id: Type.Optional(Type.String()),
-      __session_id: Type.Optional(Type.String()),
+      uri: Type.String({ description: 'Full memory URI such as core://agent/pi. Use core:// or project:// to browse a domain root; bare words are paths in the default domain.' }),
+      nav_only: Type.Optional(Type.Boolean({ description: 'If true, skip expensive glossary processing and only return structure/navigation info.' })),
+      session_id: Type.Optional(Type.String({ description: 'Session identifier from the <recall session_id="..."> tag. Enables per-session read tracking.' })),
+      query_id: Type.Optional(Type.String({ description: 'Query identifier from the <recall query_id="..."> tag. Marks this recall as adopted for usage tracking.' })),
+      __session_id: Type.Optional(Type.String({ description: 'Internal session tracking field (auto-injected by hooks).' })),
     }),
     promptSnippet: 'Open a Lore memory node by URI.',
     promptGuidelines: [
@@ -131,9 +131,9 @@ export function registerTools(pi: any, pluginCfg: any) {
     label: 'Lore search',
     description: 'Search memories by keyword, semantic similarity, or both. Returns full content for top results.',
     parameters: Type.Object({
-      query: Type.String(),
+      query: Type.String({ description: 'Search query text. Use a meaningful keyword or phrase; passing an empty string or * with a domain filter browses that domain root.' }),
       domain: Type.Optional(Type.String({ description: 'Optional domain filter to narrow the search.' })),
-      limit: Type.Optional(Type.Number({ minimum: 1, maximum: 100 })),
+      limit: Type.Optional(Type.Number({ minimum: 1, maximum: 100, description: 'Maximum number of results (1-100).' })),
       content_limit: Type.Optional(Type.Number({ minimum: 0, maximum: 20, description: 'How many top results include full content (default 5).' })),
     }),
     promptSnippet: 'Search Lore long-term memory for durable project or user context.',
@@ -142,16 +142,23 @@ export function registerTools(pi: any, pluginCfg: any) {
     ],
     async execute(_toolCallId: string, params: any = {}, _signal?: AbortSignal, _onUpdate?: unknown, _ctx?: any) {
       const query = String(params?.query || '').trim();
+      const domainFilter = typeof params?.domain === 'string' && params.domain.trim() ? params.domain.trim() : null;
       const safeLimit = Number.isFinite(params?.limit) ? Math.max(1, Math.min(100, params.limit)) : 10;
       const safeContentLimit = Number.isFinite(params?.content_limit) ? Math.max(0, Math.min(20, params.content_limit)) : 5;
       try {
+        if (domainFilter && (!query || query === '*')) {
+          const qs = new URLSearchParams({ domain: domainFilter, path: '', nav_only: 'true' });
+          const data = await fetchJson(pluginCfg, `/browse/node?${qs.toString()}`, { method: 'GET' });
+          const text = `Domain root: ${domainFilter}://\n\n${formatNode(data)}`;
+          return textResult(text, { ok: true, mode: 'domain_root', domain: domainFilter, node: data?.node, children: data?.children || [] });
+        }
         let data;
         if (hasRecallConfig(pluginCfg)) {
           data = await fetchJson(pluginCfg, '/browse/search', {
             method: 'POST',
             body: JSON.stringify({
               query,
-              domain: typeof params?.domain === 'string' && params.domain.trim() ? params.domain.trim() : null,
+              domain: domainFilter,
               limit: safeLimit,
               content_limit: safeContentLimit,
               hybrid: true,
@@ -159,7 +166,7 @@ export function registerTools(pi: any, pluginCfg: any) {
           });
         } else {
           const qs = new URLSearchParams({ query });
-          if (typeof params?.domain === 'string' && params.domain.trim()) qs.set('domain', params.domain.trim());
+          if (domainFilter) qs.set('domain', domainFilter);
           qs.set('limit', String(safeLimit));
           qs.set('content_limit', String(safeContentLimit));
           data = await fetchJson(pluginCfg, `/browse/search?${qs.toString()}`, { method: 'GET' });
@@ -173,7 +180,7 @@ export function registerTools(pi: any, pluginCfg: any) {
               if (Array.isArray(item?.matched_on) && item.matched_on.length > 0) parts.push(`via: ${item.matched_on.join('+')}`);
               return `${parts.join(', ')})\n   ${item.snippet}`;
             }).join('\n')
-          : 'No matching memories found.';
+          : `No matching memories found${domainFilter ? ` in domain ${domainFilter}` : ''}.`;
         const suffix = meta?.semantic_error ? `\n\nSemantic fallback skipped: ${meta.semantic_error}` : '';
         return textResult(`${text}${suffix}`, { ok: true, results, meta });
       } catch (error: any) {
@@ -191,7 +198,7 @@ export function registerTools(pi: any, pluginCfg: any) {
       try {
         const data = await fetchJson(pluginCfg, '/browse/domains', { method: 'GET' });
         const text = Array.isArray(data) && data.length > 0
-          ? data.map((item: any) => `- ${item.domain} (${item.root_count})`).join('\n')
+          ? data.map((item: any) => `- ${item.domain} (${item.root_count}) — open root with lore_get_node uri=\"${item.domain}://\" nav_only=true`).join('\n')
           : 'No domains found.';
         return textResult(text, { ok: true, domains: data });
       } catch (error: any) {
@@ -205,10 +212,10 @@ export function registerTools(pi: any, pluginCfg: any) {
     label: 'Lore create node',
     description: 'Create a new long-term memory node for durable facts, rules, project knowledge, or conclusions worth keeping.',
     parameters: Type.Object({
-      content: Type.String(),
-      priority: Type.Number({ minimum: 0 }),
-      glossary: Type.Array(Type.String()),
-      uri: Type.Optional(Type.String({ description: 'Optional final memory URI when you know exactly where to place it.' })),
+      content: Type.String({ description: 'Memory text body.' }),
+      priority: Type.Number({ minimum: 0, description: 'Importance tier: 0=core identity (max 5), 1=key facts (max 15), 2+=general.' }),
+      glossary: Type.Array(Type.String({ description: 'Search keywords to associate with this memory for later retrieval.' })),
+      uri: Type.Optional(Type.String({ description: 'Optional final memory URI when you know exactly where to place it. Intermediate paths in the URI must already exist.' })),
       domain: Type.Optional(Type.String({ description: 'Target memory domain when not using uri.' })),
       parent_path: Type.Optional(Type.String({ description: 'Parent location inside the chosen domain.' })),
       title: Type.Optional(Type.String({ description: 'Final path segment for the new memory.' })),
@@ -266,12 +273,12 @@ export function registerTools(pi: any, pluginCfg: any) {
     description: 'Revise an existing long-term memory node when stored knowledge becomes clearer, newer, or more accurate.',
     parameters: Type.Object({
       uri: Type.String({ description: 'Full memory URI for the node you want to revise.' }),
-      content: Type.Optional(Type.String()),
-      priority: Type.Optional(Type.Number({ minimum: 0 })),
-      disclosure: Type.Optional(Type.String()),
+      content: Type.Optional(Type.String({ description: 'New content to replace the existing content.' })),
+      priority: Type.Optional(Type.Number({ minimum: 0, description: 'New priority level.' })),
+      disclosure: Type.Optional(Type.String({ description: 'New disclosure / trigger condition.' })),
       session_id: Type.Optional(Type.String({ description: 'Session ID for read-before-update validation.' })),
-      glossary_add: Type.Optional(Type.Array(Type.String())),
-      glossary_remove: Type.Optional(Type.Array(Type.String())),
+      glossary_add: Type.Optional(Type.Array(Type.String({ description: 'Keywords to add to the glossary.' }))),
+      glossary_remove: Type.Optional(Type.Array(Type.String({ description: 'Keywords to remove from the glossary.' }))),
     }),
     async execute(_toolCallId: string, params: any = {}, _signal?: AbortSignal, _onUpdate?: unknown, _ctx?: any) {
       const body: any = {};

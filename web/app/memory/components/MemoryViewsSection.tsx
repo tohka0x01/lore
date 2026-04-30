@@ -6,10 +6,11 @@ import type { MemoryView } from '../useMemoryBrowserController';
 interface MemoryViewsSectionProps {
   memoryViews: MemoryView[];
   t: (key: string) => string;
+  defaultOpen?: boolean;
 }
 
-export default function MemoryViewsSection({ memoryViews, t }: MemoryViewsSectionProps): React.JSX.Element {
-  const [open, setOpen] = useState(false);
+export default function MemoryViewsSection({ memoryViews, t, defaultOpen = false }: MemoryViewsSectionProps): React.JSX.Element {
+  const [open, setOpen] = useState(defaultOpen);
 
   return (
     <section className="rounded-2xl border border-separator-thin bg-bg-elevated shadow-card">

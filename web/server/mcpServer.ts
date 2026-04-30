@@ -96,7 +96,7 @@ export function createMcpServer(context: McpServerContext = {}): InstanceType<ty
     'lore_get_node',
     'Open a memory node to inspect its full content, metadata, and nearby structure. Pass session_id and query_id from the <recall> tag to enable read tracking and adoption.',
     {
-      uri: z.string().describe('Full memory URI for the node you want to open, such as core://soul.'),
+      uri: z.string().describe('Full memory URI for the node you want to open, such as core://soul. Use core:// or project:// to browse a domain root; bare words are paths in the default domain.'),
       nav_only: z.boolean().optional().describe('If true, skip expensive glossary processing.'),
       session_id: z.string().optional().describe('Session identifier from the <recall session_id="..."> tag.'),
       query_id: z.string().optional().describe('Query identifier from the <recall query_id="..."> tag. Marks this recall as adopted.'),
@@ -144,7 +144,7 @@ export function createMcpServer(context: McpServerContext = {}): InstanceType<ty
     'lore_search',
     'Search memories by keyword, semantic similarity, or both. Returns full content for top results — use this when you need to read memory content directly without a separate get_node call.',
     {
-      query: z.string().describe('Search query text.'),
+      query: z.string().describe('Search query text. Not a wildcard — use a meaningful keyword or phrase. Passing an empty string or * with a domain filter browses that domain root.'),
       domain: z.string().optional().describe('Optional domain filter to narrow the search.'),
       limit: z.number().int().min(1).max(100).optional().describe('Maximum number of results.'),
       content_limit: z.number().int().min(0).max(20).optional().describe('How many top results include full content (default 5).'),
@@ -156,10 +156,15 @@ export function createMcpServer(context: McpServerContext = {}): InstanceType<ty
         const safeContentLimit = Number.isFinite(args?.content_limit) ? Math.max(0, Math.min(20, args.content_limit!)) : 5;
         const domainFilter = typeof args?.domain === 'string' && args.domain.trim() ? args.domain.trim() : null;
 
+        if (domainFilter && (!query || query === '*')) {
+          const data = await getNodePayload({ domain: domainFilter, path: '', navOnly: true });
+          return ok(`Domain root: ${domainFilter}://\n\n${formatNode(data)}`);
+        }
+
         const data = await searchMemories({ query, domain: domainFilter, limit: safeLimit, content_limit: safeContentLimit });
         const results = data?.results || [];
 
-        if (results.length === 0) return ok('No matching memories found.');
+        if (results.length === 0) return ok(`No matching memories found${domainFilter ? ` in domain ${domainFilter}` : ''}.`);
 
         const text = results.map((item, idx) => {
           const parts = [`${idx + 1}. ${item.uri} (priority: ${item.priority}, score: ${item.score_display})`];
@@ -188,7 +193,7 @@ export function createMcpServer(context: McpServerContext = {}): InstanceType<ty
       try {
         const data = await listDomains();
         const text = Array.isArray(data) && data.length > 0
-          ? (data as unknown as Record<string, unknown>[]).map((item: Record<string, unknown>) => `- ${item.domain} (${item.root_count})`).join('\n')
+          ? (data as unknown as Record<string, unknown>[]).map((item: Record<string, unknown>) => `- ${item.domain} (${item.root_count}) — open root with lore_get_node uri=\"${item.domain}://\" nav_only=true`).join('\n')
           : 'No domains found.';
         return ok(text);
       } catch (error) {
@@ -205,7 +210,7 @@ export function createMcpServer(context: McpServerContext = {}): InstanceType<ty
       content: z.string().describe('Memory text body.'),
       priority: z.number().int().min(0).describe('Importance tier (0=core identity, 1=key facts, 2+=general).'),
       glossary: z.array(z.string()).describe('Search keywords to associate with this memory.'),
-      uri: z.string().optional().describe('Optional final memory URI. Use when you know exactly where to place it.'),
+      uri: z.string().optional().describe('Optional final memory URI. Use when you know exactly where to place it. Intermediate paths in the URI must already exist.'),
       domain: z.string().optional().describe('Target memory domain when not using uri.'),
       parent_path: z.string().optional().describe('Parent location inside the chosen domain.'),
       title: z.string().optional().describe('Final path segment for the new memory.'),

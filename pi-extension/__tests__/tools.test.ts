@@ -62,4 +62,23 @@ describe('Pi extension tools', () => {
     expect(result.content[0].text).toContain('Lore online');
     expect((fetch as any).mock.calls[0][0]).toBe('http://host/api/health?client_type=pi');
   });
+
+  it('search with wildcard and domain opens the domain root', async () => {
+    const pi = makeMockPi();
+    registerTools(pi as any, makePluginCfg());
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      statusText: 'OK',
+      text: async () => JSON.stringify({
+        node: { uri: 'project://', priority: 0, content: '' },
+        children: [{ uri: 'project://lore_integration', priority: 1, content_snippet: 'Lore' }],
+      }),
+    }));
+
+    const result = await pi.tools.lore_search.execute('tool-1', { query: '*', domain: 'project' }, undefined, undefined, {});
+    expect(result.details.mode).toBe('domain_root');
+    expect(result.content[0].text).toContain('Domain root: project://');
+    expect((fetch as any).mock.calls[0][0]).toBe('http://host/api/browse/node?domain=project&path=&nav_only=true&client_type=pi');
+  });
 });

@@ -383,7 +383,7 @@ class LoreMemoryProvider(MemoryProvider):
                     "type": "object",
                     "additionalProperties": False,
                     "properties": {
-                        "uri": {"type": "string", "description": "Full memory URI (e.g. core://soul)"},
+                        "uri": {"type": "string", "description": "Full memory URI (e.g. core://soul). Use core:// or project:// to browse a domain root; bare words are paths in the default domain."},
                         "nav_only": {"type": "boolean", "description": "If true, skip expensive glossary processing"},
                         "session_id": {"type": "string", "description": "Session identifier from the <recall session_id=\"...\"> tag"},
                         "query_id": {"type": "string", "description": "Query identifier from the <recall query_id=\"...\"> tag"},
@@ -401,7 +401,7 @@ class LoreMemoryProvider(MemoryProvider):
                         "content": {"type": "string", "description": "Memory text body"},
                         "priority": {"type": "integer", "minimum": 0, "description": "Importance tier (0=core identity, 1=key facts, 2+=general)"},
                         "glossary": {"type": "array", "items": {"type": "string"}, "description": "Search keywords to associate with this memory"},
-                        "uri": {"type": "string", "description": "Optional final memory URI. Use when you know exactly where to place it"},
+                        "uri": {"type": "string", "description": "Optional final memory URI. Use when you know exactly where to place it. Intermediate paths in the URI must already exist."},
                         "domain": {"type": "string", "description": "Target memory domain when not using uri"},
                         "parent_path": {"type": "string", "description": "Parent location inside the chosen domain"},
                         "title": {"type": "string", "description": "Final path segment for the new memory"},
@@ -461,7 +461,7 @@ class LoreMemoryProvider(MemoryProvider):
                     "type": "object",
                     "additionalProperties": False,
                     "properties": {
-                        "query": {"type": "string", "description": "Search query text"},
+                        "query": {"type": "string", "description": "Search query text. Not a wildcard — use a meaningful keyword or phrase. Passing an empty string or * with a domain filter browses that domain root."},
                         "domain": {"type": "string", "description": "Optional domain filter to narrow the search"},
                         "limit": {"type": "integer", "description": "Maximum number of results (1-100)"},
                         "content_limit": {"type": "integer", "description": "How many top results include full content (default 5)"},
@@ -619,13 +619,21 @@ class LoreMemoryProvider(MemoryProvider):
         return f"Moved: {old_uri} → {new_uri}"
 
     def _tool_lore_search(self, args: Dict) -> str:
+        query = str(args.get("query", "")).strip()
+        domain = str(args.get("domain", "")).strip() or None
+        if domain and (not query or query == "*"):
+            data = self._client.get_node(domain, "", True)
+            return f"Domain root: {domain}://\n\n{formatters.format_node(data)}"
         data = self._client.search(
-            args.get("query", ""),
-            args.get("domain"),
+            query,
+            domain,
             args.get("limit", 10),
             args.get("content_limit", 5),
         )
-        return formatters.format_search_results(data.get("results", []), data.get("meta"))
+        results = data.get("results", [])
+        if not results:
+            return f"No matching memories found{' in domain ' + domain if domain else ''}."
+        return formatters.format_search_results(results, data.get("meta"))
 
     def _tool_lore_list_domains(self, args: Dict) -> str:
         data = self._client.list_domains()

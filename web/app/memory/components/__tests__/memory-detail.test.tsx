@@ -112,6 +112,7 @@ describe('memory detail Lobe wrappers', () => {
     const html = renderToStaticMarkup(
       <MemoryViewsSection
         t={(key) => key}
+        defaultOpen
         memoryViews={[
           {
             id: 1,

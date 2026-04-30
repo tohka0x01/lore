@@ -253,6 +253,10 @@ describe('rollbackNodeToEvent', () => {
       ['uuid-1'],
     );
     expect(client.query).toHaveBeenCalledWith(
+      expect.stringContaining('UPDATE memories'),
+      [11],
+    );
+    expect(client.query).toHaveBeenCalledWith(
       expect.stringContaining('INSERT INTO memories'),
       ['uuid-1', 'target content'],
     );
@@ -260,6 +264,12 @@ describe('rollbackNodeToEvent', () => {
       expect.stringContaining('UPDATE memories'),
       [11, 12],
     );
+    const queries = client.query.mock.calls.map((call: unknown[]) => String(call[0]));
+    const deprecateIndex = queries.findIndex((sql) => sql.includes('SET deprecated = TRUE'));
+    const insertIndex = queries.findIndex((sql) => sql.includes('INSERT INTO memories'));
+    expect(deprecateIndex).toBeGreaterThan(-1);
+    expect(insertIndex).toBeGreaterThan(-1);
+    expect(deprecateIndex).toBeLessThan(insertIndex);
     expect(client.query).toHaveBeenCalledWith(
       expect.stringContaining('UPDATE edges'),
       ['core', 'agent/prefs', 1, 'target disclosure', true],

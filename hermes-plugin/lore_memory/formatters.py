@@ -182,7 +182,10 @@ def format_domains(domains: List[Dict]) -> str:
     if not domains:
         return "No domains found."
     
-    lines = [f"- {d.get('domain', '')} ({d.get('root_count', 0)})" for d in domains]
+    lines = [
+        f"- {d.get('domain', '')} ({d.get('root_count', 0)}) — open root with lore_get_node uri=\"{d.get('domain', '')}://\" nav_only=true"
+        for d in domains
+    ]
     return "\n".join(lines)
 
 

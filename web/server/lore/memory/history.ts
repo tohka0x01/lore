@@ -273,6 +273,14 @@ export async function rollbackNodeToEvent(
         [node.node_uuid],
       );
       const currentMemory = currentMemoryResult.rows[0] as { id: number; content: string } | undefined;
+      if (currentMemory) {
+        await client.query(
+          `UPDATE memories
+           SET deprecated = TRUE
+           WHERE id = $1`,
+          [currentMemory.id],
+        );
+      }
       const newMemoryResult = await client.query(
         `INSERT INTO memories (node_uuid, content, deprecated, migrated_to, created_at)
          VALUES ($1, $2, FALSE, NULL, NOW())
@@ -283,7 +291,7 @@ export async function rollbackNodeToEvent(
       if (currentMemory) {
         await client.query(
           `UPDATE memories
-           SET deprecated = TRUE, migrated_to = $2
+           SET migrated_to = $2
            WHERE id = $1`,
           [currentMemory.id, newMemoryId],
         );

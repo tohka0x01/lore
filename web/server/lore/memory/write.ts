@@ -232,6 +232,12 @@ export async function updateNodeByPath(
       beforeContent = currentMemory?.content ?? null;
       if (currentMemory && currentMemory.content !== content) {
         contentChanged = true;
+        // Mark old as deprecated first to satisfy any unique partial index
+        // on (node_uuid) WHERE deprecated = FALSE.
+        await client.query(
+          `UPDATE memories SET deprecated = TRUE WHERE id = $1`,
+          [currentMemory.id],
+        );
         const newMemoryResult = await client.query(
           `
             INSERT INTO memories (node_uuid, content, deprecated, migrated_to, created_at)
@@ -242,11 +248,7 @@ export async function updateNodeByPath(
         );
         const newMemoryId = (newMemoryResult.rows[0] as { id: number }).id;
         await client.query(
-          `
-            UPDATE memories
-            SET deprecated = TRUE, migrated_to = $2
-            WHERE id = $1
-          `,
+          `UPDATE memories SET migrated_to = $2 WHERE id = $1`,
           [currentMemory.id, newMemoryId],
         );
       }

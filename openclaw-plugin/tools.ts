@@ -64,7 +64,7 @@ export function registerTools(api: any, pluginCfg: any) {
       additionalProperties: false,
       required: ["uri"],
       properties: {
-        uri: { type: "string", description: "Full memory URI for the node you want to open, such as core://soul." },
+        uri: { type: "string", description: "Full memory URI for the node you want to open, such as core://soul. Use core:// or project:// to browse a domain root; bare words are paths in the default domain." },
         nav_only: { type: "boolean", description: "If true, skip expensive glossary processing." },
         session_id: { type: "string", description: "Session identifier from the <recall session_id=\"...\"> tag. Enables per-session read tracking and recall suppression." },
         query_id: { type: "string", description: "Query identifier from the <recall query_id=\"...\"> tag. Enables recall usage tracking when the node is used in the answer." },
@@ -125,24 +125,31 @@ export function registerTools(api: any, pluginCfg: any) {
       additionalProperties: false,
       required: ["query"],
       properties: {
-        query: { type: "string" },
+        query: { type: "string", description: "Search query text. Use a meaningful keyword or phrase; passing an empty string or * with a domain filter browses that domain root." },
         domain: { type: "string", description: "Optional domain filter to narrow the search." },
-        limit: { type: "integer", minimum: 1, maximum: 100 },
+        limit: { type: "integer", minimum: 1, maximum: 100, description: "Maximum number of results (1-100)." },
         content_limit: { type: "integer", minimum: 0, maximum: 20, description: "How many top results include full content (default 5)." }
       }
     },
     async execute(_id: any, params: any) {
       const query = String(params?.query || "").trim();
+      const domainFilter = typeof params?.domain === "string" && params.domain.trim() ? params.domain.trim() : null;
       const safeLimit = Number.isFinite(params?.limit) ? Math.max(1, Math.min(100, params.limit)) : 10;
       const safeContentLimit = Number.isFinite(params?.content_limit) ? Math.max(0, Math.min(20, params.content_limit)) : 5;
       try {
+        if (domainFilter && (!query || query === "*")) {
+          const qs = new URLSearchParams({ domain: domainFilter, path: "", nav_only: "true" });
+          const data = await fetchJson(pluginCfg, `/browse/node?${qs.toString()}`, { method: "GET" });
+          const text = `Domain root: ${domainFilter}://\n\n${formatNode(data)}`;
+          return textResult(text, { ok: true, mode: "domain_root", domain: domainFilter, node: data?.node, children: data?.children || [] });
+        }
         let data;
         if (hasRecallConfig(pluginCfg)) {
           data = await fetchJson(pluginCfg, `/browse/search`, {
             method: "POST",
             body: JSON.stringify({
               query,
-              domain: typeof params?.domain === "string" && params.domain.trim() ? params.domain.trim() : null,
+              domain: domainFilter,
               limit: safeLimit,
               content_limit: safeContentLimit,
               hybrid: true,
@@ -150,7 +157,7 @@ export function registerTools(api: any, pluginCfg: any) {
           });
         } else {
           const qs = new URLSearchParams({ query });
-          if (typeof params?.domain === "string" && params.domain.trim()) qs.set("domain", params.domain.trim());
+          if (domainFilter) qs.set("domain", domainFilter);
           qs.set("limit", String(safeLimit));
           qs.set("content_limit", String(safeContentLimit));
           data = await fetchJson(pluginCfg, `/browse/search?${qs.toString()}`, { method: "GET" });
@@ -164,7 +171,7 @@ export function registerTools(api: any, pluginCfg: any) {
               if (Array.isArray(item?.matched_on) && item.matched_on.length > 0) parts.push(`via: ${item.matched_on.join("+")}`);
               return `${parts.join(", ")})\n   ${item.snippet}`;
             }).join("\n")
-          : "No matching memories found.";
+          : `No matching memories found${domainFilter ? ` in domain ${domainFilter}` : ""}.`;
         const suffix = meta?.semantic_error ? `\n\nSemantic fallback skipped: ${meta.semantic_error}` : "";
         return textResult(`${text}${suffix}`, { ok: true, results, meta });
       } catch (error: any) {
@@ -182,7 +189,7 @@ export function registerTools(api: any, pluginCfg: any) {
       try {
         const data = await fetchJson(pluginCfg, "/browse/domains", { method: "GET" });
         const text = Array.isArray(data) && data.length > 0
-          ? data.map((item: any) => `- ${item.domain} (${item.root_count})`).join("\n")
+          ? data.map((item: any) => `- ${item.domain} (${item.root_count}) — open root with lore_get_node uri=\"${item.domain}://\" nav_only=true`).join("\n")
           : "No domains found.";
         return textResult(text, { ok: true, domains: data });
       } catch (error: any) {
@@ -200,14 +207,14 @@ export function registerTools(api: any, pluginCfg: any) {
       additionalProperties: false,
       required: ["content", "priority", "glossary"],
       properties: {
-        uri: { type: "string", description: "Optional final memory URI. Use this when you already know exactly where the new memory should live." },
+        uri: { type: "string", description: "Optional final memory URI. Use this when you already know exactly where the new memory should live. Intermediate paths in the URI must already exist." },
         domain: { type: "string", description: "Target memory domain when you are not using `uri`." },
         parent_path: { type: "string", description: "Parent location inside the chosen domain." },
-        content: { type: "string" },
-        priority: { type: "integer", minimum: 0 },
+        content: { type: "string", description: "Memory text body." },
+        priority: { type: "integer", minimum: 0, description: "Importance tier: 0=core identity (max 5), 1=key facts (max 15), 2+=general." },
         title: { type: "string", description: "Final path segment for the new memory." },
-        disclosure: { type: "string" },
-        glossary: { type: "array", items: { type: "string" } }
+        disclosure: { type: "string", description: "When this memory should be recalled." },
+        glossary: { type: "array", items: { type: "string", description: "Search keyword." }, description: "Search keywords to associate with this memory for later retrieval." }
       }
     },
     async execute(_id: any, params: any) {
@@ -266,12 +273,12 @@ export function registerTools(api: any, pluginCfg: any) {
       required: ["uri"],
       properties: {
         uri: { type: "string", description: "Full memory URI for the node you want to revise." },
-        content: { type: "string" },
-        priority: { type: "integer", minimum: 0 },
-        disclosure: { type: "string" },
+        content: { type: "string", description: "New content to replace the existing content." },
+        priority: { type: "integer", minimum: 0, description: "New priority level." },
+        disclosure: { type: "string", description: "New disclosure / trigger condition." },
         session_id: { type: "string", description: "Session ID for policy validation (read-before-update check)." },
-        glossary_add: { type: "array", items: { type: "string" } },
-        glossary_remove: { type: "array", items: { type: "string" } }
+        glossary_add: { type: "array", items: { type: "string", description: "Search keyword." }, description: "Keywords to add to the glossary." },
+        glossary_remove: { type: "array", items: { type: "string", description: "Search keyword." }, description: "Keywords to remove from the glossary." }
       }
     },
     async execute(_id: any, params: any) {

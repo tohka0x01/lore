@@ -187,6 +187,17 @@ describe('tool response formatting', () => {
     expect(result.content[0].text).toContain('No domains found');
   });
 
+  it('lore_search opens the domain root for wildcard domain browsing', async () => {
+    mockFetch({
+      node: { uri: 'project://', priority: 0, content: '' },
+      children: [{ uri: 'project://lore_integration', priority: 1, content_snippet: 'Lore' }],
+    });
+    const result = await tools.lore_search.execute(null, { query: '*', domain: 'project' });
+    expect(result.details.mode).toBe('domain_root');
+    expect(result.content[0].text).toContain('Domain root: project://');
+    expect((fetch as any).mock.calls[0][0]).toBe('http://localhost:18901/api/browse/node?domain=project&path=&nav_only=true&client_type=openclaw');
+  });
+
   it('lore_delete_node returns deleted path on success', async () => {
     mockFetch({ deleted: true });
     const result = await tools.lore_delete_node.execute(null, { uri: 'core://test/node' });
