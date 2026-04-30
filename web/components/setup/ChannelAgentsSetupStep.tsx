@@ -4,7 +4,7 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { AxiosError } from 'axios';
 import { Bot, RefreshCw, Save } from 'lucide-react';
 import { usePathname, useRouter } from 'next/navigation';
-import { AppTextArea, Badge, Button, Card, Notice } from '@/components/ui';
+import { AppTextArea, Badge, Button, Notice } from '@/components/ui';
 import { SetupBackButton, SetupFlowShell } from '@/components/setup/SetupFlowShell';
 import { useConfirm } from '@/components/ConfirmDialog';
 import { getBootStatus, getSetupFlowStatus, saveBootStatus } from '@/lib/api';
@@ -183,8 +183,8 @@ export default function ChannelAgentsSetupStep(): React.JSX.Element {
       )}
 
       {!loading && nodes.length > 0 && (
-        <Card padded={false} className="overflow-hidden">
-          <div className="flex items-start justify-between gap-4 border-b border-separator-hairline px-4 py-4 md:px-6 md:py-5">
+        <div className="animate-in stagger-2 overflow-hidden rounded-2xl border border-separator-thin bg-bg-elevated shadow-card">
+          <div className="flex items-start justify-between gap-4 border-b border-separator-thin px-4 py-4 md:px-6 md:py-5">
             <div className="min-w-0">
               <h2 className="text-[18px] font-semibold tracking-tight text-txt-primary">{t('Channel agent boot memories')}</h2>
               <p className="mt-1 max-w-2xl text-[13.5px] leading-relaxed text-txt-secondary">
@@ -196,7 +196,7 @@ export default function ChannelAgentsSetupStep(): React.JSX.Element {
             </Badge>
           </div>
 
-          <div className="divide-y divide-separator-hairline">
+          <div className="divide-y divide-separator-thin">
             {nodes.map((node) => {
               const value = drafts[node.uri] ?? getDefaultBootContent(node.uri);
               const dirty = dirtyUris.has(node.uri);
@@ -243,20 +243,20 @@ export default function ChannelAgentsSetupStep(): React.JSX.Element {
           </div>
 
           {message && (
-            <div className="border-t border-separator-hairline px-4 py-4 md:px-6">
+            <div className="border-t border-separator-thin px-4 py-4 md:px-6">
               <Notice tone={message.tone === 'success' ? 'success' : message.tone === 'danger' ? 'danger' : 'info'}>
                 {message.text}
               </Notice>
             </div>
           )}
 
-          <div className="flex items-center justify-end gap-2 border-t border-separator-hairline bg-bg-raised/40 px-4 py-3.5 md:px-6">
+          <div className="flex items-center justify-end gap-2 border-t border-separator-thin px-4 py-3.5 md:px-6">
             <Button variant="secondary" onClick={() => void handleSave()} disabled={saving || nodes.length === 0}>
               {saving ? <RefreshCw size={14} className="animate-spin" /> : <Save size={14} />}
               {saving ? t('Saving…') : t('Save all')}
             </Button>
           </div>
-        </Card>
+        </div>
       )}
     </SetupFlowShell>
   );

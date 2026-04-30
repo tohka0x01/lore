@@ -122,11 +122,15 @@ Complete the setup flow:
    - `Embedding Base URL`, for example `http://host.docker.internal:8090/v1`
    - `Embedding API Key`
    - `Embedding Model`, for example `Qwen/Qwen3-Embedding-0.6B`
-2. **Global boot memories** — review or save defaults for:
+2. **View LLM setup** — configure the model used by view refinement and Dream.
+   - `View LLM Base URL`
+   - `View LLM API Key`
+   - `View LLM Model`, for example `glm-5.1`
+3. **Global boot memories** — review or save defaults for:
    - `core://agent`
    - `core://soul`
    - `preferences://user`
-3. **Channel agent memories** — review or save defaults for runtime-specific memories:
+4. **Channel agent memories** — review or save defaults for runtime-specific memories:
    - `core://agent/claudecode`
    - `core://agent/codex`
    - `core://agent/openclaw`
@@ -145,7 +149,7 @@ Open `/settings` after setup for:
 - backup settings
 - write policy settings
 
-View LLM is optional for basic memory and recall. Embedding is required for semantic recall and index rebuilds.
+Embedding is required for semantic recall and index rebuilds. View LLM is required during setup so Dream and view refinement are ready when you enable them.
 
 ### Source build fallback
 

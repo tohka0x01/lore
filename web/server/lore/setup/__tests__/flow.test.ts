@@ -139,9 +139,10 @@ describe('buildSetupFlowStatus', () => {
     });
 
     expect(result.complete).toBe(false);
-    expect(result.next_step).toBe('/setup/boot/soul');
+    expect(result.next_step).toBe('/setup/llm');
     expect(result.steps).toEqual([
       { id: 'embedding', path: '/setup/embedding', label: 'Embedding setup', complete: true },
+      { id: 'llm', path: '/setup/llm', label: 'View LLM setup', complete: false },
       { id: 'boot:agent', path: '/setup/boot/agent', label: 'Agent boot memory', description: 'Write the fixed workflow-constraints node that every Lore agent loads at startup.', complete: true, role: 'agent', uri: 'core://agent', scope: 'global', client_type: null, setup_slug: 'agent' },
       { id: 'boot:soul', path: '/setup/boot/soul', label: 'Soul boot memory', description: 'Write the fixed persona baseline that Lore carries into every session.', complete: false, role: 'soul', uri: 'core://soul', scope: 'global', client_type: null, setup_slug: 'soul' },
       { id: 'boot:user', path: '/setup/boot/user', label: 'User boot memory', description: 'Write the stable user profile Lore should remember across future sessions.', complete: false, role: 'user', uri: 'preferences://user', scope: 'global', client_type: null, setup_slug: 'user' },
@@ -152,7 +153,7 @@ describe('buildSetupFlowStatus', () => {
   it('uses one channel-agent step after the global boot steps', () => {
     const result = buildSetupFlowStatus({
       embedding: { configured: true, runtime_ready: true },
-      llm: { configured: false, runtime_ready: false },
+      llm: { configured: true, runtime_ready: true },
       boot: {
         ...BASE_BOOT_VIEW,
         nodes: BASE_BOOT_VIEW.nodes.map((node) => (

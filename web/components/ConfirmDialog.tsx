@@ -6,6 +6,7 @@ import { Toaster, toast as sonnerToast } from 'sonner';
 import clsx from 'clsx';
 import { useTheme } from '../lib/theme';
 import { useT } from '../lib/i18n';
+import { Button } from './ui';
 
 interface ConfirmOptions {
   title?: string;
@@ -39,16 +40,28 @@ export function ConfirmModalForTest({ dialog, onConfirm, onCancel }: { dialog: D
   const dismissible = dialog.dismissible !== false;
   return (
     <LobeModal
-      cancelButtonProps={dialog.hideCancel ? { style: { display: 'none' } } : undefined}
-      cancelText={dialog.cancelLabel || t('Cancel')}
       centered
       className="rounded-2xl border border-separator-thin bg-bg-elevated shadow-xl [&_.ant-modal-content]:rounded-2xl [&_.ant-modal-content]:border [&_.ant-modal-content]:border-separator-thin [&_.ant-modal-content]:bg-bg-elevated [&_.ant-modal-content]:shadow-xl"
       closable={dismissible}
-      maskClosable={dismissible}
-      okButtonProps={{ danger: Boolean(dialog.destructive) }}
-      okText={dialog.confirmLabel || t('Confirm')}
+      footer={(
+        <div className="flex items-center justify-end gap-2">
+          {dialog.hideCancel ? null : (
+            <Button className="!rounded-full focus-visible:!rounded-full" size="sm" variant="secondary" onClick={onCancel}>
+              {dialog.cancelLabel || t('Cancel')}
+            </Button>
+          )}
+          <Button
+            size="sm"
+            variant={dialog.destructive ? 'destructive' : 'secondary'}
+            onClick={onConfirm}
+          >
+            {dialog.confirmLabel || t('Confirm')}
+          </Button>
+        </div>
+      )}
+      keyboard={dismissible}
+      mask={{ closable: dismissible }}
       onCancel={onCancel}
-      onOk={onConfirm}
       open
       title={dialog.title}
       width={400}

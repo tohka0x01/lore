@@ -15,6 +15,7 @@ export const CHANNEL_AGENTS_SETUP_PATH = '/setup/channels';
 
 const STATIC_SETUP_STEP_PATHS = {
   embedding: '/setup/embedding',
+  llm: '/setup/llm',
   [CHANNEL_AGENTS_SETUP_STEP_ID]: CHANNEL_AGENTS_SETUP_PATH,
 } as const;
 

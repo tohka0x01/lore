@@ -349,7 +349,7 @@ function AppShellInner({ children }: AppShellInnerProps): React.JSX.Element {
     promptingSetupRef.current = true;
     void confirm({
       title: t('Setup required'),
-      message: t('Lore needs boot initialization before you can enter the normal workspace.'),
+      message: t('Lore needs first-run setup before you can enter the normal workspace.'),
       confirmLabel: t('Continue'),
       hideCancel: true,
       dismissible: false,

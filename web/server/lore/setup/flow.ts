@@ -67,6 +67,12 @@ export function buildSetupFlowStatus(input: {
       label: 'Embedding setup',
       complete: input.embedding.configured,
     },
+    {
+      id: 'llm',
+      path: getSetupStepPath('llm'),
+      label: 'View LLM setup',
+      complete: input.llm.configured,
+    },
     ...globalBootSteps,
     ...(channelAgentsStep ? [channelAgentsStep] : []),
   ];

@@ -4,7 +4,7 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { AxiosError } from 'axios';
 import { Bot, RefreshCw, Save, Sparkles, User } from 'lucide-react';
 import { usePathname, useRouter } from 'next/navigation';
-import { AppTextArea, Badge, Button, Card, Notice } from '@/components/ui';
+import { AppTextArea, Badge, Button, Notice } from '@/components/ui';
 import { SetupBackButton, SetupFlowShell } from '@/components/setup/SetupFlowShell';
 import { useConfirm } from '@/components/ConfirmDialog';
 import { getBootStatus, getSetupFlowStatus, saveBootStatus } from '@/lib/api';
@@ -206,8 +206,8 @@ export default function BootSetupStep({ setupSlug }: BootSetupStepProps): React.
       )}
 
       {!loading && node && (
-        <Card padded={false} className="overflow-hidden">
-          <div className="flex items-start justify-between gap-4 border-b border-separator-hairline px-4 py-4 md:px-6 md:py-5">
+        <div className="animate-in stagger-2 overflow-hidden rounded-2xl border border-separator-thin bg-bg-elevated shadow-card">
+          <div className="flex items-start justify-between gap-4 border-b border-separator-thin px-4 py-4 md:px-6 md:py-5">
             <div className="flex min-w-0 items-start gap-3">
               <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl border border-sys-blue/20 bg-sys-blue/10 text-sys-blue">
                 <Icon size={19} />
@@ -253,13 +253,13 @@ export default function BootSetupStep({ setupSlug }: BootSetupStepProps): React.
             )}
           </div>
 
-          <div className="flex items-center justify-end gap-2 border-t border-separator-hairline bg-bg-raised/40 px-4 py-3.5 md:px-6">
+          <div className="flex items-center justify-end gap-2 border-t border-separator-thin px-4 py-3.5 md:px-6">
             <Button variant="secondary" onClick={() => void handleSave()} disabled={saving}>
               {saving ? <RefreshCw size={14} className="animate-spin" /> : <Save size={14} />}
               {saving ? t('Saving…') : t('Save')}
             </Button>
           </div>
-        </Card>
+        </div>
       )}
     </SetupFlowShell>
   );

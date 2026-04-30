@@ -15,36 +15,32 @@ vi.mock('@lobehub/ui/es/Modal/index', () => ({
     children,
     open,
     title,
-    okText,
-    cancelText,
-    okButtonProps,
-    cancelButtonProps,
     footer,
     centered,
     className,
+    mask,
+    keyboard,
   }: {
     children: React.ReactNode;
     open?: boolean;
     title?: React.ReactNode;
-    okText?: React.ReactNode;
-    cancelText?: React.ReactNode;
-    okButtonProps?: { danger?: boolean };
-    cancelButtonProps?: { style?: React.CSSProperties };
     footer?: React.ReactNode;
     centered?: boolean;
     className?: string;
+    mask?: { closable?: boolean };
+    keyboard?: boolean;
   }) => (
     <section
       data-lobe-modal="true"
       data-open={String(open)}
-      data-ok-danger={String(Boolean(okButtonProps?.danger))}
-      data-cancel-hidden={String(cancelButtonProps?.style?.display === 'none')}
+      data-mask-closable={String(Boolean(mask?.closable))}
+      data-keyboard={String(Boolean(keyboard))}
       data-class-name={className || ''}
       data-centered={String(Boolean(centered))}
     >
       <h1>{title}</h1>
       <div>{children}</div>
-      {footer === null ? null : <footer>{cancelText}{okText}</footer>}
+      {footer === null ? null : <footer>{footer}</footer>}
     </section>
   ),
 }));
@@ -58,7 +54,9 @@ vi.mock('sonner', () => ({
 }));
 
 vi.mock('../ui', () => ({
-  Button: ({ children }: { children: React.ReactNode }) => <button>{children}</button>,
+  Button: ({ children, className, variant }: { children: React.ReactNode; className?: string; variant?: string }) => (
+    <button className={className} data-variant={variant}>{children}</button>
+  ),
 }));
 
 vi.mock('../../lib/theme', () => ({
@@ -104,17 +102,20 @@ describe('ConfirmProvider modal', () => {
     expect(html).toContain('This cannot be undone.');
     expect(html).toContain('Cancel');
     expect(html).toContain('Delete');
+    expect(html).toContain('data-variant="secondary"');
+    expect(html).not.toContain('data-variant="primary"');
   });
 
-  it('maps destructive confirmations to a danger ok button', () => {
+  it('maps destructive confirmations to the destructive button variant', () => {
     const html = renderConfirmModal({ destructive: true });
 
-    expect(html).toContain('data-ok-danger="true"');
+    expect(html).toContain('data-variant="destructive"');
   });
 
   it('can hide the cancel action', () => {
     const html = renderConfirmModal({ hideCancel: true });
 
-    expect(html).toContain('data-cancel-hidden="true"');
+    expect(html).not.toContain('Cancel');
+    expect(html).toContain('Delete');
   });
 });

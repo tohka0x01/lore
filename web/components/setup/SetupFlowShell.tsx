@@ -4,7 +4,7 @@ import React from 'react';
 import clsx from 'clsx';
 import { useRouter } from 'next/navigation';
 import { ArrowLeft } from 'lucide-react';
-import { Badge, Button, Card, PageCanvas, PageTitle } from '@/components/ui';
+import { Badge, Button, PageCanvas, PageTitle } from '@/components/ui';
 import { useT } from '@/lib/i18n';
 import type { SetupFlowStatus, SetupStepId } from '@/lib/bootSetup';
 
@@ -20,9 +20,9 @@ interface SetupFlowShellProps {
 }
 
 function stepPillClass(current: boolean, complete: boolean): string {
-  if (current) return 'border-sys-blue/40 bg-sys-blue/10 text-txt-primary';
-  if (complete) return 'border-sys-green/25 bg-sys-green/10 text-txt-primary';
-  return 'border-separator-hairline bg-bg-raised text-txt-secondary';
+  if (current) return 'border-sys-blue/40 bg-sys-blue/[0.04] text-txt-primary';
+  if (complete) return 'border-sys-green/25 bg-sys-green/[0.04] text-txt-primary';
+  return 'border-separator-thin bg-bg-elevated text-txt-secondary';
 }
 
 function stepDotClass(current: boolean, complete: boolean): string {
@@ -58,8 +58,8 @@ export function SetupFlowShell({
       />
 
       {setupStatus && (
-        <Card padded={false} className="mb-6 overflow-hidden">
-          <div className="flex items-center justify-between gap-3 border-b border-separator-hairline px-4 py-3.5 md:px-5">
+        <div className="animate-in stagger-1 mb-5 overflow-hidden rounded-2xl border border-separator-thin bg-bg-elevated shadow-card">
+          <div className="flex items-center justify-between gap-3 border-b border-separator-thin px-4 py-3.5 md:px-5">
             <div className="min-w-0">
               <div className="text-[11px] font-medium uppercase tracking-[0.08em] text-txt-tertiary">{t('Setup progress')}</div>
               <div className="mt-1 text-[13px] font-medium text-txt-primary">
@@ -95,7 +95,7 @@ export function SetupFlowShell({
               })}
             </div>
           </div>
-        </Card>
+        </div>
       )}
 
       {topNotice ? <div className="mb-6">{topNotice}</div> : null}

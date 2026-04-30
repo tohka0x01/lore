@@ -122,7 +122,7 @@ const DICT: Record<'zh' | 'en', Record<string, string>> = {
     'Embedding setup': 'Embedding 配置',
     'Configure the vector endpoint Lore uses for embeddings before continuing.': '先配置 Lore 用于向量化的 Embedding 服务，再继续后续步骤。',
     'View LLM setup': 'View LLM 配置',
-    'Configure the model Lore uses for draft generation, view refinement, and dream workflows.': '配置 Lore 用于生成草稿、视图精炼和 dream 流程的模型。',
+    'Configure the model Lore uses for view refinement and dream workflows.': '配置 Lore 用于视图精炼和 dream 流程的模型。',
     'Agent boot memory': 'Agent 启动记忆',
     'Write the fixed workflow-constraints node that Lore always loads at startup.': '填写 Lore 每次启动都会固定加载的工作规则节点。',
     'Write the fixed workflow-constraints node that every Lore agent loads at startup.': '填写每个 Lore agent 启动时都会固定加载的通用工作规则节点。',
@@ -145,8 +145,8 @@ const DICT: Record<'zh' | 'en', Record<string, string>> = {
     'Channel agent boot memories': 'Channel agent 启动记忆',
     'Each channel keeps only its runtime-specific delta; shared rules stay in core://agent.': '每个 channel 只保留运行时专属差异；通用规则放在 core://agent。',
     'No channel agent boot nodes found.': '未找到 channel agent 启动节点。',
-    'Lore needs boot initialization before you can enter the normal workspace.':
-      '进入正常工作区之前，需要先完成 Lore 的 boot 初始化。',
+    'Lore needs first-run setup before you can enter the normal workspace.':
+      '进入正常工作区之前，需要先完成 Lore 首次初始化。',
     'Refresh status': '刷新状态',
     'Open settings': '打开设置',
     'Generate all drafts': '全部生成草稿',

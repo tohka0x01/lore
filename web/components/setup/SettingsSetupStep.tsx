@@ -2,7 +2,7 @@
 
 import React, { useCallback, useMemo, useState } from 'react';
 import { usePathname, useRouter } from 'next/navigation';
-import { Button, Card, Notice } from '@/components/ui';
+import { Button, Notice } from '@/components/ui';
 import {
   buildSettingsSaveLabel,
   findSettingsSection,
@@ -30,7 +30,7 @@ function getStepMeta(sectionId: SettingsSetupStepProps['sectionId']) {
   return {
     stepId: 'llm' as const,
     title: 'View LLM setup',
-    description: 'Configure the model Lore uses for draft generation, view refinement, and dream workflows.',
+    description: 'Configure the model Lore uses for view refinement and dream workflows.',
   };
 }
 
@@ -136,7 +136,7 @@ export default function SettingsSetupStep({ sectionId }: SettingsSetupStepProps)
       )}
 
       {!loading && section && data && (
-        <Card className="overflow-hidden p-0">
+        <div className="animate-in stagger-2 overflow-hidden rounded-2xl border border-separator-thin bg-bg-elevated shadow-card">
           <SettingsSectionEditor
             section={section}
             data={data}
@@ -157,7 +157,7 @@ export default function SettingsSetupStep({ sectionId }: SettingsSetupStepProps)
               </div>
             }
           />
-        </Card>
+        </div>
       )}
     </SetupFlowShell>
   );

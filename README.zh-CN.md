@@ -122,11 +122,15 @@ http://127.0.0.1:18901/setup
    - `Embedding Base URL`，例如 `http://host.docker.internal:8090/v1`
    - `Embedding API Key`
    - `Embedding Model`，例如 `Qwen/Qwen3-Embedding-0.6B`
-2. **全局 boot 记忆** — 检查或保存默认值：
+2. **View LLM setup** — 配置 view refinement 和 Dream 使用的模型。
+   - `View LLM Base URL`
+   - `View LLM API Key`
+   - `View LLM Model`，例如 `glm-5.1`
+3. **全局 boot 记忆** — 检查或保存默认值：
    - `core://agent`
    - `core://soul`
    - `preferences://user`
-3. **Channel agent 记忆** — 检查或保存各运行时专属默认值：
+4. **Channel agent 记忆** — 检查或保存各运行时专属默认值：
    - `core://agent/claudecode`
    - `core://agent/codex`
    - `core://agent/openclaw`
@@ -145,7 +149,7 @@ http://127.0.0.1:18901/setup
 - 备份设置
 - 写入策略
 
-基础记忆和 recall 需要 Embedding。View LLM 只影响视图精炼和 Dream。
+语义 recall 和索引重建需要 Embedding。初始化阶段要求配置 View LLM，让 Dream 和 view refinement 在启用时直接可用。
 
 ### 源码构建 fallback
 
