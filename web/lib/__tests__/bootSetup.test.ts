@@ -11,13 +11,13 @@ import {
 
 const partialSetupFlow: SetupFlowStatus = {
   complete: false,
-  next_step: '/setup/llm',
+  next_step: '/setup/boot/agent',
   steps: [
     { id: 'embedding', path: '/setup/embedding', label: 'Embedding setup', complete: true },
-    { id: 'llm', path: '/setup/llm', label: 'View LLM setup', complete: false },
     { id: 'boot:agent', path: '/setup/boot/agent', label: 'Agent boot memory', complete: false, role: 'agent', uri: 'core://agent', scope: 'global', client_type: null, setup_slug: 'agent' },
     { id: 'boot:soul', path: '/setup/boot/soul', label: 'Soul boot memory', complete: false, role: 'soul', uri: 'core://soul', scope: 'global', client_type: null, setup_slug: 'soul' },
     { id: 'boot:user', path: '/setup/boot/user', label: 'User boot memory', complete: false, role: 'user', uri: 'preferences://user', scope: 'global', client_type: null, setup_slug: 'user' },
+    { id: 'channel_agents', path: '/setup/channels', label: 'Channel agent setup', complete: false, role: 'agent', scope: 'client', client_type: null, setup_slug: 'channel_agents' },
   ],
   embedding: { configured: true, runtime_ready: true },
   llm: { configured: false, runtime_ready: false },
@@ -102,19 +102,19 @@ describe('bootSetup routing helpers', () => {
   });
 
   it('prompts to the first incomplete setup step before acknowledgement', () => {
-    expect(getSetupFlowDecision('/memory', partialSetupFlow, false)).toEqual({ kind: 'prompt', target: '/setup/llm' });
-    expect(getSetupFlowDecision('/', partialSetupFlow, false)).toEqual({ kind: 'prompt', target: '/setup/llm' });
+    expect(getSetupFlowDecision('/memory', partialSetupFlow, false)).toEqual({ kind: 'prompt', target: '/setup/boot/agent' });
+    expect(getSetupFlowDecision('/', partialSetupFlow, false)).toEqual({ kind: 'prompt', target: '/setup/boot/agent' });
   });
 
   it('redirects to the first incomplete setup step after acknowledgement', () => {
-    expect(getSetupFlowDecision('/memory', partialSetupFlow, true)).toEqual({ kind: 'redirect', target: '/setup/llm' });
-    expect(getSetupFlowRedirect('/memory', partialSetupFlow)).toBe('/setup/llm');
+    expect(getSetupFlowDecision('/memory', partialSetupFlow, true)).toEqual({ kind: 'redirect', target: '/setup/boot/agent' });
+    expect(getSetupFlowRedirect('/memory', partialSetupFlow)).toBe('/setup/boot/agent');
   });
 
   it('allows setup and settings pages while setup is incomplete', () => {
-    expect(getSetupFlowDecision('/setup/llm', partialSetupFlow, false)).toEqual({ kind: 'none', target: null });
+    expect(getSetupFlowDecision('/setup/boot/agent', partialSetupFlow, false)).toEqual({ kind: 'none', target: null });
     expect(getSetupFlowDecision('/settings', partialSetupFlow, false)).toEqual({ kind: 'none', target: null });
-    expect(getSetupFlowRedirect('/setup/llm', partialSetupFlow)).toBeNull();
+    expect(getSetupFlowRedirect('/setup/channels', partialSetupFlow)).toBeNull();
   });
 
   it('redirects setup pages back to memory after completion', () => {

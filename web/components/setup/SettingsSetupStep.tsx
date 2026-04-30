@@ -87,6 +87,7 @@ export default function SettingsSetupStep({ sectionId }: SettingsSetupStepProps)
       if (target !== pathname) router.replace(target);
     },
     awaitEmbeddingRebuildOnSave: true,
+    skipEmbeddingRebuildWhenUnconfigured: sectionId === 'embedding',
   });
 
   const section = useMemo(() => findSettingsSection(data, sectionId), [data, sectionId]);
@@ -107,8 +108,6 @@ export default function SettingsSetupStep({ sectionId }: SettingsSetupStepProps)
     return null;
   }, [sectionId, setupStatus, t]);
 
-  const footer = previousPath ? <SetupBackButton href={previousPath} /> : <div />;
-
   return (
     <SetupFlowShell
       stepId={meta.stepId}
@@ -116,7 +115,7 @@ export default function SettingsSetupStep({ sectionId }: SettingsSetupStepProps)
       title={t(meta.title)}
       description={t(meta.description)}
       topNotice={topNotice}
-      footer={footer}
+      right={previousPath ? <SetupBackButton href={previousPath} /> : null}
     >
       {error && (
         <Notice tone="danger" title={t('Failed to load')}>
@@ -152,7 +151,7 @@ export default function SettingsSetupStep({ sectionId }: SettingsSetupStepProps)
                     {t('Discard')}
                   </Button>
                 )}
-                <Button variant="primary" onClick={() => void handleSave()} disabled={saving || rebuilding || dirtyKeys.length === 0}>
+                <Button variant="secondary" onClick={() => void handleSave()} disabled={saving || rebuilding || dirtyKeys.length === 0}>
                   {saving || rebuilding ? t('Saving…') : buildSettingsSaveLabel(dirtyKeys.length, t)}
                 </Button>
               </div>

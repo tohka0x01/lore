@@ -61,6 +61,7 @@ const DICT: Record<'zh' | 'en', Record<string, string>> = {
     'View': '视图',
     'Connecting…': '连接中…',
     'Continue': '继续',
+    'Skip': '跳过',
     'Try Again': '重试',
     'Unable to connect': '连接失败',
     'Check that the backend service is running.': '请确认后端服务已启动。',
@@ -78,6 +79,8 @@ const DICT: Record<'zh' | 'en', Record<string, string>> = {
     'Rebuild completed': '重建完成',
     'Restore': '恢复',
     'Current step': '当前步骤',
+    'Setup progress': '初始化进度',
+    'Step': '步骤',
     'Runtime not ready': '运行时未就绪',
     'Rebuild Index': '重建索引',
     'Changing the embedding model will invalidate all existing embeddings and trigger a full rebuild. Continue?':
@@ -109,6 +112,7 @@ const DICT: Record<'zh' | 'en', Record<string, string>> = {
     'Rebuild failed': '重建失败',
     'Reset completed': '重置完成',
     'Changes saved': '已保存更改',
+    'Default saved': '已保存默认值',
     'Debug request failed': '调试请求失败',
 
     // ── setup
@@ -134,6 +138,13 @@ const DICT: Record<'zh' | 'en', Record<string, string>> = {
     'Write the Hermes-specific agent rules that load together with core://agent.': '填写会与 core://agent 一起加载的 Hermes 专属 agent 规则。',
     'Codex boot memory': 'Codex 启动记忆',
     'Write the Codex-specific agent rules that load together with core://agent.': '填写会与 core://agent 一起加载的 Codex 专属 agent 规则。',
+    'Pi boot memory': 'Pi 启动记忆',
+    'Write the Pi-specific agent rules that load together with core://agent.': '填写会与 core://agent 一起加载的 Pi 专属 agent 规则。',
+    'Channel agent setup': 'Channel agent 配置',
+    'Review the runtime-specific agent boot memories for every supported channel in one page.': '在同一个页面检查所有 channel 的运行时专属 agent 启动记忆。',
+    'Channel agent boot memories': 'Channel agent 启动记忆',
+    'Each channel keeps only its runtime-specific delta; shared rules stay in core://agent.': '每个 channel 只保留运行时专属差异；通用规则放在 core://agent。',
+    'No channel agent boot nodes found.': '未找到 channel agent 启动节点。',
     'Lore needs boot initialization before you can enter the normal workspace.':
       '进入正常工作区之前，需要先完成 Lore 的 boot 初始化。',
     'Refresh status': '刷新状态',
@@ -175,6 +186,7 @@ const DICT: Record<'zh' | 'en', Record<string, string>> = {
     'openclaw runtime constraints': 'OpenClaw 运行时约束',
     'hermes runtime constraints': 'Hermes 运行时约束',
     'codex runtime constraints': 'Codex 运行时约束',
+    'pi runtime constraints': 'Pi 运行时约束',
     'style / persona / self-definition': '风格 / 人格 / 自我定义',
     'stable user definition': '稳定用户定义',
     'Working rules, collaboration constraints, and execution protocol.':
@@ -187,6 +199,8 @@ const DICT: Record<'zh' | 'en', Record<string, string>> = {
       'Hermes 专属 memory provider 行为、工具与运行时工作流约束。',
     'Codex-specific plugins, hooks, MCP behavior, and runtime workflow constraints.':
       'Codex 专属插件、hook、MCP 行为与运行时工作流约束。',
+    'Pi-specific extensions, tools, prompt injection, and runtime workflow constraints.':
+      'Pi 专属扩展、工具、prompt 注入与运行时工作流约束。',
     'Agent style, persona, and self-cognition baseline.':
       '代理的风格、人格与自我认知基线。',
     'Stable user information, user preferences, and durable collaboration context.':

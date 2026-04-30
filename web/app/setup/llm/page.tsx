@@ -1,5 +1,5 @@
-import SettingsSetupStep from '@/components/setup/SettingsSetupStep';
+import { redirect } from 'next/navigation';
 
 export default function SetupLlmPage() {
-  return <SettingsSetupStep sectionId="view_llm" />;
+  redirect('/settings');
 }

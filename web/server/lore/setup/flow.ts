@@ -1,4 +1,5 @@
 import {
+  CHANNEL_AGENTS_SETUP_STEP_ID,
   getSetupStepPath,
   makeBootSetupStepId,
   type BootStatusNode,
@@ -30,6 +31,22 @@ function buildBootStep(node: BootStatusNode): SetupFlowStep {
   };
 }
 
+function buildChannelAgentsStep(nodes: BootStatusNode[]): SetupFlowStep | null {
+  const clientNodes = nodes.filter((node) => node.scope === 'client');
+  if (clientNodes.length === 0) return null;
+  return {
+    id: CHANNEL_AGENTS_SETUP_STEP_ID,
+    path: getSetupStepPath(CHANNEL_AGENTS_SETUP_STEP_ID),
+    label: 'Channel agent setup',
+    description: 'Review the runtime-specific agent boot memories for every supported channel in one page.',
+    complete: clientNodes.every((node) => node.state === 'initialized'),
+    role: 'agent',
+    scope: 'client',
+    client_type: null,
+    setup_slug: CHANNEL_AGENTS_SETUP_STEP_ID,
+  };
+}
+
 function findNextStep(steps: SetupFlowStep[]): string | null {
   return steps.find((step) => !step.complete)?.path || null;
 }
@@ -39,6 +56,10 @@ export function buildSetupFlowStatus(input: {
   llm: SetupRuntimeStatus;
   boot: BootViewResult;
 }): SetupFlowStatus {
+  const globalBootSteps = input.boot.nodes
+    .filter((node) => node.scope === 'global')
+    .map((node) => buildBootStep(node));
+  const channelAgentsStep = buildChannelAgentsStep(input.boot.nodes);
   const steps: SetupFlowStep[] = [
     {
       id: 'embedding',
@@ -46,13 +67,8 @@ export function buildSetupFlowStatus(input: {
       label: 'Embedding setup',
       complete: input.embedding.configured,
     },
-    {
-      id: 'llm',
-      path: getSetupStepPath('llm'),
-      label: 'View LLM setup',
-      complete: input.llm.configured,
-    },
-    ...input.boot.nodes.map((node) => buildBootStep(node)),
+    ...globalBootSteps,
+    ...(channelAgentsStep ? [channelAgentsStep] : []),
   ];
 
   const next_step = findNextStep(steps);

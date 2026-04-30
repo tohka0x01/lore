@@ -4,12 +4,13 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { AxiosError } from 'axios';
 import { Bot, RefreshCw, Save, Sparkles, User } from 'lucide-react';
 import { usePathname, useRouter } from 'next/navigation';
-import { AppInput, AppTextArea, Badge, Button, Card, Notice } from '@/components/ui';
+import { AppTextArea, Badge, Button, Card, Notice } from '@/components/ui';
 import { SetupBackButton, SetupFlowShell } from '@/components/setup/SetupFlowShell';
 import { useConfirm } from '@/components/ConfirmDialog';
-import { generateBootStatusDrafts, getBootStatus, getSetupFlowStatus, saveBootStatus } from '@/lib/api';
+import { getBootStatus, getSetupFlowStatus, saveBootStatus } from '@/lib/api';
 import {
   dispatchSetupStatusChanged,
+  getDefaultBootContent,
   makeBootSetupStepId,
   type BootNodeRole,
   type BootStatusNode,
@@ -62,10 +63,8 @@ export default function BootSetupStep({ setupSlug }: BootSetupStepProps): React.
   const [draft, setDraft] = useState('');
   const [dirty, setDirty] = useState(false);
   const dirtyRef = useRef(false);
-  const [nodeContext, setNodeContext] = useState('');
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
-  const [generating, setGenerating] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [message, setMessage] = useState<NodeMessage | null>(null);
 
@@ -82,7 +81,7 @@ export default function BootSetupStep({ setupSlug }: BootSetupStepProps): React.
       const nextNode = boot.nodes.find((entry) => entry.setup_slug === setupSlug) || null;
       setNode(nextNode);
       if (nextNode && !dirtyRef.current) {
-        setDraft(nextNode.content || '');
+        setDraft(nextNode.content || getDefaultBootContent(nextNode.uri));
       }
     } catch (e) {
       const axiosErr = e as AxiosError<{ detail?: string }>;
@@ -100,31 +99,6 @@ export default function BootSetupStep({ setupSlug }: BootSetupStepProps): React.
     const target = nextSetupStatus?.next_step || '/memory';
     if (target !== pathname) router.replace(target);
   }, [pathname, router]);
-
-  const handleGenerate = useCallback(async () => {
-    if (!node) return;
-    setGenerating(true);
-    setError(null);
-    try {
-      const response = await generateBootStatusDrafts({
-        uris: [node.uri],
-        node_context: nodeContext.trim() ? { [node.uri]: nodeContext.trim() } : undefined,
-      });
-      const result = response.results[0];
-      if (result?.status === 'generated' && result.content) {
-        setDraft(result.content);
-        setDirty(true);
-        setMessage({ tone: 'success', text: t('Draft generated') });
-      } else {
-        setMessage({ tone: 'danger', text: result?.detail || t('Failed to load') });
-      }
-    } catch (e) {
-      const axiosErr = e as AxiosError<{ detail?: string }>;
-      setError(axiosErr.response?.data?.detail || axiosErr.message || t('Failed to load'));
-    } finally {
-      setGenerating(false);
-    }
-  }, [node, nodeContext, t]);
 
   const handleSave = useCallback(async () => {
     if (!node) return;
@@ -144,6 +118,7 @@ export default function BootSetupStep({ setupSlug }: BootSetupStepProps): React.
           : t('Unchanged');
       setMessage({ tone: result.status === 'unchanged' ? 'info' : 'success', text: notice });
       setDirty(false);
+      dirtyRef.current = false;
       dispatchSetupStatusChanged();
       toast(notice, 'success');
       const nextSetupStatus = await getSetupFlowStatus();
@@ -158,6 +133,36 @@ export default function BootSetupStep({ setupSlug }: BootSetupStepProps): React.
     }
   }, [draft, goNext, load, node, t, toast]);
 
+  const handleSkip = useCallback(async () => {
+    if (!node) return;
+    const defaultContent = getDefaultBootContent(node.uri);
+    const content = node.state === 'initialized' && node.content.trim() ? node.content : defaultContent;
+    setSaving(true);
+    setError(null);
+    try {
+      const response = await saveBootStatus({ nodes: { [node.uri]: content } });
+      const result = response.results[0];
+      if (!result || result.status === 'failed') {
+        setMessage({ tone: 'danger', text: result?.detail || t('Failed to load') });
+        return;
+      }
+      setDraft(content);
+      setDirty(false);
+      dirtyRef.current = false;
+      dispatchSetupStatusChanged();
+      toast(t('Default saved'), 'success');
+      const nextSetupStatus = await getSetupFlowStatus();
+      setSetupStatus(nextSetupStatus);
+      await load();
+      goNext(nextSetupStatus);
+    } catch (e) {
+      const axiosErr = e as AxiosError<{ detail?: string }>;
+      setError(axiosErr.response?.data?.detail || axiosErr.message || t('Failed to load'));
+    } finally {
+      setSaving(false);
+    }
+  }, [goNext, load, node, t, toast]);
+
   const Icon = roleIcon(node?.role || 'agent');
   const currentStep = useMemo(
     () => setupStatus?.steps.find((step) => step.id === stepId) || null,
@@ -167,29 +172,20 @@ export default function BootSetupStep({ setupSlug }: BootSetupStepProps): React.
   const pageTitle = currentStep?.label || node?.setup_title || 'Boot memory';
   const pageDescription = currentStep?.description || node?.setup_description || 'Write the fixed boot node for this setup step.';
 
-  const topNotice = useMemo(() => {
-    if (!setupStatus) return null;
-    if (!setupStatus.boot.draft_generation_available) {
-      return (
-        <Notice tone="warning" title={t('Draft generation unavailable')}>
-          <div className="space-y-2">
-            <p>{t('You can still complete setup manually, or open Settings first and configure the default View LLM.')}</p>
-            {setupStatus.boot.draft_generation_reason && <p>{setupStatus.boot.draft_generation_reason}</p>}
-          </div>
-        </Notice>
-      );
-    }
-    return null;
-  }, [setupStatus, t]);
-
   return (
     <SetupFlowShell
       stepId={stepId}
       setupStatus={setupStatus}
       title={t(pageTitle)}
       description={t(pageDescription)}
-      topNotice={topNotice}
-      footer={previous ? <SetupBackButton href={previous} /> : <div />}
+      right={
+        <>
+          {previous ? <SetupBackButton href={previous} /> : null}
+          <Button variant="secondary" onClick={() => void handleSkip()} disabled={saving || loading || !node}>
+            {saving ? t('Saving…') : t('Skip')}
+          </Button>
+        </>
+      }
     >
       {error && (
         <Notice tone="danger" title={t('Failed to load')}>
@@ -210,71 +206,55 @@ export default function BootSetupStep({ setupSlug }: BootSetupStepProps): React.
       )}
 
       {!loading && node && (
-        <Card className="space-y-5">
-          <div className="flex items-start justify-between gap-4 flex-wrap">
-            <div className="flex items-start gap-3 min-w-0">
-              <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-fill-primary text-sys-blue">
-                <Icon size={18} />
+        <Card padded={false} className="overflow-hidden">
+          <div className="flex items-start justify-between gap-4 border-b border-separator-hairline px-4 py-4 md:px-6 md:py-5">
+            <div className="flex min-w-0 items-start gap-3">
+              <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl border border-sys-blue/20 bg-sys-blue/10 text-sys-blue">
+                <Icon size={19} />
               </div>
               <div className="min-w-0">
                 <div className="flex items-center gap-2 flex-wrap">
-                  <h2 className="text-[18px] font-semibold tracking-tight text-txt-primary">{t(node.role_label)}</h2>
+                  <h2 className="text-[17px] font-semibold tracking-tight text-txt-primary">{t(node.role_label)}</h2>
                   <Badge tone={statusTone(node.state)}>{statusLabel(t, node.state)}</Badge>
                   {node.scope === 'client' && node.client_type && <Badge tone="default">{node.client_type}</Badge>}
+                  {!node.content.trim() && <Badge tone="soft">{t('Default')}</Badge>}
                   {dirty && <Badge tone="blue">{t('Unsaved')}</Badge>}
                 </div>
                 <div className="mt-1 text-[12px] font-mono text-txt-tertiary break-all">{node.uri}</div>
-                <p className="mt-2 text-[14px] leading-relaxed text-txt-secondary">{t(node.purpose)}</p>
+                <p className="mt-2 max-w-2xl text-[13.5px] leading-relaxed text-txt-secondary">{t(node.purpose)}</p>
               </div>
             </div>
-            <div className="grid grid-cols-2 gap-3 text-[12px] min-w-[220px]">
-              <div className="rounded-xl bg-fill-quaternary px-3 py-2">
-                <div className="text-txt-tertiary">{t('Status')}</div>
-                <div className="mt-1 font-medium text-txt-primary">{statusLabel(t, node.state)}</div>
-              </div>
-              <div className="rounded-xl bg-fill-quaternary px-3 py-2">
-                <div className="text-txt-tertiary">{t('Content length')}</div>
-                <div className="mt-1 font-medium text-txt-primary">{draft.trim().length}</div>
-              </div>
+            <div className="shrink-0 rounded-xl bg-fill-quaternary px-3 py-2 text-right text-[12px]">
+              <div className="text-txt-tertiary">{t('Content length')}</div>
+              <div className="mt-1 font-medium tabular-nums text-txt-primary">{draft.trim().length}</div>
             </div>
           </div>
 
-          <div>
-            <label className="mb-2 block text-[12px] font-medium uppercase tracking-[0.06em] text-txt-tertiary">{t('Draft prompt')}</label>
-            <AppInput
-              type="text"
-              value={nodeContext}
-              onChange={(event) => setNodeContext(event.target.value)}
-              placeholder={t('Optional extra guidance for this node')}
-              className="text-[13px]"
-            />
+          <div className="space-y-4 px-4 py-4 md:px-6 md:py-5">
+            <div>
+              <label htmlFor={`boot-content-${node.id}`} className="mb-2 block text-[12px] font-medium uppercase tracking-[0.06em] text-txt-tertiary">{t('Content')}</label>
+              <AppTextArea
+                id={`boot-content-${node.id}`}
+                value={draft}
+                onChange={(event) => {
+                  setDraft(event.target.value);
+                  setDirty(true);
+                }}
+                placeholder={t('Write the final memory content here')}
+                className="bg-bg-inset text-[14px] leading-relaxed"
+                style={{ height: 460, minHeight: 460 }}
+              />
+            </div>
+
+            {message && (
+              <Notice tone={message.tone === 'success' ? 'success' : message.tone === 'danger' ? 'danger' : 'info'}>
+                {message.text}
+              </Notice>
+            )}
           </div>
 
-          <div>
-            <label className="mb-2 block text-[12px] font-medium uppercase tracking-[0.06em] text-txt-tertiary">{t('Content')}</label>
-            <AppTextArea
-              value={draft}
-              onChange={(event) => {
-                setDraft(event.target.value);
-                setDirty(true);
-              }}
-              placeholder={t('Write the final memory content here')}
-              className="min-h-[320px] text-[14px] leading-relaxed"
-            />
-          </div>
-
-          {message && (
-            <Notice tone={message.tone === 'success' ? 'success' : message.tone === 'danger' ? 'danger' : 'info'}>
-              {message.text}
-            </Notice>
-          )}
-
-          <div className="flex items-center gap-2 flex-wrap justify-end">
-            <Button variant="secondary" onClick={() => void handleGenerate()} disabled={!setupStatus?.boot.draft_generation_available || generating || saving}>
-              {generating ? <RefreshCw size={14} className="animate-spin" /> : <Sparkles size={14} />}
-              {generating ? t('Generating…') : t('Generate draft')}
-            </Button>
-            <Button variant="primary" onClick={() => void handleSave()} disabled={saving}>
+          <div className="flex items-center justify-end gap-2 border-t border-separator-hairline bg-bg-raised/40 px-4 py-3.5 md:px-6">
+            <Button variant="secondary" onClick={() => void handleSave()} disabled={saving}>
               {saving ? <RefreshCw size={14} className="animate-spin" /> : <Save size={14} />}
               {saving ? t('Saving…') : t('Save')}
             </Button>

@@ -11,6 +11,18 @@ const EMBEDDING_REBUILD_KEYS = new Set([
   'embedding.model',
 ]);
 
+function hasConfiguredSetting(data: SettingsData, key: string): boolean {
+  if (data.secret_configured[key] === true) return true;
+  return String(data.values[key] ?? '').trim().length > 0;
+}
+
+export function hasConfiguredEmbedding(data: SettingsData | null): boolean {
+  if (!data) return false;
+  return hasConfiguredSetting(data, 'embedding.base_url')
+    && hasConfiguredSetting(data, 'embedding.api_key')
+    && hasConfiguredSetting(data, 'embedding.model');
+}
+
 interface ConfirmDialogOptions {
   message: string;
   destructive?: boolean;
@@ -29,6 +41,7 @@ interface UseSettingsFlowArgs {
   onAfterReset?: () => Promise<unknown>;
   onAfterSave?: () => Promise<unknown>;
   awaitEmbeddingRebuildOnSave?: boolean;
+  skipEmbeddingRebuildWhenUnconfigured?: boolean;
 }
 
 interface UseSettingsFlowResult {
@@ -56,6 +69,7 @@ export function useSettingsFlow({
   onAfterReset,
   onAfterSave,
   awaitEmbeddingRebuildOnSave = false,
+  skipEmbeddingRebuildWhenUnconfigured = false,
 }: UseSettingsFlowArgs): UseSettingsFlowResult {
   const [data, setData] = useState<SettingsData | null>(null);
   const [draft, setDraft] = useState<Record<string, unknown>>({});
@@ -90,6 +104,11 @@ export function useSettingsFlow({
   const embeddingChanged = useMemo(
     () => dirtyKeys.some((key) => EMBEDDING_REBUILD_KEYS.has(key)),
     [dirtyKeys],
+  );
+
+  const shouldRebuildEmbedding = useMemo(
+    () => embeddingChanged && (!skipEmbeddingRebuildWhenUnconfigured || hasConfiguredEmbedding(data)),
+    [data, embeddingChanged, skipEmbeddingRebuildWhenUnconfigured],
   );
 
   const clearDraft = useCallback(() => {
@@ -150,7 +169,7 @@ export function useSettingsFlow({
 
   const handleSave = useCallback(async () => {
     if (!dirtyKeys.length) return;
-    if (embeddingChanged) {
+    if (shouldRebuildEmbedding) {
       const ok = await confirmDialog({
         message: t('Changing the embedding model will invalidate all existing embeddings and trigger a full rebuild. Continue?'),
         confirmLabel: t('Continue'),
@@ -165,12 +184,12 @@ export function useSettingsFlow({
       const response = await api.put('/settings', { patch });
       setData(response.data as SettingsData);
       setDraft({});
-      if (embeddingChanged && awaitEmbeddingRebuildOnSave) {
+      if (shouldRebuildEmbedding && awaitEmbeddingRebuildOnSave) {
         await handleRebuild(false);
       }
       if (onAfterSave) await onAfterSave();
       notify(t('Changes saved'), 'success');
-      if (embeddingChanged && !awaitEmbeddingRebuildOnSave) {
+      if (shouldRebuildEmbedding && !awaitEmbeddingRebuildOnSave) {
         void handleRebuild();
       }
     } catch (e) {
@@ -179,7 +198,7 @@ export function useSettingsFlow({
     } finally {
       setSaving(false);
     }
-  }, [awaitEmbeddingRebuildOnSave, confirmDialog, dirtyKeys, draft, embeddingChanged, handleRebuild, notify, onAfterSave, t]);
+  }, [awaitEmbeddingRebuildOnSave, confirmDialog, dirtyKeys, draft, handleRebuild, notify, onAfterSave, shouldRebuildEmbedding, t]);
 
   return {
     data,
