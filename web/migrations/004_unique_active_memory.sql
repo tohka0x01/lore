@@ -2,7 +2,9 @@
 --
 -- updateNodeByPath first marks the old row as deprecated, then inserts the new
 -- active row. This index makes that application invariant explicit in every
--- environment and matches the production constraint name.
+-- environment and matches the production constraint name. The duplicate cleanup
+-- intentionally avoids migrated_to because deployed databases may have it as
+-- integer while old local schemas declared it as text.
 
 WITH ranked AS (
   SELECT
@@ -14,8 +16,7 @@ WITH ranked AS (
   WHERE deprecated = FALSE
 )
 UPDATE memories m
-SET deprecated = TRUE,
-    migrated_to = ranked.latest_id::text
+SET deprecated = TRUE
 FROM ranked
 WHERE m.id = ranked.id
   AND ranked.rn > 1;
