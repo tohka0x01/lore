@@ -20,6 +20,17 @@
 
 Lore is a long-term memory system for AI agents. It gives an agent a durable memory graph, a fixed startup baseline, per-prompt recall, explicit read tracking, and cautious write tools.
 
+Supported runtimes:
+
+| Runtime | Integration | Notes |
+|---|---|---|
+| **Pi** | `pi-extension/` | Best fit. Pi leaves long-term memory to extensions and keeps its system prompt compact, so Lore can act as the primary memory layer with little prompt competition. |
+| **Claude Code** | `claudecode-plugin/` | MCP tools, session-start boot injection, per-prompt recall injection, and guidance rules. |
+| **Codex** | `codex-plugin/` | Local marketplace plugin, MCP config, and optional hooks for boot / recall injection. |
+| **OpenClaw** | `openclaw-plugin/` | Runtime plugin with boot, recall, and Lore tools. |
+| **Hermes** | `hermes-plugin/` | MemoryProvider plugin with Lore tools and recall support. |
+| **Generic MCP clients** | `/api/mcp` | Streamable HTTP MCP endpoint for clients that can connect to remote tools. |
+
 Most agent memory systems stop at retrieval. Lore focuses on the full memory lifecycle:
 
 - **Boot baseline** — every session starts with stable identity, workflow, user, and runtime memories.

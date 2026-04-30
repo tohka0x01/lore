@@ -20,6 +20,17 @@
 
 Lore 是给 AI agent 用的长期记忆系统。它提供持久记忆图谱、固定启动基线、每轮 prompt 前召回、显式读取追踪和谨慎写入工具。
 
+当前支持的运行时：
+
+| Runtime | 接入方式 | 说明 |
+|---|---|---|
+| **Pi** | `pi-extension/` | 适配性最好。Pi 把长期记忆交给 extension 承载，系统提示词更简洁，Lore 可以成为主记忆层，prompt 竞争更少。 |
+| **Claude Code** | `claudecode-plugin/` | MCP tools、SessionStart boot 注入、每轮 prompt recall 注入和 guidance rules。 |
+| **Codex** | `codex-plugin/` | 本地 marketplace plugin、MCP 配置，以及可选 boot / recall injection hooks。 |
+| **OpenClaw** | `openclaw-plugin/` | runtime plugin，提供 boot、recall 和 Lore tools。 |
+| **Hermes** | `hermes-plugin/` | MemoryProvider plugin，提供 Lore tools 和 recall 支持。 |
+| **通用 MCP client** | `/api/mcp` | Streamable HTTP MCP endpoint，适合能连接远程 tools 的客户端。 |
+
 Lore 关注完整的记忆生命周期：
 
 - **Boot baseline** — 每次会话启动时加载稳定的身份、工作流、用户和运行时记忆。
