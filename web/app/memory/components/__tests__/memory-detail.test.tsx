@@ -3,7 +3,7 @@ import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it, vi } from 'vitest';
 
 vi.mock('@lobehub/ui/es/Button/index', () => ({
-  default: ({ children, ...props }: React.ButtonHTMLAttributes<HTMLButtonElement>) => <button {...props}>{children}</button>,
+  default: ({ children, danger: _danger, ...props }: React.ButtonHTMLAttributes<HTMLButtonElement> & { danger?: boolean }) => <button {...props}>{children}</button>,
 }));
 
 vi.mock('@lobehub/ui/es/Alert/index', () => ({
@@ -23,7 +23,7 @@ vi.mock('@lobehub/ui/es/Input/Input', () => ({
 }));
 
 vi.mock('@lobehub/ui/es/Input/TextArea', () => ({
-  default: (props: React.TextareaHTMLAttributes<HTMLTextAreaElement>) => <textarea data-app-text-area="true" {...props} />,
+  default: ({ resize: _resize, ...props }: React.TextareaHTMLAttributes<HTMLTextAreaElement> & { resize?: boolean }) => <textarea data-app-text-area="true" {...props} />,
 }));
 
 vi.mock('@lobehub/ui/es/Select/Select', () => ({
@@ -51,6 +51,48 @@ vi.mock('@lobehub/ui/es/Tag/Tag', () => ({
   default: ({ children }: { children: React.ReactNode }) => <span data-badge="true">{children}</span>,
 }));
 
+vi.mock('@lobehub/ui/es/Input/InputNumber', () => ({
+  default: (props: Record<string, unknown>) => <input data-lobe-input-number="true" {...props} />,
+}));
+
+vi.mock('@lobehub/ui/es/Empty/index', () => ({
+  default: ({ description }: { description?: React.ReactNode }) => <div data-lobe-empty="true">{description}</div>,
+}));
+
+vi.mock('@lobehub/ui/es/CopyButton/index', () => ({
+  default: ({ content }: { content: string }) => <button data-lobe-copy="true" data-content={content}>Copy</button>,
+}));
+
+vi.mock('@lobehub/ui/es/base-ui/Switch/Switch', () => ({
+  default: ({ checked }: { checked?: boolean }) => <button data-lobe-switch="true" data-checked={checked} />,
+}));
+
+vi.mock('@lobehub/ui/es/ActionIcon/index', () => ({
+  default: ({ title }: { title: string }) => <button data-lobe-action-icon="true" title={title} />,
+}));
+
+vi.mock('@lobehub/ui/es/CodeDiff/index', () => ({
+  CodeDiff: () => <div data-lobe-code-diff="true" />,
+}));
+
+vi.mock('@lobehub/ui/es/Block/index', () => ({
+  default: ({ children }: { children: React.ReactNode }) => <section data-lobe-block="true">{children}</section>,
+}));
+
+vi.mock('@lobehub/ui/es/Modal/index', () => ({
+  default: ({ children }: { children: React.ReactNode }) => <section data-lobe-modal="true">{children}</section>,
+}));
+
+vi.mock('@lobehub/ui', () => ({
+  Dropdown: ({ children, menu }: { children: React.ReactNode; menu?: { items?: Array<{ key: string; label: React.ReactNode }> } }) => (
+    <div data-lobe-dropdown="true">
+      <div>{children}</div>
+      {(menu?.items || []).map((item) => <span key={item.key}>{item.label}</span>)}
+    </div>
+  ),
+  Tooltip: ({ children }: { children: React.ReactNode }) => <span data-lobe-tooltip="true">{children}</span>,
+}));
+
 vi.mock('../../../../../lib/i18n', () => ({
   useT: () => ({ t: (key: string) => key }),
 }));
@@ -75,10 +117,38 @@ describe('memory detail Lobe wrappers', () => {
       />,
     );
 
-    expect((html.match(/data-app-input="true"/g) || []).length).toBe(2);
-    expect(html).toContain('type="number"');
+    expect((html.match(/data-app-input="true"/g) || []).length).toBe(1);
+    expect(html).toContain('data-lobe-input-number="true"');
     expect(html).toContain('data-app-text-area="true"');
     expect(html).toContain('when useful');
+  });
+
+  it('renders header actions through the shared dropdown menu wrapper', () => {
+    const html = renderToStaticMarkup(
+      <MemoryNodeHeader
+        node={{ content: 'body', priority: 1 }}
+        data={{ node: null, children: [], breadcrumbs: [{ label: 'Memory', path: '' }, { label: 'agent', path: 'agent' }] }}
+        domain="core"
+        path="agent"
+        isRoot={false}
+        editing={false}
+        moving={false}
+        creating={false}
+        sidebarOpen
+        setSidebarOpen={() => undefined}
+        startEditing={() => undefined}
+        setCreating={() => undefined}
+        setMoving={() => undefined}
+        handleRebuildViews={async () => undefined}
+        rebuildingViews={false}
+        handleDelete={async () => undefined}
+        navigateTo={() => undefined}
+        t={(key) => key}
+      />,
+    );
+
+    expect(html).toContain('data-lobe-dropdown="true"');
+    expect(html).toContain('More');
   });
 
   it('does not render history action in the node header', () => {

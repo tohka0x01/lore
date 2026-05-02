@@ -3,7 +3,7 @@
 import React, { useState, useEffect, useRef, KeyboardEvent, ChangeEvent } from 'react';
 import type { InputRef } from 'antd';
 import { X } from 'lucide-react';
-import { AppInput } from '../../../components/ui';
+import { ActionIcon, AppInput, Badge, TextButton } from '../../../components/ui';
 import { api } from '../../../lib/api';
 import { useT } from '../../../lib/i18n';
 import { useConfirm } from '../../../components/ConfirmDialog';
@@ -56,24 +56,18 @@ const KeywordManager = ({ keywords, nodeUuid, onUpdate }: KeywordManagerProps): 
   };
 
   return (
-    <div className="flex items-center gap-2 flex-wrap">
+    <div className="flex flex-wrap items-center gap-2">
       <span className="text-[11px] font-medium uppercase tracking-[0.06em] text-txt-tertiary">{t('Glossary')}</span>
       {visibleKeywords.map((kw) => (
-        <span key={kw} className="inline-flex items-center gap-0.5 font-mono text-[10.5px] text-txt-tertiary">
-          #{kw}
-          <button onClick={() => handleRemove(kw)} className="opacity-35 hover:opacity-100" aria-label={t('Remove')}>
-            <X size={9} />
-          </button>
-        </span>
+        <Badge key={kw} size="sm" tone="soft" mono className="gap-1 pr-1">
+          <span>#{kw}</span>
+          <ActionIcon icon={X} title={t('Remove')} size="small" onClick={() => void handleRemove(kw)} />
+        </Badge>
       ))}
       {hiddenCount > 0 && (
-        <button
-          type="button"
-          onClick={() => setExpanded(true)}
-          className="font-mono text-[10.5px] text-txt-quaternary hover:text-sys-blue"
-        >
+        <TextButton type="button" size="sm" tone="default" onClick={() => setExpanded(true)}>
           +{hiddenCount}
-        </button>
+        </TextButton>
       )}
       {adding ? (
         <AppInput
@@ -87,12 +81,9 @@ const KeywordManager = ({ keywords, nodeUuid, onUpdate }: KeywordManagerProps): 
           mono
         />
       ) : (
-        <button
-          onClick={() => setAdding(true)}
-          className="rounded-md border border-dashed border-separator-thin px-1.5 py-[1px] text-[10.5px] text-txt-quaternary transition-colors hover:border-sys-blue/40 hover:text-sys-blue"
-        >
+        <TextButton type="button" size="sm" tone="default" onClick={() => setAdding(true)}>
           + {t('Add')}
-        </button>
+        </TextButton>
       )}
     </div>
   );

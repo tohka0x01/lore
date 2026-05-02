@@ -74,13 +74,12 @@ export default function MemoryBrowserSidebar({
         <aside className="group sticky top-4 hidden max-h-[calc(100vh-96px)] w-52 shrink-0 self-start overflow-y-auto pr-1 md:block lg:w-56">
           <div className="mb-3 flex items-center justify-between">
             <h2 className="text-[15px] font-semibold tracking-tight text-txt-primary">{t('Domains')}</h2>
-            <button
+            <ActionIcon
+              className="-mr-1 opacity-0 transition-opacity group-hover:opacity-100"
+              icon={PanelLeftClose}
+              title={t('Hide tree')}
               onClick={() => setSidebarOpen(false)}
-              className="press -mr-1 rounded-md p-1 text-txt-quaternary opacity-0 transition-opacity group-hover:opacity-100 hover:text-txt-secondary"
-              aria-label={t('Hide tree')}
-            >
-              <PanelLeftClose size={14} />
-            </button>
+            />
           </div>
           {sidebarBody}
           <div className="mt-6 border-t border-separator-hairline pt-4">

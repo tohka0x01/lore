@@ -47,17 +47,18 @@ vi.mock('../../lib/theme', () => ({
 }));
 
 vi.mock('../ui', () => ({
+  AppUIProvider: ({ children }: { children: React.ReactNode }) => <div data-app-ui-provider="true">{children}</div>,
   Button: ({ children }: { children: React.ReactNode }) => <button>{children}</button>,
 }));
 
-import { LobeThemeWrapper, navIndicatorClassName } from '../AppShell';
+import { navIndicatorClassName } from '../AppShell';
+import { AppUIProvider } from '../ui';
 
 describe('AppShell theme contrast', () => {
-  it('passes the app theme into Lobe UI components', () => {
-    const html = renderToStaticMarkup(<LobeThemeWrapper><div>content</div></LobeThemeWrapper>);
+  it('passes the app theme through the self-owned UI provider bridge', () => {
+    const html = renderToStaticMarkup(<AppUIProvider><div>content</div></AppUIProvider>);
 
-    expect(html).toContain('data-lobe-theme-provider="true"');
-    expect(html).toContain('data-appearance="light"');
+    expect(html).toContain('data-app-ui-provider="true"');
   });
 
   it('uses a subtle fill background for active nav indicator', () => {

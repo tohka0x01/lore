@@ -91,7 +91,23 @@ vi.mock('@lobehub/ui/es/ActionIcon/index', () => ({
   ),
 }));
 
+vi.mock('@lobehub/ui/es/Input/InputNumber', () => ({
+  default: (props: Record<string, unknown>) => <input data-lobe-input-number="true" {...props} />,
+}));
+
+vi.mock('@lobehub/ui/es/base-ui/Switch/Switch', () => ({
+  default: ({ checked, disabled, onChange }: { checked?: boolean; disabled?: boolean; onChange?: (v: boolean) => void }) => (
+    <button data-lobe-switch="true" data-checked={checked} disabled={disabled} onClick={() => onChange?.(!checked)} />
+  ),
+}));
+
 vi.mock('@lobehub/ui', () => ({
+  Dropdown: ({ children, menu }: { children: React.ReactNode; menu?: { items?: Array<{ key: string; label: React.ReactNode }> } }) => (
+    <div data-lobe-dropdown="true">
+      <div>{children}</div>
+      {(menu?.items || []).map((item) => <span key={item.key}>{item.label}</span>)}
+    </div>
+  ),
   Tooltip: ({ title, children }: { title: React.ReactNode; children: React.ReactNode }) => (
     <span data-lobe-tooltip="true" data-title={typeof title === 'string' ? title : undefined}>
       {children}
@@ -99,7 +115,7 @@ vi.mock('@lobehub/ui', () => ({
   ),
 }));
 
-import { ActionIcon, AppAvatar, AppCheckbox, AppInput, Badge, Button, CopyButton, Empty, FilterPill, MenuItem, Notice, SegmentedTabs, SelectionBox, Spinner, StatCard, TextButton, ToggleSwitch, Tooltip } from '../controls';
+import { ActionIcon, AppAvatar, AppCheckbox, AppInput, Badge, Button, CopyButton, DropdownMenu, Empty, FilterNumberField, FilterPill, MenuItem, Notice, SegmentedTabs, SelectionBox, Spinner, StatCard, TextButton, ToggleSwitch, Tooltip } from '../controls';
 
 describe('ui controls Lobe wrappers', () => {
   it('maps primary buttons to Lobe type primary', () => {
@@ -326,18 +342,43 @@ describe('ui controls Lobe wrappers', () => {
     expect(label).toContain('for="days"');
   });
 
-  it('renders ToggleSwitch with switch accessibility state and disabled affordance', () => {
-    const checked = renderToStaticMarkup(<ToggleSwitch checked label="Enabled" />);
-    const disabled = renderToStaticMarkup(<ToggleSwitch checked={false} aria-label="Disabled switch" disabled />);
+  it('renders DropdownMenu through the shared wrapper with trigger and items', () => {
+    const html = renderToStaticMarkup(
+      <DropdownMenu
+        items={[
+          { key: 'new', label: 'New' },
+          { key: 'delete', label: 'Delete', danger: true },
+        ]}
+      >
+        <Button>More</Button>
+      </DropdownMenu>,
+    );
 
-    expect(checked).toContain('role="switch"');
-    expect(checked).toContain('aria-checked="true"');
+    expect(html).toContain('data-lobe-dropdown="true"');
+    expect(html).toContain('More');
+    expect(html).toContain('New');
+    expect(html).toContain('Delete');
+  });
+
+  it('renders FilterNumberField through the shared numeric wrapper without extra local styling', () => {
+    const html = renderToStaticMarkup(
+      <FilterNumberField id="days" value={14} min={1} onChange={() => undefined} />,
+    );
+
+    expect(html).toContain('data-lobe-input-number="true"');
+    expect(html).toContain('id="days"');
+  });
+
+  it('renders ToggleSwitch wrapping Lobe Switch with label', () => {
+    const checked = renderToStaticMarkup(<ToggleSwitch checked label="Enabled" />);
+    const disabled = renderToStaticMarkup(<ToggleSwitch checked={false} disabled />);
+
+    expect(checked).toContain('data-lobe-switch="true"');
+    expect(checked).toContain('data-checked="true"');
     expect(checked).toContain('Enabled');
-    expect(checked).toContain('bg-sys-blue');
-    expect(disabled).toContain('aria-label="Disabled switch"');
-    expect(disabled).toContain('aria-checked="false"');
+    expect(disabled).toContain('data-checked="false"');
     expect(disabled).toContain('disabled=""');
-    expect(disabled).toContain('disabled:cursor-not-allowed');
+    expect(disabled).toContain('cursor-not-allowed');
   });
 
   it('renders MenuItem with role, disabled state, danger tone, and optional slots', () => {

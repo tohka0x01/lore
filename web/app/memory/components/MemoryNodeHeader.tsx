@@ -1,6 +1,5 @@
 import React from 'react';
-import { Dropdown } from '@lobehub/ui';
-import { Button, PageTitle, TextButton } from '../../../components/ui';
+import { Button, DropdownMenu, PageTitle, TextButton } from '../../../components/ui';
 import { MoreHorizontal, PanelLeftOpen } from 'lucide-react';
 import PriorityBadge from './PriorityBadge';
 import type { BrowseData, MemoryNode } from '../useMemoryBrowserController';
@@ -89,21 +88,18 @@ export default function MemoryNodeHeader({
               <Button onClick={startEditing}>
                 {t('Edit')}
               </Button>
-              <Dropdown
-                trigger={['click']}
-                menu={{
-                  items: [
-                    { key: 'new', label: t('New'), onClick: () => setCreating(true) },
-                    ...(!isRoot ? [{ key: 'move', label: t('Move'), onClick: () => setMoving(true) }] : []),
-                    { key: 'rebuild', label: rebuildingViews ? t('Rebuilding…') : t('Rebuild'), disabled: rebuildingViews, onClick: () => void handleRebuildViews() },
-                    ...(!isRoot ? [{ key: 'delete', label: t('Delete'), danger: true, onClick: () => void handleDelete() }] : []),
-                  ],
-                }}
+              <DropdownMenu
+                items={[
+                  { key: 'new', label: t('New'), onClick: () => setCreating(true) },
+                  ...(!isRoot ? [{ key: 'move', label: t('Move'), onClick: () => setMoving(true) }] : []),
+                  { key: 'rebuild', label: rebuildingViews ? t('Rebuilding…') : t('Rebuild'), disabled: rebuildingViews, onClick: () => void handleRebuildViews() },
+                  ...(!isRoot ? [{ key: 'delete', label: t('Delete'), danger: true, onClick: () => void handleDelete() }] : []),
+                ]}
               >
                 <Button aria-label={t('More')}>
                   <MoreHorizontal size={15} />
                 </Button>
-              </Dropdown>
+              </DropdownMenu>
             </>
           )}
         </div>

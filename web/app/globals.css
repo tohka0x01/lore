@@ -172,7 +172,7 @@
 
 /* ── focus ring ─────────────────────────────────────────── */
 
-:focus-visible {
+:where(button, [role="button"], [role="checkbox"], [role="menuitem"], a[href], summary):focus-visible {
   outline: none;
   box-shadow: 0 0 0 3px rgba(10, 132, 255, 0.45);
   border-radius: inherit;

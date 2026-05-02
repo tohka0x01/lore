@@ -3,6 +3,7 @@
 import React, { type ReactNode } from 'react';
 import clsx from 'clsx';
 import LobeBlock from '@lobehub/ui/es/Block/index';
+import LobeModal from '@lobehub/ui/es/Modal/index';
 import { Spinner, surfaceCardClassName } from './controls';
 
 export { surfaceCardClassName };
@@ -168,6 +169,35 @@ export function LoadingBlock({ className, label, size = 'md', compact = false, c
 interface InlineMetaProps {
   children: ReactNode;
   className?: string;
+}
+
+interface ModalProps {
+  open: boolean;
+  title?: ReactNode;
+  children: ReactNode;
+  footer?: ReactNode;
+  onCancel?: () => void;
+  dismissible?: boolean;
+  width?: number;
+}
+
+export function Modal({ open, title, children, footer, onCancel, dismissible = true, width = 400 }: ModalProps): React.JSX.Element {
+  return (
+    <LobeModal
+      centered
+      className="rounded-2xl border border-separator-thin bg-bg-elevated shadow-xl"
+      closable={dismissible}
+      footer={footer}
+      keyboard={dismissible}
+      mask={{ closable: dismissible }}
+      onCancel={onCancel}
+      open={open}
+      title={title}
+      width={width}
+    >
+      {children}
+    </LobeModal>
+  );
 }
 
 export function InlineMeta({ children, className }: InlineMetaProps): React.JSX.Element {

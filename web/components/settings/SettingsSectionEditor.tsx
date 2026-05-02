@@ -2,7 +2,7 @@
 
 import React, { ChangeEvent } from 'react';
 import clsx from 'clsx';
-import { AppInput, AppPasswordInput, AppSelect, Badge, Button, TextButton, ToggleSwitch } from '@/components/ui';
+import { AppInput, AppInputNumber, AppPasswordInput, AppSelect, Badge, Button, TextButton, ToggleSwitch } from '@/components/ui';
 import { useT } from '@/lib/i18n';
 
 export type SettingSource = 'db' | 'default';
@@ -69,17 +69,15 @@ interface NumberInputProps {
 function NumberInput({ value, onChange, schema, disabled }: NumberInputProps): React.JSX.Element {
   const step = schema.step ?? (schema.type === 'integer' ? 1 : 0.01);
   return (
-    <AppInput
-      type="number"
+    <AppInputNumber
       step={step}
       min={schema.min}
       max={schema.max}
-      value={value == null ? '' : String(value)}
+      value={value == null || value === '' ? null : Number(value)}
       disabled={disabled}
-      onChange={(e: ChangeEvent<HTMLInputElement>) => onChange(e.target.value === '' ? '' : Number(e.target.value))}
+      onChange={(v) => onChange(v == null ? '' : Number(v) as number)}
       className="w-32 text-right tabular-nums"
       size="md"
-      mono
     />
   );
 }
@@ -146,7 +144,6 @@ function BooleanInput({ value, onChange, disabled }: BooleanInputProps): React.J
       onCheckedChange={(v) => onChange(v)}
       disabled={disabled}
       label={checked ? t('true') : t('false')}
-      className="text-[13px] text-txt-primary"
     />
   );
 }

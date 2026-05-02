@@ -4,6 +4,7 @@ import { describe, expect, it, vi } from 'vitest';
 
 vi.mock('@/components/ui', () => ({
   AppInput: (props: React.InputHTMLAttributes<HTMLInputElement>) => <input data-app-input="true" {...props} />,
+  AppInputNumber: (props: Record<string, unknown>) => <input data-app-input-number="true" {...props} />,
   AppPasswordInput: (props: React.InputHTMLAttributes<HTMLInputElement>) => <input data-app-password-input="true" type="password" {...props} />,
   AppSelect: ({ options = [], value }: { options?: Array<{ label: React.ReactNode; value: string }>; value?: string }) => (
     <div data-app-select="true" data-value={value}>
@@ -104,8 +105,7 @@ describe('SettingsSectionEditor fields', () => {
       />,
     );
 
-    expect(html).toContain('data-app-input="true"');
-    expect(html).toContain('type="number"');
+    expect(html).toContain('data-app-input-number="true"');
   });
 
   it('renders enabled boolean switches with a green selected state', () => {

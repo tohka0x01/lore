@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { ChevronRight } from 'lucide-react';
-import { Badge, surfaceCardClassName } from '../../../components/ui';
+import clsx from 'clsx';
+import { Badge, Section, TextButton } from '../../../components/ui';
 import type { MemoryView } from '../useMemoryBrowserController';
 
 interface MemoryViewsSectionProps {
@@ -13,17 +14,29 @@ export default function MemoryViewsSection({ memoryViews, t, defaultOpen = false
   const [open, setOpen] = useState(defaultOpen);
 
   return (
-    <section className={surfaceCardClassName}>
-      <button
-        type="button"
-        onClick={() => setOpen((value) => !value)}
-        className="group flex w-full items-center justify-between gap-3 px-4 py-3 text-left transition-colors hover:text-sys-blue md:px-6"
-        aria-expanded={open}
-      >
-        <span className="text-[13px] font-semibold text-txt-primary">{t('Retrieval views')} {memoryViews.length}</span>
-        <ChevronRight size={15} className={open ? 'rotate-90 text-txt-tertiary transition-transform' : 'text-txt-tertiary transition-transform'} />
-      </button>
-      {open && (
+    <Section
+      compact
+      padded={false}
+      title={(
+        <span className="inline-flex items-center gap-2">
+          <span>{t('Retrieval views')}</span>
+          <Badge size="sm" tone="soft" mono>{memoryViews.length}</Badge>
+        </span>
+      )}
+      right={(
+        <TextButton
+          type="button"
+          tone="default"
+          size="sm"
+          title={open ? t('Hide') : t('Show')}
+          aria-expanded={open}
+          onClick={() => setOpen((value) => !value)}
+        >
+          <ChevronRight size={15} className={clsx('transition-transform', open && 'rotate-90')} />
+        </TextButton>
+      )}
+    >
+      {open ? (
         <div className="border-t border-separator-hairline">
           {memoryViews.map((view, index) => {
             const llmRefined = view?.metadata?.llm_refined === true;
@@ -52,7 +65,7 @@ export default function MemoryViewsSection({ memoryViews, t, defaultOpen = false
             );
           })}
         </div>
-      )}
-    </section>
+      ) : undefined}
+    </Section>
   );
 }

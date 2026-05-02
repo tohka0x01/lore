@@ -1,12 +1,11 @@
 'use client';
 
 import React, { useCallback, useContext, useMemo, useRef, useState, createContext, ReactNode } from 'react';
-import LobeModal from '@lobehub/ui/es/Modal/index';
 import { Toaster, toast as sonnerToast } from 'sonner';
 import clsx from 'clsx';
 import { useTheme } from '../lib/theme';
 import { useT } from '../lib/i18n';
-import { Button } from './ui';
+import { Button, Modal } from './ui';
 
 interface ConfirmOptions {
   title?: string;
@@ -39,10 +38,8 @@ export function ConfirmModalForTest({ dialog, onConfirm, onCancel }: { dialog: D
   const { t } = useT();
   const dismissible = dialog.dismissible !== false;
   return (
-    <LobeModal
-      centered
-      className="rounded-2xl border border-separator-thin bg-bg-elevated shadow-xl"
-      closable={dismissible}
+    <Modal
+      dismissible={dismissible}
       footer={(
         <div className="flex items-center justify-end gap-2">
           {dialog.hideCancel ? null : (
@@ -51,7 +48,6 @@ export function ConfirmModalForTest({ dialog, onConfirm, onCancel }: { dialog: D
             </Button>
           )}
           <Button
-           
             variant={dialog.destructive ? 'destructive' : 'secondary'}
             onClick={onConfirm}
           >
@@ -59,8 +55,6 @@ export function ConfirmModalForTest({ dialog, onConfirm, onCancel }: { dialog: D
           </Button>
         </div>
       )}
-      keyboard={dismissible}
-      mask={{ closable: dismissible }}
       onCancel={onCancel}
       open
       title={dialog.title}
@@ -69,7 +63,7 @@ export function ConfirmModalForTest({ dialog, onConfirm, onCancel }: { dialog: D
       <p className="text-[14px] leading-relaxed text-txt-secondary">
         {dialog.message}
       </p>
-    </LobeModal>
+    </Modal>
   );
 }
 

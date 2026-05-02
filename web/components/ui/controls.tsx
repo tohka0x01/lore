@@ -12,18 +12,23 @@ import type { AvatarProps as LobeAvatarProps } from '@lobehub/ui/es/Avatar/type'
 import LobeCheckbox from '@lobehub/ui/es/Checkbox/index';
 import type { CheckboxProps as LobeCheckboxProps } from '@lobehub/ui/es/Checkbox/type';
 import LobeInput from '@lobehub/ui/es/Input/Input';
+import * as LobeInputNumberMod from '@lobehub/ui/es/Input/InputNumber';
+const LobeInputNumber = (LobeInputNumberMod as any).default ?? LobeInputNumberMod;
 import LobeInputPassword from '@lobehub/ui/es/Input/InputPassword';
 import LobeTextArea from '@lobehub/ui/es/Input/TextArea';
-import type { InputPasswordProps as LobeInputPasswordProps, InputProps as LobeInputProps, TextAreaProps as LobeTextAreaProps } from '@lobehub/ui/es/Input/type';
+import type { InputNumberProps as LobeInputNumberProps, InputPasswordProps as LobeInputPasswordProps, InputProps as LobeInputProps, TextAreaProps as LobeTextAreaProps } from '@lobehub/ui/es/Input/type';
 import LobeSelect from '@lobehub/ui/es/Select/Select';
 import type { SelectProps as LobeSelectProps } from '@lobehub/ui/es/Select/type';
 import LobeSegmented from '@lobehub/ui/es/Segmented/index';
 import LobeTag from '@lobehub/ui/es/Tag/Tag';
 import LobeEmpty from '@lobehub/ui/es/Empty/index';
 import LobeCopyButton from '@lobehub/ui/es/CopyButton/index';
+import * as LobeSwitchMod from '@lobehub/ui/es/base-ui/Switch/Switch';
+const LobeSwitch = (LobeSwitchMod as any).default ?? LobeSwitchMod;
+import type { SwitchProps as LobeSwitchProps } from '@lobehub/ui/es/base-ui/Switch/type';
 import LobeActionIcon from '@lobehub/ui/es/ActionIcon/index';
 import { CodeDiff as LobeCodeDiff } from '@lobehub/ui/es/CodeDiff/index';
-import { Tooltip as LobeTooltip } from '@lobehub/ui';
+import { Dropdown as LobeDropdown, Tooltip as LobeTooltip } from '@lobehub/ui';
 
 export type ButtonVariant = 'primary' | 'secondary' | 'ghost' | 'destructive';
 export type ButtonSize = 'sm' | 'md' | 'lg';
@@ -273,11 +278,10 @@ const APP_INPUT_SIZE_CLASSES: Record<AppInputSize, string> = {
 interface AppInputProps extends Omit<LobeInputProps, 'size'> {
   size?: AppInputSize;
   mono?: boolean;
-  narrow?: boolean;
 }
 
-export function AppInput({ className, variant = 'filled', size = 'md', mono = false, narrow = false, ...rest }: AppInputProps): React.JSX.Element {
-  return <LobeInput className={clsx(APP_INPUT_SIZE_CLASSES[size], mono && 'font-mono tabular-nums', narrow && '!p-0 !h-auto !bg-transparent', className)} variant={variant} {...rest} />;
+export function AppInput({ className, variant = 'filled', size = 'md', mono = false, ...rest }: AppInputProps): React.JSX.Element {
+  return <LobeInput className={clsx(APP_INPUT_SIZE_CLASSES[size], mono && 'font-mono tabular-nums', className)} variant={variant} {...rest} />;
 }
 
 interface AppPasswordInputProps extends Omit<LobeInputPasswordProps, 'size'> {
@@ -286,6 +290,32 @@ interface AppPasswordInputProps extends Omit<LobeInputPasswordProps, 'size'> {
 
 export function AppPasswordInput({ className, variant = 'filled', size = 'md', ...rest }: AppPasswordInputProps): React.JSX.Element {
   return <LobeInputPassword className={clsx(APP_INPUT_SIZE_CLASSES[size], className)} variant={variant} {...rest} />;
+}
+
+interface AppInputNumberProps extends Omit<LobeInputNumberProps, 'size'> {
+  size?: AppInputSize;
+}
+
+export function AppInputNumber({ className, variant = 'filled', size = 'md', ...rest }: AppInputNumberProps): React.JSX.Element {
+  return <LobeInputNumber className={clsx(APP_INPUT_SIZE_CLASSES[size], className)} variant={variant} {...rest} />;
+}
+
+interface FilterNumberFieldProps extends Omit<LobeInputNumberProps, 'size' | 'onChange' | 'value'> {
+  value: number;
+  onChange: (value: number | null) => void;
+}
+
+export function FilterNumberField({ className, value, onChange, variant = 'borderless', ...rest }: FilterNumberFieldProps): React.JSX.Element {
+  return (
+    <LobeInputNumber
+      size="middle"
+      value={value}
+      variant={variant}
+      onChange={(next: number | null | undefined) => onChange(next == null ? null : Number(next))}
+      {...rest}
+      className={clsx(className)}
+    />
+  );
 }
 
 interface AppTextAreaProps extends Omit<LobeTextAreaProps, 'size'> {
@@ -316,15 +346,14 @@ interface AppSelectProps {
   disabled?: boolean;
   size?: AppInputSize;
   mono?: boolean;
-  narrow?: boolean;
   style?: LobeSelectProps['style'];
   variant?: LobeSelectProps['variant'];
 }
 
-export function AppSelect({ value, onValueChange, options, placeholder, className, disabled = false, size = 'md', mono = false, narrow = false, style, variant = 'filled' }: AppSelectProps): React.JSX.Element {
+export function AppSelect({ value, onValueChange, options, placeholder, className, disabled = false, size = 'md', mono = false, style, variant = 'filled' }: AppSelectProps): React.JSX.Element {
   return (
     <LobeSelect
-      className={clsx(APP_INPUT_SIZE_CLASSES[size], mono && 'font-mono tabular-nums', narrow && 'w-auto', className)}
+      className={clsx(APP_INPUT_SIZE_CLASSES[size], mono && 'font-mono tabular-nums', className)}
       disabled={disabled}
       options={options.map((option) => ({ label: option.label, value: option.value }))}
       placeholder={placeholder || '—'}
@@ -373,47 +402,23 @@ export function FilterPill({ children, active = false, className, as = 'div', ht
   return <div className={filterPillClassName(active, className)}>{children}</div>;
 }
 
-interface ToggleSwitchProps extends Omit<ButtonHTMLAttributes<HTMLButtonElement>, 'children' | 'onChange'> {
-  checked: boolean;
-  onCheckedChange?: (checked: boolean) => void;
+interface ToggleSwitchProps extends Omit<LobeSwitchProps, 'onChange'> {
   label?: ReactNode;
+  onCheckedChange?: (checked: boolean) => void;
 }
 
-export function ToggleSwitch({ checked, onCheckedChange, disabled = false, label, className, type = 'button', onClick, ...rest }: ToggleSwitchProps): React.JSX.Element {
-  const handleClick: ButtonHTMLAttributes<HTMLButtonElement>['onClick'] = (event) => {
-    onClick?.(event);
-    if (!event.defaultPrevented) onCheckedChange?.(!checked);
-  };
-
+export function ToggleSwitch({ checked, onCheckedChange, disabled = false, label, className, size = 'default', ...rest }: ToggleSwitchProps): React.JSX.Element {
   return (
-    <button
-      {...rest}
-      type={type}
-      role="switch"
-      aria-checked={checked}
-      disabled={disabled}
-      onClick={handleClick}
-      className={clsx(
-        'press inline-flex items-center gap-2 rounded-full text-[13px] font-medium text-txt-secondary disabled:cursor-not-allowed disabled:opacity-40',
-        className,
-      )}
-    >
-      <span
-        className={clsx(
-          'relative inline-flex h-5 w-9 shrink-0 rounded-full border transition-colors',
-          checked ? 'border-sys-blue/40 bg-sys-blue' : 'border-separator-thin bg-fill-secondary',
-        )}
-        aria-hidden
-      >
-        <span
-          className={clsx(
-            'absolute top-0.5 h-4 w-4 rounded-full bg-white shadow-sm transition-transform',
-            checked ? 'translate-x-[18px]' : 'translate-x-0.5',
-          )}
-        />
-      </span>
+    <label className={clsx('inline-flex items-center gap-2 text-[13px] font-medium text-txt-secondary', disabled && 'cursor-not-allowed opacity-40', className)}>
+      <LobeSwitch
+        checked={checked}
+        disabled={disabled}
+        size={size}
+        onChange={(v: boolean) => onCheckedChange?.(v)}
+        {...rest}
+      />
       {label ? <span>{label}</span> : null}
-    </button>
+    </label>
   );
 }
 
@@ -421,6 +426,30 @@ interface MenuItemProps extends ButtonHTMLAttributes<HTMLButtonElement> {
   tone?: 'default' | 'danger';
   leftIcon?: ReactNode;
   right?: ReactNode;
+}
+
+interface DropdownMenuItem {
+  key: string;
+  label: ReactNode;
+  danger?: boolean;
+  disabled?: boolean;
+  onClick?: () => void;
+}
+
+interface DropdownMenuProps {
+  items: DropdownMenuItem[];
+  children: ReactNode;
+}
+
+export function DropdownMenu({ items, children }: DropdownMenuProps): React.JSX.Element {
+  return (
+    <LobeDropdown
+      trigger={['click']}
+      menu={{ items }}
+    >
+      {children}
+    </LobeDropdown>
+  );
 }
 
 export function MenuItem({ tone = 'default', leftIcon, right, children, type = 'button', className, role = 'menuitem', ...rest }: MenuItemProps): React.JSX.Element {

@@ -1,5 +1,5 @@
 import React, { ChangeEvent } from 'react';
-import { ActionPanel, AppInput, AppTextArea, Button } from '../../../components/ui';
+import { ActionPanel, AppInput, AppInputNumber, AppTextArea, Button } from '../../../components/ui';
 import { useT } from '../../../lib/i18n';
 
 interface MemoryEditorProps {
@@ -33,12 +33,11 @@ export default function MemoryEditor({
       <div className="grid gap-4 sm:grid-cols-[auto_1fr] items-start">
         <label className="block">
           <span className="block mb-1 text-[11px] font-medium text-txt-tertiary">{t('Priority')}</span>
-          <AppInput
-            type="number" min="0" value={editPriority}
-            onChange={(e: ChangeEvent<HTMLInputElement>) => setEditPriority(parseInt(e.target.value, 10) || 0)}
+          <AppInputNumber
+            min={0} value={editPriority}
+            onChange={(v) => setEditPriority(Number(v) || 0)}
             className="w-24 tabular-nums"
             size="lg"
-            mono
           />
         </label>
         <label className="block">

@@ -1,5 +1,5 @@
 import React, { useState, ChangeEvent } from 'react';
-import { ActionPanel, AppInput, AppTextArea, Button } from '../../../components/ui';
+import { ActionPanel, AppInput, AppInputNumber, AppTextArea, Button } from '../../../components/ui';
 import { useT } from '../../../lib/i18n';
 import { api } from '../../../lib/api';
 import { AxiosError } from 'axios';
@@ -63,10 +63,11 @@ export default function CreateNodeForm({ domain, parentPath, onCreated, onCancel
         </label>
         <label className="block">
           <span className="block mb-1 text-[11px] font-medium text-txt-tertiary">{t('Priority')}</span>
-          <AppInput
-            type="number" min="0" value={priority}
-            onChange={(e: ChangeEvent<HTMLInputElement>) => setPriority(parseInt(e.target.value, 10) || 0)}
-            className="w-24 font-mono text-[14px] tabular-nums"
+          <AppInputNumber
+            min={0} value={priority}
+            onChange={(v) => setPriority(Number(v) || 0)}
+            className="w-24"
+            size="lg"
           />
         </label>
       </div>

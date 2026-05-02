@@ -5,7 +5,7 @@ import { useRouter, useSearchParams } from 'next/navigation';
 import { RefreshCw } from 'lucide-react';
 import { api } from '../../lib/api';
 import {
-  PageCanvas, PageTitle, Section, Button, TextButton, Table, StatCard, Notice, AppInput, AppSelect, FilterPill,
+  PageCanvas, PageTitle, Section, Button, TextButton, Table, StatCard, Notice, FilterNumberField, AppSelect, FilterPill,
   fmt, trunc, asNumber,
 } from '../../components/ui';
 import RecallStages from '../../components/RecallStages';
@@ -229,16 +229,11 @@ export default function RecallDrilldown(): React.JSX.Element {
         className="press h-8 hover:bg-fill-quaternary focus-within:bg-fill-quaternary"
       >
         <span>{t('Days')}</span>
-        <AppInput
+        <FilterNumberField
           id="recall-days-filter"
-          variant="borderless"
-          type="number"
-          narrow
-          mono
           min={1}
-          value={String(filters.days)}
-          onChange={(e) => applyFilters({ days: e.target.value }, 'replace')}
-          className="!w-8 text-right font-semibold tabular-nums"
+          value={Number(filters.days) || 1}
+          onChange={(v) => applyFilters({ days: v ?? DEFAULT_FILTERS.days }, 'replace')}
         />
       </FilterPill>
       <FilterPill
@@ -250,12 +245,11 @@ export default function RecallDrilldown(): React.JSX.Element {
         <AppSelect
           variant="borderless"
           size="md"
-          narrow
           value={filters.clientType}
           onValueChange={(value) => applyFilters({ clientType: value }, 'replace')}
           options={[{ value: '', label: t('All sources') }, ...sourceOptions]}
           placeholder={t('All sources')}
-          className="font-semibold text-txt-primary"
+          className="w-auto font-semibold text-txt-primary"
         />
       </FilterPill>
     </div>

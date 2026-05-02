@@ -7,7 +7,7 @@ import remarkGfm from 'remark-gfm';
 import { X } from 'lucide-react';
 import clsx from 'clsx';
 import { useT } from '../../../lib/i18n';
-import { ActionIcon, Badge, surfaceCardClassName } from '../../../components/ui';
+import { ActionIcon, Badge, Section } from '../../../components/ui';
 
 interface GlossaryNode {
   uri?: string;
@@ -36,6 +36,49 @@ interface GlossaryPopupProps {
   onNavigate: (path: string, domain: string) => void;
 }
 
+interface GlossaryPopupRowProps {
+  node: GlossaryNode;
+  onNavigate: (path: string, domain: string) => void;
+  onClose: () => void;
+  t: (key: string) => string;
+}
+
+function GlossaryPopupRow({ node, onNavigate, onClose, t }: GlossaryPopupRowProps): React.JSX.Element {
+  const isUnlinked = node.uri?.startsWith('unlinked://');
+
+  return (
+    <button
+      type="button"
+      disabled={isUnlinked}
+      onClick={() => {
+        if (isUnlinked) return;
+        const match = node.uri?.match(/^([^:]+):\/\/(.*)$/);
+        if (match) onNavigate(match[2], match[1]);
+        onClose();
+      }}
+      className={clsx(
+        'press w-full rounded-xl border border-transparent px-3 py-2.5 text-left transition-colors disabled:cursor-default disabled:opacity-60',
+        !isUnlinked && 'hover:border-separator-thin hover:bg-fill-quaternary',
+      )}
+    >
+      <div className="flex items-center gap-2">
+        <code className={clsx(
+          'flex-1 truncate font-mono text-[11.5px]',
+          isUnlinked ? 'text-txt-tertiary' : 'text-txt-primary',
+        )}>
+          {node.uri}
+        </code>
+        {isUnlinked && (
+          <Badge tone="red" size="xs">{t('Orphaned')}</Badge>
+        )}
+      </div>
+      {node.content_snippet && (
+        <p className="mt-1 line-clamp-2 text-[12px] leading-snug text-txt-secondary">{node.content_snippet}</p>
+      )}
+    </button>
+  );
+}
+
 const GlossaryPopup = ({ keyword, nodes, position, onClose, onNavigate }: GlossaryPopupProps): React.JSX.Element => {
   const { t } = useT();
   const popupRef = useRef<HTMLDivElement>(null);
@@ -51,7 +94,7 @@ const GlossaryPopup = ({ keyword, nodes, position, onClose, onNavigate }: Glossa
   return createPortal(
     <div
       ref={popupRef}
-      className={clsx('animate-scale fixed z-[70] flex w-80 flex-col', surfaceCardClassName, 'shadow-2xl shadow-black/60 backdrop-blur-xl')}
+      className="animate-scale fixed z-[70] w-80"
       style={{
         left: Math.min(position.x, (typeof window !== 'undefined' ? window.innerWidth : 800) - 328),
         ...(position.isAbove
@@ -59,46 +102,30 @@ const GlossaryPopup = ({ keyword, nodes, position, onClose, onNavigate }: Glossa
           : { top: position.y + 8, maxHeight: (typeof window !== 'undefined' ? window.innerHeight : 600) - position.y - 24 }),
       }}
     >
-      <div className="flex flex-shrink-0 items-center gap-2 border-b border-separator-thin px-4 py-3">
-        <span className="text-[11px] font-medium uppercase tracking-[0.06em] text-txt-tertiary">{t('Entry')}</span>
-        <span className="text-[14px] font-semibold text-sys-yellow truncate">{keyword}</span>
-        <ActionIcon icon={X} title={t('Close')} onClick={onClose} className="ml-auto" />
-      </div>
-      <div className="flex-1 overflow-y-auto p-1.5">
-        {nodes.map((node, i) => {
-          const isUnlinked = node.uri?.startsWith('unlinked://');
-          return (
-            <button
+      <Section
+        compact
+        className="overflow-hidden shadow-2xl shadow-black/40"
+        title={(
+          <span className="inline-flex min-w-0 items-center gap-2">
+            <span className="text-[11px] font-medium uppercase tracking-[0.06em] text-txt-tertiary">{t('Entry')}</span>
+            <span className="truncate text-[14px] font-semibold text-sys-yellow">{keyword}</span>
+          </span>
+        )}
+        right={<ActionIcon icon={X} title={t('Close')} onClick={onClose} />}
+        bodyClassName="max-h-[inherit] overflow-y-auto px-1.5 py-1.5"
+      >
+        <div className="space-y-1">
+          {nodes.map((node, i) => (
+            <GlossaryPopupRow
               key={node.uri || i}
-              onClick={() => {
-                if (isUnlinked) return;
-                const match = node.uri?.match(/^([^:]+):\/\/(.*)$/);
-                if (match) onNavigate(match[2], match[1]);
-                onClose();
-              }}
-              className={clsx(
-                'press group w-full rounded-xl px-3 py-2.5 text-left transition-colors',
-                isUnlinked ? 'cursor-default opacity-60' : 'cursor-pointer hover:bg-fill-quaternary',
-              )}
-            >
-              <div className="flex items-center gap-2">
-                <code className={clsx(
-                  'flex-1 truncate font-mono text-[11.5px]',
-                  isUnlinked ? 'text-txt-tertiary' : 'text-txt-primary group-hover:text-sys-blue',
-                )}>
-                  {node.uri}
-                </code>
-                {isUnlinked && (
-                  <Badge tone="red" size="xs">{t('Orphaned')}</Badge>
-                )}
-              </div>
-              {node.content_snippet && (
-                <p className="mt-1 line-clamp-2 text-[12px] leading-snug text-txt-secondary">{node.content_snippet}</p>
-              )}
-            </button>
-          );
-        })}
-      </div>
+              node={node}
+              onNavigate={onNavigate}
+              onClose={onClose}
+              t={t}
+            />
+          ))}
+        </div>
+      </Section>
     </div>,
     document.body,
   );

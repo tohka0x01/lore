@@ -57,6 +57,13 @@ vi.mock('../ui', () => ({
   Button: ({ children, className, variant }: { children: React.ReactNode; className?: string; variant?: string }) => (
     <button className={className} data-variant={variant}>{children}</button>
   ),
+  Modal: ({ children, open, title, footer }: { children: React.ReactNode; open?: boolean; title?: React.ReactNode; footer?: React.ReactNode }) => (
+    <section data-app-modal="true" data-open={String(open)}>
+      <h1>{title}</h1>
+      <div>{children}</div>
+      {footer === null ? null : <footer>{footer}</footer>}
+    </section>
+  ),
 }));
 
 vi.mock('../../lib/theme', () => ({
@@ -88,16 +95,11 @@ function renderConfirmModal(options: { destructive?: boolean; hideCancel?: boole
 }
 
 describe('ConfirmProvider modal', () => {
-  it('renders confirmations through Lobe Modal with message and actions', () => {
+  it('renders confirmations through the shared Modal wrapper with message and actions', () => {
     const html = renderConfirmModal();
 
-    expect(html).toContain('data-lobe-modal="true"');
+    expect(html).toContain('data-app-modal="true"');
     expect(html).toContain('data-open="true"');
-    expect(html).toContain('data-centered="true"');
-    expect(html).toContain('rounded-2xl');
-    expect(html).toContain('border-separator-thin');
-    expect(html).toContain('bg-bg-elevated');
-    expect(html).toContain('shadow-xl');
     expect(html).toContain('Delete memory');
     expect(html).toContain('This cannot be undone.');
     expect(html).toContain('Cancel');

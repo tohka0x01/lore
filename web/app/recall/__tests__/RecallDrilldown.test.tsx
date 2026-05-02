@@ -47,6 +47,7 @@ vi.mock('../../../components/ui', () => ({
   Disclosure: ({ children, trigger }: { children: React.ReactNode; trigger: React.ReactNode }) => <div>{trigger}{children}</div>,
   SegmentedTabs: () => <div data-segmented-tabs="true" />,
   AppInput: (props: React.InputHTMLAttributes<HTMLInputElement>) => <input data-app-input="true" {...props} />,
+  FilterNumberField: (props: Record<string, unknown>) => <input data-filter-number-field="true" {...props} />,
   AppSelect: ({ options, placeholder }: { options: Array<{ value: string; label: React.ReactNode }>; placeholder?: React.ReactNode }) => (
     <select data-app-select="true">
       {placeholder && <option value="">{placeholder}</option>}
@@ -97,7 +98,7 @@ describe('RecallDrilldown threshold analysis', () => {
   it('renders only the day and source filters in the page header', () => {
     const html = renderToStaticMarkup(<RecallDrilldown />);
 
-    expect((html.match(/data-app-input="true"/g) || []).length).toBe(1);
+    expect((html.match(/data-filter-number-field="true"/g) || []).length).toBe(1);
     expect((html.match(/data-app-select="true"/g) || []).length).toBe(1);
     expect((html.match(/data-filter-pill="true"/g) || []).length).toBe(2);
     expect((html.match(/data-filter-pill-as="label"/g) || []).length).toBe(2);

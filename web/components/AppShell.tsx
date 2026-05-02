@@ -3,9 +3,6 @@
 import React, { useState, useEffect, useCallback, useRef, useMemo, ReactNode } from 'react';
 import { useRouter, usePathname } from 'next/navigation';
 import { Sun, Moon } from 'lucide-react';
-import { ConfigProvider } from '@lobehub/ui';
-import LobeThemeProvider from '@lobehub/ui/es/ThemeProvider/index';
-import { motion } from 'motion/react';
 import clsx from 'clsx';
 import { getDomains, getSetupFlowStatus, AUTH_ERROR_EVENT } from '../lib/api';
 import { getSetupFlowDecision, SETUP_STATUS_CHANGED_EVENT, type SetupFlowStatus } from '@/lib/bootSetup';
@@ -13,7 +10,7 @@ import { LanguageProvider, useT } from '../lib/i18n';
 import { ThemeProvider, useTheme } from '../lib/theme';
 import TokenAuth from './TokenAuth';
 import { ConfirmProvider, useConfirm } from './ConfirmDialog';
-import { Button } from './ui';
+import { AppUIProvider, Button } from './ui';
 import { AxiosError } from 'axios';
 
 const BOOT_SETUP_ACK_KEY = 'lore-boot-setup-confirmed';
@@ -34,15 +31,6 @@ const tabs: Tab[] = [
 
 export function navIndicatorClassName(isHovering: boolean): string {
   return 'bg-fill-primary shadow-none';
-}
-
-export function LobeThemeWrapper({ children }: { children: ReactNode }): React.JSX.Element {
-  const { theme } = useTheme();
-  return (
-    <LobeThemeProvider appearance={theme === 'light' ? 'light' : 'dark'}>
-      {children}
-    </LobeThemeProvider>
-  );
 }
 
 interface IndicatorState {
@@ -432,15 +420,13 @@ interface AppShellProps {
 export default function AppShell({ children }: AppShellProps): React.JSX.Element {
   return (
     <ThemeProvider>
-      <ConfigProvider motion={motion}>
-        <LobeThemeWrapper>
-          <LanguageProvider>
-            <ConfirmProvider>
-              <AppShellInner>{children}</AppShellInner>
-            </ConfirmProvider>
-          </LanguageProvider>
-        </LobeThemeWrapper>
-      </ConfigProvider>
+      <AppUIProvider>
+        <LanguageProvider>
+          <ConfirmProvider>
+            <AppShellInner>{children}</AppShellInner>
+          </ConfirmProvider>
+        </LanguageProvider>
+      </AppUIProvider>
     </ThemeProvider>
   );
 }
