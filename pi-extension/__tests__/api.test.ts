@@ -1,18 +1,29 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { authHeaders, buildApiUrl, fetchJson, hasRecallConfig, pickPluginConfig, textResult } from '../api';
 
+let originalLoreBaseUrl: string | undefined;
+
+function restoreEnvVar(name: 'LORE_BASE_URL' | 'LORE_API_TOKEN' | 'API_TOKEN', value: string | undefined) {
+  if (value === undefined) delete process.env[name];
+  else process.env[name] = value;
+}
+
 describe('Pi extension API helpers', () => {
   beforeEach(() => {
     vi.stubGlobal('fetch', vi.fn());
+    originalLoreBaseUrl = process.env.LORE_BASE_URL;
   });
 
   afterEach(() => {
     vi.unstubAllGlobals();
+    restoreEnvVar('LORE_BASE_URL', originalLoreBaseUrl);
     delete process.env.LORE_API_TOKEN;
     delete process.env.API_TOKEN;
   });
 
   it('uses Pi defaults', () => {
+    delete process.env.LORE_BASE_URL;
+
     const cfg = pickPluginConfig({});
     expect(cfg.baseUrl).toBe('http://127.0.0.1:18901');
     expect(cfg.defaultDomain).toBe('core');
@@ -20,6 +31,12 @@ describe('Pi extension API helpers', () => {
     expect(cfg.recallEnabled).toBe(true);
     expect(cfg.injectPromptGuidance).toBe(true);
     expect(cfg.startupHealthcheck).toBe(true);
+  });
+
+  it('falls back to LORE_BASE_URL when config omits it', () => {
+    process.env.LORE_BASE_URL = 'http://192.168.31.69:18901/';
+
+    expect(pickPluginConfig({}).baseUrl).toBe('http://192.168.31.69:18901');
   });
 
   it('loads api token from env when config omits it', () => {
