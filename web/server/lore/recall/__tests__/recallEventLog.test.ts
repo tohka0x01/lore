@@ -1,6 +1,13 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
-vi.mock('../../../db', () => ({ sql: vi.fn() }));
+const mockClientQuery = vi.fn();
+const mockClientRelease = vi.fn();
+const mockConnect = vi.fn(() => Promise.resolve({ query: mockClientQuery, release: mockClientRelease }));
+
+vi.mock('../../../db', () => ({
+  sql: vi.fn(),
+  getPool: () => ({ connect: mockConnect }),
+}));
 import { sql } from '../../../db';
 import {
   logRecallEvents,
@@ -16,6 +23,12 @@ const mockSql = vi.mocked(sql);
 
 function makeResult(rows: Record<string, unknown>[] = [], rowCount = rows.length) {
   return { rows, rowCount } as any;
+}
+
+function eventInsertCalls() {
+  return mockClientQuery.mock.calls.filter(([q]) =>
+    typeof q === 'string' && q.includes('INSERT INTO recall_events'),
+  );
 }
 
 // ---------------------------------------------------------------------------
@@ -116,6 +129,7 @@ describe('logRecallEvents', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mockSql.mockResolvedValue(makeResult());
+    mockClientQuery.mockResolvedValue(makeResult());
   });
 
   it('returns 0 for empty query', async () => {
@@ -131,9 +145,7 @@ describe('logRecallEvents', () => {
     expect(result.inserted_count).toBe(1);
     expect(result.query_id).toBeDefined();
     // table init + insert
-    const insertCalls = mockSql.mock.calls.filter(([q]) =>
-      typeof q === 'string' && q.includes('INSERT INTO recall_events'),
-    );
+    const insertCalls = eventInsertCalls();
     expect(insertCalls).toHaveLength(1);
     const params = insertCalls[0][1] as unknown[];
     expect(params[0]).toBe('test query');
@@ -147,9 +159,7 @@ describe('logRecallEvents', () => {
       glossarySemanticRows: [{ uri: 'core://node2', glossary_semantic_score: 0.8, keyword: 'key' }],
     });
     expect(result.inserted_count).toBe(1);
-    const insertCalls = mockSql.mock.calls.filter(([q]) =>
-      typeof q === 'string' && q.includes('INSERT INTO recall_events'),
-    );
+    const insertCalls = eventInsertCalls();
     const params = insertCalls[0][1] as unknown[];
     expect(params[2]).toBe('glossary_semantic');
   });
@@ -160,9 +170,7 @@ describe('logRecallEvents', () => {
       denseRows: [{ uri: 'core://node3', semantic_score: 0.7, weight: 1.2 }],
     });
     expect(result.inserted_count).toBe(1);
-    const insertCalls = mockSql.mock.calls.filter(([q]) =>
-      typeof q === 'string' && q.includes('INSERT INTO recall_events'),
-    );
+    const insertCalls = eventInsertCalls();
     const params = insertCalls[0][1] as unknown[];
     expect(params[2]).toBe('dense');
   });
@@ -173,12 +181,10 @@ describe('logRecallEvents', () => {
       lexicalRows: [{ uri: 'core://node4', lexical_score: 0.6, weight: 1, fts_hit: true, text_hit: false, uri_hit: true }],
     });
     expect(result.inserted_count).toBe(1);
-    const insertCalls = mockSql.mock.calls.filter(([q]) =>
-      typeof q === 'string' && q.includes('INSERT INTO recall_events'),
-    );
+    const insertCalls = eventInsertCalls();
     const params = insertCalls[0][1] as unknown[];
     expect(params[2]).toBe('lexical');
-    const meta = JSON.parse(params[7] as string);
+    const meta = JSON.parse(params[8] as string);
     expect(meta.lexical_flags.fts_hit).toBe(true);
     expect(meta.lexical_flags.uri_hit).toBe(true);
     expect(meta.lexical_flags.text_hit).toBe(false);
@@ -200,9 +206,7 @@ describe('logRecallEvents', () => {
       exactRows: [{ uri: 'core://sel' }],
       displayedItems: [{ uri: 'core://sel' }],
     });
-    const insertCalls = mockSql.mock.calls.filter(([q]) =>
-      typeof q === 'string' && q.includes('INSERT INTO recall_events'),
-    );
+    const insertCalls = eventInsertCalls();
     const params = insertCalls[0][1] as unknown[];
     expect(params[6]).toBe(true); // selected
   });
@@ -214,10 +218,8 @@ describe('logRecallEvents', () => {
       exactRows: [{ uri: 'core://x' }],
     });
     expect(result.query_id).toBe('custom-id-123');
-    const insertCalls = mockSql.mock.calls.filter(([q]) =>
-      typeof q === 'string' && q.includes('INSERT INTO recall_events'),
-    );
-    const meta = JSON.parse(insertCalls[0][1]![7] as string);
+    const insertCalls = eventInsertCalls();
+    const meta = JSON.parse(insertCalls[0][1]![8] as string);
     expect(meta.query_id).toBe('custom-id-123');
   });
 
@@ -228,11 +230,55 @@ describe('logRecallEvents', () => {
       clientType: 'claudecode',
     });
 
-    const insertCalls = mockSql.mock.calls.filter(([q]) =>
-      typeof q === 'string' && q.includes('INSERT INTO recall_events'),
-    );
-    const meta = JSON.parse(insertCalls[0][1]![7] as string);
+    const insertCalls = eventInsertCalls();
+    const meta = JSON.parse(insertCalls[0][1]![8] as string);
     expect(meta.client_type).toBe('claudecode');
+  });
+
+  it('writes query, candidates, and path events in one transaction', async () => {
+    const result = await logRecallEvents({
+      queryId: 'q-rollup',
+      queryText: 'rollup query',
+      sessionId: 's1',
+      clientType: 'codex',
+      exactRows: [{ uri: 'core://a', exact_score: 0.9, weight: 1 }],
+      denseRows: [{ uri: 'core://b', semantic_score: 0.7, weight: 1 }],
+      rankedCandidates: [
+        { uri: 'core://a', score: 0.91, matched_on: ['exact'] },
+        { uri: 'core://b', score: 0.72, matched_on: ['dense'] },
+      ],
+      displayedItems: [{ uri: 'core://a' }],
+    });
+
+    expect(result).toEqual({ inserted_count: 2, query_id: 'q-rollup' });
+    expect(mockConnect).toHaveBeenCalledTimes(1);
+    expect(mockClientQuery.mock.calls[0][0]).toBe('BEGIN');
+    expect(mockClientQuery.mock.calls.at(-1)?.[0]).toBe('COMMIT');
+    expect(mockClientRelease).toHaveBeenCalledTimes(1);
+
+    const sqlTexts = mockClientQuery.mock.calls.map(([query]) => String(query));
+    expect(sqlTexts.some((query) => query.includes('INSERT INTO recall_queries'))).toBe(true);
+    expect(sqlTexts.some((query) => query.includes('INSERT INTO recall_query_candidates'))).toBe(true);
+    expect(sqlTexts.some((query) => query.includes('INSERT INTO recall_events'))).toBe(true);
+  });
+
+  it('rolls back the transaction when any recall write fails', async () => {
+    mockClientQuery.mockImplementation(async (query: string) => {
+      if (String(query).includes('INSERT INTO recall_query_candidates')) {
+        throw new Error('candidate insert failed');
+      }
+      return makeResult();
+    });
+
+    await expect(logRecallEvents({
+      queryId: 'q-fail',
+      queryText: 'fail query',
+      exactRows: [{ uri: 'core://a' }],
+      rankedCandidates: [{ uri: 'core://a', score: 0.8 }],
+    })).rejects.toThrow('candidate insert failed');
+
+    expect(mockClientQuery.mock.calls.some(([query]) => query === 'ROLLBACK')).toBe(true);
+    expect(mockClientRelease).toHaveBeenCalledTimes(1);
   });
 });
 
@@ -244,6 +290,7 @@ describe('markRecallEventsUsedInAnswer', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mockSql.mockResolvedValue(makeResult([], 0));
+    mockClientQuery.mockResolvedValue(makeResult([], 0));
   });
 
   it('returns 0 for empty queryId', async () => {
@@ -257,7 +304,12 @@ describe('markRecallEventsUsedInAnswer', () => {
   });
 
   it('updates matching rows', async () => {
-    mockSql.mockResolvedValue({ rows: [], rowCount: 3 } as any);
+    mockClientQuery.mockImplementation(async (query: string) => {
+      if (String(query).includes('UPDATE recall_query_candidates')) {
+        return makeResult([], 3);
+      }
+      return makeResult();
+    });
     const result = await markRecallEventsUsedInAnswer({
       queryId: 'q-abc',
       nodeUris: ['core://a', 'core://b'],
@@ -269,20 +321,25 @@ describe('markRecallEventsUsedInAnswer', () => {
     expect(result.query_id).toBe('q-abc');
     expect(result.node_uris).toEqual(['core://a', 'core://b']);
 
-    const updateCalls = mockSql.mock.calls.filter(([q]) =>
+    const updateCalls = mockClientQuery.mock.calls.filter(([q]) =>
       typeof q === 'string' && q.includes('UPDATE recall_events'),
     );
     expect(updateCalls).toHaveLength(1);
   });
 
   it('includes answer_preview in metadata patch when text is provided', async () => {
-    mockSql.mockResolvedValue({ rows: [], rowCount: 1 } as any);
+    mockClientQuery.mockImplementation(async (query: string) => {
+      if (String(query).includes('UPDATE recall_query_candidates')) {
+        return makeResult([], 1);
+      }
+      return makeResult();
+    });
     await markRecallEventsUsedInAnswer({
       queryId: 'q-preview',
       assistantText: 'Some answer text',
       success: true,
     });
-    const updateCalls = mockSql.mock.calls.filter(([q]) =>
+    const updateCalls = mockClientQuery.mock.calls.filter(([q]) =>
       typeof q === 'string' && q.includes('UPDATE recall_events'),
     );
     const metaPatch = JSON.parse(updateCalls[0][1]![2] as string);
@@ -291,16 +348,71 @@ describe('markRecallEventsUsedInAnswer', () => {
   });
 
   it('stores answer client type in metadata patch when provided', async () => {
-    mockSql.mockResolvedValue({ rows: [], rowCount: 1 } as any);
+    mockClientQuery.mockImplementation(async (query: string) => {
+      if (String(query).includes('UPDATE recall_query_candidates')) {
+        return makeResult([], 1);
+      }
+      return makeResult();
+    });
     await markRecallEventsUsedInAnswer({
       queryId: 'q-client',
       success: true,
       clientType: 'mcp',
     });
-    const updateCalls = mockSql.mock.calls.filter(([q]) =>
+    const updateCalls = mockClientQuery.mock.calls.filter(([q]) =>
       typeof q === 'string' && q.includes('UPDATE recall_events'),
     );
     const metaPatch = JSON.parse(updateCalls[0][1]![2] as string);
     expect(metaPatch.answer_client_type).toBe('mcp');
+  });
+
+  it('marks candidates first, recalculates query used_count, then syncs events', async () => {
+    mockClientQuery.mockImplementation(async (query: string) => {
+      if (String(query).includes('UPDATE recall_query_candidates')) {
+        return makeResult([{ node_uri: 'core://a' }, { node_uri: 'core://b' }], 2);
+      }
+      return makeResult();
+    });
+
+    const result = await markRecallEventsUsedInAnswer({
+      queryId: 'q-usage',
+      nodeUris: ['core://a', 'core://b'],
+      assistantText: 'answer',
+      success: true,
+      clientType: 'codex',
+    });
+
+    expect(result.updated_count).toBe(2);
+    expect(result.query_id).toBe('q-usage');
+    expect(result.node_uris).toEqual(['core://a', 'core://b']);
+
+    const sqlTexts = mockClientQuery.mock.calls.map(([query]) => String(query));
+    const candidateIndex = sqlTexts.findIndex((query) => query.includes('UPDATE recall_query_candidates'));
+    const queryIndex = sqlTexts.findIndex((query) => query.includes('UPDATE recall_queries'));
+    const eventIndex = sqlTexts.findIndex((query) => query.includes('UPDATE recall_events'));
+    expect(candidateIndex).toBeGreaterThan(-1);
+    expect(queryIndex).toBeGreaterThan(candidateIndex);
+    expect(eventIndex).toBeGreaterThan(queryIndex);
+  });
+
+  it('keeps usage retry idempotent by recalculating used_count from candidates', async () => {
+    mockClientQuery.mockImplementation(async (query: string) => {
+      if (String(query).includes('UPDATE recall_query_candidates')) {
+        return makeResult([], 0);
+      }
+      return makeResult();
+    });
+
+    const result = await markRecallEventsUsedInAnswer({
+      queryId: 'q-retry',
+      nodeUris: ['core://a'],
+      success: true,
+    });
+
+    expect(result.updated_count).toBe(0);
+    const updateQueryText = mockClientQuery.mock.calls
+      .map(([query]) => String(query))
+      .find((query) => query.includes('UPDATE recall_queries'));
+    expect(updateQueryText).toContain('SELECT COUNT(*)');
   });
 });

@@ -1,5 +1,5 @@
 import crypto from 'crypto';
-import { sql } from '../../db';
+import { getPool, sql } from '../../db';
 import type { ClientType } from '../../auth';
 import { clampLimit } from '../core/utils';
 
@@ -29,6 +29,12 @@ export function truncateText(value: unknown, maxChars = 280): string {
   const text = String(value || '').replace(/\s+/g, ' ').trim();
   if (!text) return '';
   return text.length > maxChars ? `${text.slice(0, maxChars - 1)}\u2026` : text;
+}
+
+function addValues(values: unknown[], row: unknown[]): string {
+  const start = values.length + 1;
+  values.push(...row);
+  return `(${row.map((_, index) => `$${start + index}`).join(', ')})`;
 }
 
 // ---------------------------------------------------------------------------
@@ -63,6 +69,32 @@ interface RankedCandidate {
 
 interface DisplayedItem {
   uri?: string;
+}
+
+interface RecallEventInsertRow {
+  query_text: string;
+  node_uri: string;
+  retrieval_path: string;
+  view_type: string | null;
+  pre_rank_score: number | null;
+  final_rank_score: number | null;
+  selected: boolean;
+  metadata: Record<string, unknown>;
+  query_id: string;
+  session_id: string | null;
+  client_type: ClientType | null;
+  ranked_position: number | null;
+  displayed_position: number | null;
+}
+
+interface RecallCandidateInsertRow {
+  query_id: string;
+  node_uri: string;
+  client_type: ClientType | null;
+  final_rank_score: number | null;
+  selected: boolean;
+  ranked_position: number | null;
+  displayed_position: number | null;
 }
 
 interface LogRecallEventsArgs {
@@ -109,16 +141,27 @@ export async function logRecallEvents({
     ]),
   );
 
-  const rows: Array<{
-    query_text: string;
-    node_uri: string;
-    retrieval_path: string;
-    view_type: string | null;
-    pre_rank_score: number | null;
-    final_rank_score: number | null;
-    selected: boolean;
-    metadata: Record<string, unknown>;
-  }> = [];
+  const candidateRows: RecallCandidateInsertRow[] = [];
+  const seenCandidateUris = new Set<string>();
+  for (const item of rankedCandidates) {
+    const uri = String(item?.uri || '').trim();
+    if (!uri || seenCandidateUris.has(uri)) continue;
+    seenCandidateUris.add(uri);
+    const ranked = rankedMap.get(uri) || null;
+    const displayed = displayedMap.get(uri) || null;
+    candidateRows.push({
+      query_id: effectiveQueryId,
+      node_uri: uri,
+      client_type: clientType,
+      final_rank_score: asNumber(ranked?.score),
+      selected: Boolean(displayed),
+      ranked_position: ranked?.rank || null,
+      displayed_position: displayed?.display_rank || null,
+    });
+  }
+
+  const shownCount = candidateRows.filter((row) => row.selected).length;
+  const rows: RecallEventInsertRow[] = [];
 
   for (const row of exactRows) {
     const uri = String(row?.uri || '').trim();
@@ -133,6 +176,11 @@ export async function logRecallEvents({
       pre_rank_score: asNumber(Number(row?.exact_score || 0) * Number(row?.weight || 1)),
       final_rank_score: asNumber(ranked?.score),
       selected: Boolean(displayed),
+      query_id: effectiveQueryId,
+      session_id: sessionId || null,
+      client_type: clientType,
+      ranked_position: ranked?.rank || null,
+      displayed_position: displayed?.display_rank || null,
       metadata: {
         query_id: effectiveQueryId,
         session_id: sessionId || null,
@@ -169,6 +217,11 @@ export async function logRecallEvents({
       pre_rank_score: asNumber(row?.glossary_semantic_score),
       final_rank_score: asNumber(ranked?.score),
       selected: Boolean(displayed),
+      query_id: effectiveQueryId,
+      session_id: sessionId || null,
+      client_type: clientType,
+      ranked_position: ranked?.rank || null,
+      displayed_position: displayed?.display_rank || null,
       metadata: {
         query_id: effectiveQueryId,
         session_id: sessionId || null,
@@ -177,6 +230,7 @@ export async function logRecallEvents({
         ranked_position: ranked?.rank || null,
         displayed_position: (displayed as Record<string, unknown>)?.display_rank || null,
         retrieval_meta: retrievalMeta || null,
+        client_type: clientType,
         cue_terms: [String(row?.keyword || '').trim()].filter(Boolean),
         glossary_terms: [String(row?.keyword || '').trim()].filter(Boolean),
         matched_on: ranked?.matched_on || ['glossary_semantic'],
@@ -198,6 +252,11 @@ export async function logRecallEvents({
       pre_rank_score: asNumber(Number(row?.semantic_score || 0) * Number(row?.weight || 1)),
       final_rank_score: asNumber(ranked?.score),
       selected: Boolean(displayed),
+      query_id: effectiveQueryId,
+      session_id: sessionId || null,
+      client_type: clientType,
+      ranked_position: ranked?.rank || null,
+      displayed_position: displayed?.display_rank || null,
       metadata: {
         query_id: effectiveQueryId,
         session_id: sessionId || null,
@@ -228,6 +287,11 @@ export async function logRecallEvents({
       pre_rank_score: asNumber(Number(row?.lexical_score || 0) * Number(row?.weight || 1)),
       final_rank_score: asNumber(ranked?.score),
       selected: Boolean(displayed),
+      query_id: effectiveQueryId,
+      session_id: sessionId || null,
+      client_type: clientType,
+      ranked_position: ranked?.rank || null,
+      displayed_position: displayed?.display_rank || null,
       metadata: {
         query_id: effectiveQueryId,
         session_id: sessionId || null,
@@ -250,8 +314,98 @@ export async function logRecallEvents({
     });
   }
 
-  for (const row of rows) {
-    await sql(
+  const client = await getPool().connect();
+  try {
+    await client.query('BEGIN');
+
+    await client.query(
+      `
+        INSERT INTO recall_queries (
+          query_id,
+          query_text,
+          session_id,
+          client_type,
+          merged_count,
+          shown_count,
+          used_count,
+          created_at
+        ) VALUES (
+          $1, $2, $3, $4, $5, $6, 0, NOW()
+        )
+        ON CONFLICT (query_id) DO UPDATE SET
+          query_text = EXCLUDED.query_text,
+          session_id = EXCLUDED.session_id,
+          client_type = EXCLUDED.client_type,
+          merged_count = EXCLUDED.merged_count,
+          shown_count = EXCLUDED.shown_count
+      `,
+      [
+        effectiveQueryId,
+        query,
+        sessionId || null,
+        clientType,
+        candidateRows.length,
+        shownCount,
+      ],
+    );
+
+    if (candidateRows.length > 0) {
+      const values: unknown[] = [];
+      const placeholders = candidateRows.map((row) => addValues(values, [
+        row.query_id,
+        row.node_uri,
+        row.client_type,
+        row.final_rank_score,
+        row.selected,
+        false,
+        row.ranked_position,
+        row.displayed_position,
+      ]));
+
+      await client.query(
+        `
+          INSERT INTO recall_query_candidates (
+            query_id,
+            node_uri,
+            client_type,
+            final_rank_score,
+            selected,
+            used_in_answer,
+            ranked_position,
+            displayed_position,
+            created_at
+          ) VALUES ${placeholders.join(', ')}
+          ON CONFLICT (query_id, node_uri) DO UPDATE SET
+            client_type = EXCLUDED.client_type,
+            final_rank_score = EXCLUDED.final_rank_score,
+            selected = EXCLUDED.selected,
+            ranked_position = EXCLUDED.ranked_position,
+            displayed_position = EXCLUDED.displayed_position
+        `,
+        values,
+      );
+    }
+
+    if (rows.length > 0) {
+      const values: unknown[] = [];
+      const placeholders = rows.map((row) => addValues(values, [
+        row.query_text,
+        row.node_uri,
+        row.retrieval_path,
+        row.view_type,
+        row.pre_rank_score,
+        row.final_rank_score,
+        row.selected,
+        false,
+        JSON.stringify(row.metadata || {}),
+        row.query_id,
+        row.session_id,
+        row.client_type,
+        row.ranked_position,
+        row.displayed_position,
+      ]));
+
+      await client.query(
       `
         INSERT INTO recall_events (
           query_text,
@@ -263,22 +417,24 @@ export async function logRecallEvents({
           selected,
           used_in_answer,
           metadata,
+          query_id,
+          session_id,
+          client_type,
+          ranked_position,
+          displayed_position,
           created_at
-        ) VALUES (
-          $1, $2, $3, $4, $5, $6, $7, FALSE, $8::jsonb, NOW()
-        )
+        ) VALUES ${placeholders.join(', ')}
       `,
-      [
-        row.query_text,
-        row.node_uri,
-        row.retrieval_path,
-        row.view_type,
-        row.pre_rank_score,
-        row.final_rank_score,
-        row.selected,
-        JSON.stringify(row.metadata || {}),
-      ],
-    );
+        values,
+      );
+    }
+
+    await client.query('COMMIT');
+  } catch (error) {
+    await client.query('ROLLBACK');
+    throw error;
+  } finally {
+    client.release();
   }
 
   return { inserted_count: rows.length, query_id: effectiveQueryId };
@@ -320,28 +476,65 @@ export async function markRecallEventsUsedInAnswer({
   const preview = truncateText(assistantText, 280);
   if (preview) metadataPatch.answer_preview = preview;
 
-  const result = await sql(
-    `
-      UPDATE recall_events
-      SET
-        used_in_answer = TRUE,
-        metadata = COALESCE(metadata, '{}'::jsonb) || $3::jsonb
-      WHERE metadata->>'query_id' = $1
-        AND selected = TRUE
-        AND used_in_answer = FALSE
-        AND ($2::text[] IS NULL OR node_uri = ANY($2::text[]))
-    `,
-    [
-      safeQueryId,
-      safeUris.length > 0 ? safeUris : null,
-      JSON.stringify(metadataPatch),
-    ],
-  );
+  const client = await getPool().connect();
+  try {
+    await client.query('BEGIN');
 
-  return {
-    updated_count: Number(result.rowCount || 0),
-    query_id: safeQueryId,
-    node_uris: safeUris,
-  };
+    const candidateResult = await client.query(
+      `
+        UPDATE recall_query_candidates
+        SET used_in_answer = TRUE
+        WHERE query_id = $1
+          AND selected = TRUE
+          AND used_in_answer = FALSE
+          AND ($2::text[] IS NULL OR node_uri = ANY($2::text[]))
+        RETURNING node_uri
+      `,
+      [safeQueryId, safeUris.length > 0 ? safeUris : null],
+    );
+
+    await client.query(
+      `
+        UPDATE recall_queries
+        SET used_count = (
+          SELECT COUNT(*)::integer
+          FROM recall_query_candidates
+          WHERE query_id = $1
+            AND used_in_answer = TRUE
+        )
+        WHERE query_id = $1
+      `,
+      [safeQueryId],
+    );
+
+    await client.query(
+      `
+        UPDATE recall_events
+        SET
+          used_in_answer = TRUE,
+          metadata = COALESCE(metadata, '{}'::jsonb) || $3::jsonb
+        WHERE query_id = $1
+          AND selected = TRUE
+          AND ($2::text[] IS NULL OR node_uri = ANY($2::text[]))
+      `,
+      [
+        safeQueryId,
+        safeUris.length > 0 ? safeUris : null,
+        JSON.stringify(metadataPatch),
+      ],
+    );
+
+    await client.query('COMMIT');
+
+    return {
+      updated_count: Number(candidateResult.rowCount || 0),
+      query_id: safeQueryId,
+      node_uris: safeUris,
+    };
+  } catch (error) {
+    await client.query('ROLLBACK');
+    throw error;
+  } finally {
+    client.release();
+  }
 }
-
