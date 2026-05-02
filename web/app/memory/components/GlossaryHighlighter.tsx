@@ -7,7 +7,7 @@ import remarkGfm from 'remark-gfm';
 import { X } from 'lucide-react';
 import clsx from 'clsx';
 import { useT } from '../../../lib/i18n';
-import { Badge } from '../../../components/ui';
+import { ActionIcon, Badge, surfaceCardClassName } from '../../../components/ui';
 
 interface GlossaryNode {
   uri?: string;
@@ -51,7 +51,7 @@ const GlossaryPopup = ({ keyword, nodes, position, onClose, onNavigate }: Glossa
   return createPortal(
     <div
       ref={popupRef}
-      className="animate-scale fixed z-[70] flex w-80 flex-col rounded-2xl border border-separator-thin bg-bg-elevated shadow-card shadow-2xl shadow-black/60 backdrop-blur-xl"
+      className={clsx('animate-scale fixed z-[70] flex w-80 flex-col', surfaceCardClassName, 'shadow-2xl shadow-black/60 backdrop-blur-xl')}
       style={{
         left: Math.min(position.x, (typeof window !== 'undefined' ? window.innerWidth : 800) - 328),
         ...(position.isAbove
@@ -62,9 +62,7 @@ const GlossaryPopup = ({ keyword, nodes, position, onClose, onNavigate }: Glossa
       <div className="flex flex-shrink-0 items-center gap-2 border-b border-separator-thin px-4 py-3">
         <span className="text-[11px] font-medium uppercase tracking-[0.06em] text-txt-tertiary">{t('Entry')}</span>
         <span className="text-[14px] font-semibold text-sys-yellow truncate">{keyword}</span>
-        <button onClick={onClose} className="press ml-auto text-txt-tertiary hover:text-txt-primary">
-          <X size={14} />
-        </button>
+        <ActionIcon icon={X} title={t('Close')} onClick={onClose} className="ml-auto" />
       </div>
       <div className="flex-1 overflow-y-auto p-1.5">
         {nodes.map((node, i) => {
@@ -91,7 +89,7 @@ const GlossaryPopup = ({ keyword, nodes, position, onClose, onNavigate }: Glossa
                   {node.uri}
                 </code>
                 {isUnlinked && (
-                  <Badge tone="red" className="text-[9px]">{t('Orphaned')}</Badge>
+                  <Badge tone="red" size="xs">{t('Orphaned')}</Badge>
                 )}
               </div>
               {node.content_snippet && (

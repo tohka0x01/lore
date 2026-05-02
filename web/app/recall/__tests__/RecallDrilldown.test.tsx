@@ -40,6 +40,7 @@ vi.mock('../../../components/ui', () => ({
   Card: ({ children }: { children: React.ReactNode }) => <section>{children}</section>,
   Section: ({ children, title }: { children: React.ReactNode; title: React.ReactNode }) => <section>{title}{children}</section>,
   Button: ({ children }: { children: React.ReactNode }) => <button>{children}</button>,
+  TextButton: ({ children, ...props }: React.ButtonHTMLAttributes<HTMLButtonElement>) => <button data-text-button="true" {...props}>{children}</button>,
   Badge: ({ children }: { children: React.ReactNode }) => <span>{children}</span>,
   Notice: ({ children }: { children: React.ReactNode }) => <aside>{children}</aside>,
   StatCard: ({ label, value }: { label: React.ReactNode; value: React.ReactNode }) => <div data-stat-card="true">{label}{value}</div>,
@@ -52,6 +53,11 @@ vi.mock('../../../components/ui', () => ({
       {options.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
     </select>
   ),
+  FilterPill: ({ children, as = 'div', active }: { children: React.ReactNode; as?: 'div' | 'label'; active?: boolean }) => (
+    as === 'label'
+      ? <label data-filter-pill="true" data-filter-pill-as="label" data-active={active ? 'true' : 'false'}>{children}</label>
+      : <div data-filter-pill="true" data-filter-pill-as="div" data-active={active ? 'true' : 'false'}>{children}</div>
+  ),
   Table: ({ columns, rows, empty }: { columns: Array<{ key: string; label: React.ReactNode; render?: (value: unknown, row: Record<string, unknown>) => React.ReactNode }>; rows?: Record<string, unknown>[]; empty?: string }) => {
     const keys = columns.map((column) => column.key);
     if (new Set(keys).size !== keys.length) throw new Error(`duplicate column keys: ${keys.join(',')}`);
@@ -62,7 +68,7 @@ vi.mock('../../../components/ui', () => ({
       </table>
     );
   },
-  inputClass: '',
+  surfaceCardClassName: 'rounded-2xl border border-separator-thin bg-bg-elevated shadow-card',
   fmt: (value: unknown) => value == null ? '—' : String(value),
   trunc: (value: unknown) => String(value ?? ''),
   asNumber: (value: unknown, fallback = 0) => Number(value) || fallback,
@@ -93,6 +99,8 @@ describe('RecallDrilldown threshold analysis', () => {
 
     expect((html.match(/data-app-input="true"/g) || []).length).toBe(1);
     expect((html.match(/data-app-select="true"/g) || []).length).toBe(1);
+    expect((html.match(/data-filter-pill="true"/g) || []).length).toBe(2);
+    expect((html.match(/data-filter-pill-as="label"/g) || []).length).toBe(2);
     expect(html).toContain('Days');
     expect(html).toContain('All sources');
     expect(html).not.toContain('Adjust filters');

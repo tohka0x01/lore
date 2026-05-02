@@ -82,7 +82,9 @@ const KeywordManager = ({ keywords, nodeUuid, onUpdate }: KeywordManagerProps): 
           onKeyDown={handleKeyDown}
           onBlur={() => { if (!newKeyword.trim()) setAdding(false); }}
           placeholder={t('keyword')}
-          className="w-28 font-mono text-[11px]"
+          className="w-28"
+          size="sm"
+          mono
         />
       ) : (
         <button

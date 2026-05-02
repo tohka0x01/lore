@@ -91,19 +91,15 @@ vi.mock('@lobehub/ui/es/ActionIcon/index', () => ({
   ),
 }));
 
-vi.mock('@lobehub/ui', async (importOriginal) => {
-  const original = await importOriginal<typeof import('@lobehub/ui')>();
-  return {
-    ...original,
-    Tooltip: ({ title, children }: { title: React.ReactNode; children: React.ReactNode }) => (
-      <span data-lobe-tooltip="true" data-title={typeof title === 'string' ? title : undefined}>
-        {children}
-      </span>
-    ),
-  };
-});
+vi.mock('@lobehub/ui', () => ({
+  Tooltip: ({ title, children }: { title: React.ReactNode; children: React.ReactNode }) => (
+    <span data-lobe-tooltip="true" data-title={typeof title === 'string' ? title : undefined}>
+      {children}
+    </span>
+  ),
+}));
 
-import { ActionIcon, AppAvatar, AppCheckbox, AppInput, Badge, Button, CopyButton, Disclosure, Empty, Notice, SegmentedTabs, StatCard, Tooltip } from '../controls';
+import { ActionIcon, AppAvatar, AppCheckbox, AppInput, Badge, Button, CopyButton, Empty, FilterPill, MenuItem, Notice, SegmentedTabs, SelectionBox, Spinner, StatCard, TextButton, ToggleSwitch, Tooltip } from '../controls';
 
 describe('ui controls Lobe wrappers', () => {
   it('maps primary buttons to Lobe type primary', () => {
@@ -234,24 +230,6 @@ describe('ui controls Lobe wrappers', () => {
     expect(html).toContain('By path');
   });
 
-  it('renders Disclosure through Lobe Accordion', () => {
-    const html = renderToStaticMarkup(
-      <Disclosure open onOpenChange={() => undefined} trigger={<span>Filters</span>}>
-        <div>Filter content</div>
-      </Disclosure>,
-    );
-
-    expect(html).toContain('data-lobe-accordion="true"');
-    expect(html).toContain('data-expanded-keys="open"');
-    expect(html).toContain('bg-transparent');
-    expect(html).toContain('shadow-none');
-    expect(html).toContain('[&amp;_.ant-collapse-item]:border-0');
-    expect(html).toContain('[&amp;_.ant-collapse-header]:p-0');
-    expect(html).toContain('[&amp;_.ant-collapse-content-box]:p-0');
-    expect(html).toContain('Filters');
-    expect(html).toContain('Filter content');
-  });
-
   it('renders compact StatCard larger for recall overview tabs', () => {
     const html = renderToStaticMarkup(<StatCard compact label="Merged" value="12" />);
 
@@ -268,13 +246,6 @@ describe('ui controls Lobe wrappers', () => {
     expect(html).toContain('Nothing here');
   });
 
-  it('renders EmptyState as a deprecated alias for Empty', async () => {
-    const { EmptyState } = await import('../controls');
-    const html = renderToStaticMarkup(<EmptyState text="Deprecated" />);
-
-    expect(html).toContain('data-lobe-empty="true"');
-    expect(html).toContain('Deprecated');
-  });
 
   it('renders Empty with title and icon', () => {
     const TestIcon = ({ size, className }: { size?: number; className?: string }) => <svg data-size={size} className={className} />;
@@ -320,6 +291,81 @@ describe('ui controls Lobe wrappers', () => {
     expect(html).toContain('data-variant="filled"');
     expect(html).toContain('data-loading="true"');
     expect(html).toContain('disabled=""');
+  });
+
+  it('renders TextButton with tone styling and button type', () => {
+    const html = renderToStaticMarkup(<TextButton tone="danger">Reset</TextButton>);
+
+    expect(html).toContain('type="button"');
+    expect(html).toContain('text-sys-red');
+    expect(html).toContain('Reset');
+  });
+
+  it('renders Spinner with the shared loading classes and optional status label', () => {
+    const hidden = renderToStaticMarkup(<Spinner size="sm" />);
+    const labelled = renderToStaticMarkup(<Spinner label="Loading memories" />);
+
+    expect(hidden).toContain('animate-spin');
+    expect(hidden).toContain('h-4');
+    expect(hidden).toContain('border-t-sys-blue');
+    expect(hidden).toContain('aria-hidden="true"');
+    expect(labelled).toContain('role="status"');
+    expect(labelled).toContain('aria-label="Loading memories"');
+  });
+
+  it('renders FilterPill with active, inactive, and label surface styles', () => {
+    const active = renderToStaticMarkup(<FilterPill active>Client</FilterPill>);
+    const inactive = renderToStaticMarkup(<FilterPill>Days</FilterPill>);
+    const label = renderToStaticMarkup(<FilterPill as="label" htmlFor="days">Days</FilterPill>);
+
+    expect(active).toContain('border-sys-blue/40');
+    expect(active).toContain('Client');
+    expect(inactive).toContain('border-separator-thin');
+    expect(inactive).toContain('Days');
+    expect(label).toContain('<label');
+    expect(label).toContain('for="days"');
+  });
+
+  it('renders ToggleSwitch with switch accessibility state and disabled affordance', () => {
+    const checked = renderToStaticMarkup(<ToggleSwitch checked label="Enabled" />);
+    const disabled = renderToStaticMarkup(<ToggleSwitch checked={false} aria-label="Disabled switch" disabled />);
+
+    expect(checked).toContain('role="switch"');
+    expect(checked).toContain('aria-checked="true"');
+    expect(checked).toContain('Enabled');
+    expect(checked).toContain('bg-sys-blue');
+    expect(disabled).toContain('aria-label="Disabled switch"');
+    expect(disabled).toContain('aria-checked="false"');
+    expect(disabled).toContain('disabled=""');
+    expect(disabled).toContain('disabled:cursor-not-allowed');
+  });
+
+  it('renders MenuItem with role, disabled state, danger tone, and optional slots', () => {
+    const danger = renderToStaticMarkup(<MenuItem tone="danger" leftIcon={<span>!</span>} right="⌘D">Delete</MenuItem>);
+    const disabled = renderToStaticMarkup(<MenuItem disabled>Disabled</MenuItem>);
+
+    expect(danger).toContain('role="menuitem"');
+    expect(danger).toContain('text-sys-red');
+    expect(danger).toContain('Delete');
+    expect(danger).toContain('⌘D');
+    expect(disabled).toContain('disabled=""');
+    expect(disabled).toContain('disabled:cursor-not-allowed');
+  });
+
+  it('renders SelectionBox selected, unchecked, and interactive states', () => {
+    const selected = renderToStaticMarkup(<SelectionBox selected label="Selected" />);
+    const unchecked = renderToStaticMarkup(<SelectionBox selected={false} />);
+    const interactive = renderToStaticMarkup(<SelectionBox selected={false} label="Select" onClick={() => undefined} />);
+
+    expect(selected).toContain('role="checkbox"');
+    expect(selected).toContain('aria-checked="true"');
+    expect(selected).toContain('aria-label="Selected"');
+    expect(selected).toContain('bg-sys-blue');
+    expect(unchecked).toContain('border-separator');
+    expect(unchecked).toContain('text-transparent');
+    expect(interactive).toContain('<button');
+    expect(interactive).toContain('type="button"');
+    expect(interactive).toContain('aria-checked="false"');
   });
 
   it('renders Tooltip wrapping children', () => {

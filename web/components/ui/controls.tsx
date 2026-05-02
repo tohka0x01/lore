@@ -1,6 +1,6 @@
 'use client';
 
-import React, { type Key, type ReactNode } from 'react';
+import React, { type ButtonHTMLAttributes, type Key, type ReactNode } from 'react';
 import clsx from 'clsx';
 import type { AccordionProps as LobeAccordionProps } from '@lobehub/ui/es/Accordion/type';
 import { Accordion as LobeAccordion, AccordionItem as LobeAccordionItem } from '@lobehub/ui/es/Accordion/index';
@@ -31,6 +31,7 @@ export type ButtonSize = 'sm' | 'md' | 'lg';
 interface ButtonProps extends Omit<LobeButtonProps, 'size' | 'type' | 'variant'> {
   variant?: ButtonVariant;
   size?: ButtonSize;
+  block?: boolean;
   children?: ReactNode;
   className?: string;
 }
@@ -41,14 +42,8 @@ const BUTTON_SIZE_MAP: Record<ButtonSize, LobeButtonProps['size']> = {
   lg: 'large',
 };
 
-const BUTTON_VARIANT_CLASSNAMES: Record<ButtonVariant, string> = {
-  primary: '',
-  secondary: '',
-  ghost: '',
-  destructive: '',
-};
 
-export function Button({ variant = 'secondary', size = 'md', children, className, ...rest }: ButtonProps): React.JSX.Element {
+export function Button({ variant = 'secondary', size = 'md', block = false, children, className, ...rest }: ButtonProps): React.JSX.Element {
   const danger = variant === 'destructive';
   const type = variant === 'primary' || variant === 'destructive'
     ? 'primary'
@@ -59,7 +54,7 @@ export function Button({ variant = 'secondary', size = 'md', children, className
 
   return (
     <LobeButton
-      className={clsx('press inline-flex items-center justify-center gap-1.5 font-medium rounded-full whitespace-nowrap', className)}
+      className={clsx('press inline-flex items-center justify-center gap-1.5 font-medium rounded-full whitespace-nowrap', block && 'w-full', className)}
       danger={danger}
       size={BUTTON_SIZE_MAP[size]}
       type={type}
@@ -71,12 +66,77 @@ export function Button({ variant = 'secondary', size = 'md', children, className
   );
 }
 
+export type TextButtonTone = 'default' | 'blue' | 'danger';
+export type TextButtonSize = 'sm' | 'md';
+
+interface TextButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
+  tone?: TextButtonTone;
+  size?: TextButtonSize;
+  active?: boolean;
+}
+
+const TEXT_BUTTON_TONES: Record<TextButtonTone, string> = {
+  default: 'text-txt-secondary hover:text-txt-primary',
+  blue: 'text-sys-blue hover:opacity-80',
+  danger: 'text-sys-red hover:opacity-80',
+};
+
+const TEXT_BUTTON_SIZES: Record<TextButtonSize, string> = {
+  sm: 'text-[11px]',
+  md: 'text-[13px]',
+};
+
+export function TextButton({ tone = 'blue', size = 'md', active = false, type = 'button', className, children, ...rest }: TextButtonProps): React.JSX.Element {
+  return (
+    <button
+      type={type}
+      className={clsx(
+        'press inline-flex items-center gap-1 rounded-full font-medium transition-colors disabled:cursor-not-allowed disabled:opacity-40',
+        TEXT_BUTTON_SIZES[size],
+        TEXT_BUTTON_TONES[tone],
+        active && 'bg-sys-blue/15 font-semibold hover:opacity-100',
+        !active && tone === 'default' && 'hover:bg-fill-quaternary',
+        className,
+      )}
+      {...rest}
+    >
+      {children}
+    </button>
+  );
+}
+
+interface SpinnerProps {
+  size?: 'sm' | 'md' | 'lg';
+  className?: string;
+  label?: string;
+}
+
+export function Spinner({ size = 'md', className, label }: SpinnerProps): React.JSX.Element {
+  return (
+    <span
+      className={clsx(
+        'inline-block animate-spin rounded-full border-2 border-fill-tertiary border-t-sys-blue',
+        size === 'sm' && 'h-4 w-4',
+        size === 'md' && 'h-6 w-6',
+        size === 'lg' && 'h-8 w-8',
+        className,
+      )}
+      aria-hidden={label ? undefined : true}
+      aria-label={label}
+      role={label ? 'status' : undefined}
+    />
+  );
+}
+
 export type BadgeTone = 'default' | 'blue' | 'green' | 'orange' | 'red' | 'yellow' | 'purple' | 'teal' | 'soft';
+export type BadgeSize = 'xs' | 'sm' | 'md' | 'lg';
 
 interface BadgeProps {
   children: ReactNode;
   tone?: BadgeTone;
+  size?: BadgeSize;
   dot?: boolean;
+  mono?: boolean;
   className?: string;
 }
 
@@ -92,10 +152,22 @@ const BADGE_TAG_COLORS: Record<BadgeTone, string> = {
   soft: 'default',
 };
 
-export function Badge({ children, tone = 'default', dot = false, className }: BadgeProps): React.JSX.Element {
+const BADGE_SIZE_CLASSES: Record<BadgeSize, string> = {
+  xs: 'py-px px-1 text-[9px]',
+  sm: 'py-0.5 px-1.5 text-[10px]',
+  md: 'py-[2px] px-1.5 text-[11px]',
+  lg: 'py-1 px-2.5 text-[12px]',
+};
+
+export function Badge({ children, tone = 'default', size = 'md', dot = false, mono = false, className }: BadgeProps): React.JSX.Element {
   return (
     <LobeTag
-      className={clsx('inline-flex items-center gap-1 px-1.5 py-[2px] text-[11px] font-medium leading-[1.4]', className)}
+      className={clsx(
+        'inline-flex items-center gap-1 font-medium',
+        BADGE_SIZE_CLASSES[size],
+        mono && 'font-mono tabular-nums',
+        className,
+      )}
       color={BADGE_TAG_COLORS[tone] || BADGE_TAG_COLORS.default}
       variant={tone === 'soft' ? 'borderless' : 'filled'}
     >
@@ -127,7 +199,7 @@ interface StatCardProps {
 
 export function StatCard({ label, value, hint, tone = 'default', compact = false }: StatCardProps): React.JSX.Element {
   return (
-    <div className={clsx('rounded-2xl border border-separator-thin bg-bg-elevated shadow-card', compact ? 'p-5' : 'p-5')}>
+    <div className={clsx(surfaceCardClassName, compact ? 'p-5' : 'p-5')}>
       <div className={clsx('font-medium text-txt-tertiary', compact ? 'text-[12px]' : 'text-[12px]')}>{label}</div>
       <div className={clsx(compact ? 'mt-2 text-[30px]' : 'mt-2 text-[32px]', 'font-bold leading-none tracking-[-0.02em] tabular-nums', STAT_TONES[tone] || STAT_TONES.default)}>
         {value ?? '—'}
@@ -188,27 +260,40 @@ export function Empty({ text, title, icon: Icon, emoji, action, className }: Emp
   );
 }
 
-/** @deprecated use Empty instead */
-export { Empty as EmptyState };
+export const surfaceCardClassName = 'rounded-2xl border border-separator-thin bg-bg-elevated shadow-card';
 
-export const inputClass = 'w-full rounded-lg border border-separator bg-bg-raised px-3 py-2 text-[13px] font-mono text-txt-primary placeholder:text-txt-quaternary shadow-[inset_0_1px_0_rgba(255,255,255,0.02)] hover:border-separator hover:bg-bg-surface focus:border-sys-blue focus:bg-bg-elevated focus:ring-2 focus:ring-sys-blue/20 focus:outline-none';
+type AppInputSize = 'sm' | 'md' | 'lg';
 
-type AppInputProps = LobeInputProps;
+const APP_INPUT_SIZE_CLASSES: Record<AppInputSize, string> = {
+  sm: 'text-[11px]',
+  md: 'text-[13px]',
+  lg: 'text-[14px]',
+};
 
-export function AppInput({ className, variant = 'filled', ...rest }: AppInputProps): React.JSX.Element {
-  return <LobeInput className={className} variant={variant} {...rest} />;
+interface AppInputProps extends Omit<LobeInputProps, 'size'> {
+  size?: AppInputSize;
+  mono?: boolean;
+  narrow?: boolean;
 }
 
-type AppPasswordInputProps = LobeInputPasswordProps;
-
-export function AppPasswordInput({ className, variant = 'filled', ...rest }: AppPasswordInputProps): React.JSX.Element {
-  return <LobeInputPassword className={className} variant={variant} {...rest} />;
+export function AppInput({ className, variant = 'filled', size = 'md', mono = false, narrow = false, ...rest }: AppInputProps): React.JSX.Element {
+  return <LobeInput className={clsx(APP_INPUT_SIZE_CLASSES[size], mono && 'font-mono tabular-nums', narrow && '!p-0 !h-auto !bg-transparent', className)} variant={variant} {...rest} />;
 }
 
-type AppTextAreaProps = LobeTextAreaProps;
+interface AppPasswordInputProps extends Omit<LobeInputPasswordProps, 'size'> {
+  size?: AppInputSize;
+}
 
-export function AppTextArea({ className, resize = true, variant = 'filled', ...rest }: AppTextAreaProps): React.JSX.Element {
-  return <LobeTextArea className={className} resize={resize} variant={variant} {...rest} />;
+export function AppPasswordInput({ className, variant = 'filled', size = 'md', ...rest }: AppPasswordInputProps): React.JSX.Element {
+  return <LobeInputPassword className={clsx(APP_INPUT_SIZE_CLASSES[size], className)} variant={variant} {...rest} />;
+}
+
+interface AppTextAreaProps extends Omit<LobeTextAreaProps, 'size'> {
+  size?: AppInputSize;
+}
+
+export function AppTextArea({ className, resize = true, variant = 'filled', size = 'md', ...rest }: AppTextAreaProps): React.JSX.Element {
+  return <LobeTextArea className={clsx(APP_INPUT_SIZE_CLASSES[size], className)} resize={resize} variant={variant} {...rest} />;
 }
 
 type AppAvatarProps = LobeAvatarProps;
@@ -229,20 +314,22 @@ interface AppSelectProps {
   placeholder?: ReactNode;
   className?: string;
   disabled?: boolean;
-  size?: LobeSelectProps['size'];
+  size?: AppInputSize;
+  mono?: boolean;
+  narrow?: boolean;
   style?: LobeSelectProps['style'];
   variant?: LobeSelectProps['variant'];
 }
 
-export function AppSelect({ value, onValueChange, options, placeholder, className, disabled = false, size, style, variant = 'filled' }: AppSelectProps): React.JSX.Element {
+export function AppSelect({ value, onValueChange, options, placeholder, className, disabled = false, size = 'md', mono = false, narrow = false, style, variant = 'filled' }: AppSelectProps): React.JSX.Element {
   return (
     <LobeSelect
-      className={className}
+      className={clsx(APP_INPUT_SIZE_CLASSES[size], mono && 'font-mono tabular-nums', narrow && 'w-auto', className)}
       disabled={disabled}
       options={options.map((option) => ({ label: option.label, value: option.value }))}
       placeholder={placeholder || '—'}
-      size={size}
-      style={{ width: '100%', ...style }}
+      size={size === 'sm' ? 'small' : size === 'lg' ? 'large' : 'middle'}
+      style={style}
       value={value === '' ? undefined : value}
       variant={variant}
       onChange={(next: string | number | null | undefined) => onValueChange(String(next ?? ''))}
@@ -258,15 +345,166 @@ export function AppCheckbox({ onValueChange, ...rest }: AppCheckboxProps): React
   return <LobeCheckbox onChange={onValueChange} {...rest} />;
 }
 
+interface FilterPillProps {
+  children: ReactNode;
+  active?: boolean;
+  className?: string;
+  as?: 'div' | 'label';
+  htmlFor?: string;
+}
+
+function filterPillClassName(active: boolean, className?: string): string {
+  return clsx(
+    'inline-flex min-h-8 items-center gap-1.5 rounded-full border px-3 text-[13px] font-medium transition-colors',
+    active ? 'border-sys-blue/40 bg-sys-blue/[0.04] text-txt-primary' : 'border-separator-thin bg-bg-elevated text-txt-secondary',
+    className,
+  );
+}
+
+export function FilterPill({ children, active = false, className, as = 'div', htmlFor }: FilterPillProps): React.JSX.Element {
+  if (as === 'label') {
+    return (
+      <label htmlFor={htmlFor} className={filterPillClassName(active, className)}>
+        {children}
+      </label>
+    );
+  }
+
+  return <div className={filterPillClassName(active, className)}>{children}</div>;
+}
+
+interface ToggleSwitchProps extends Omit<ButtonHTMLAttributes<HTMLButtonElement>, 'children' | 'onChange'> {
+  checked: boolean;
+  onCheckedChange?: (checked: boolean) => void;
+  label?: ReactNode;
+}
+
+export function ToggleSwitch({ checked, onCheckedChange, disabled = false, label, className, type = 'button', onClick, ...rest }: ToggleSwitchProps): React.JSX.Element {
+  const handleClick: ButtonHTMLAttributes<HTMLButtonElement>['onClick'] = (event) => {
+    onClick?.(event);
+    if (!event.defaultPrevented) onCheckedChange?.(!checked);
+  };
+
+  return (
+    <button
+      {...rest}
+      type={type}
+      role="switch"
+      aria-checked={checked}
+      disabled={disabled}
+      onClick={handleClick}
+      className={clsx(
+        'press inline-flex items-center gap-2 rounded-full text-[13px] font-medium text-txt-secondary disabled:cursor-not-allowed disabled:opacity-40',
+        className,
+      )}
+    >
+      <span
+        className={clsx(
+          'relative inline-flex h-5 w-9 shrink-0 rounded-full border transition-colors',
+          checked ? 'border-sys-blue/40 bg-sys-blue' : 'border-separator-thin bg-fill-secondary',
+        )}
+        aria-hidden
+      >
+        <span
+          className={clsx(
+            'absolute top-0.5 h-4 w-4 rounded-full bg-white shadow-sm transition-transform',
+            checked ? 'translate-x-[18px]' : 'translate-x-0.5',
+          )}
+        />
+      </span>
+      {label ? <span>{label}</span> : null}
+    </button>
+  );
+}
+
+interface MenuItemProps extends ButtonHTMLAttributes<HTMLButtonElement> {
+  tone?: 'default' | 'danger';
+  leftIcon?: ReactNode;
+  right?: ReactNode;
+}
+
+export function MenuItem({ tone = 'default', leftIcon, right, children, type = 'button', className, role = 'menuitem', ...rest }: MenuItemProps): React.JSX.Element {
+  return (
+    <button
+      type={type}
+      role={role}
+      className={clsx(
+        'flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-[13px] transition-colors disabled:cursor-not-allowed disabled:opacity-50',
+        tone === 'danger' ? 'text-sys-red hover:bg-sys-red/10' : 'text-txt-secondary hover:bg-bg-raised hover:text-txt-primary',
+        className,
+      )}
+      {...rest}
+    >
+      {leftIcon ? <span className="shrink-0" aria-hidden>{leftIcon}</span> : null}
+      <span className="min-w-0 flex-1 truncate">{children}</span>
+      {right ? <span className="shrink-0 text-txt-tertiary">{right}</span> : null}
+    </button>
+  );
+}
+
+interface SelectionBoxProps {
+  selected: boolean;
+  className?: string;
+  label?: string;
+  onClick?: ButtonHTMLAttributes<HTMLButtonElement>['onClick'];
+  disabled?: boolean;
+}
+
+function SelectionBoxMark(): React.JSX.Element {
+  return <span className="h-2 w-2 rounded-sm bg-current" />;
+}
+
+export function SelectionBox({ selected, className, label, onClick, disabled = false }: SelectionBoxProps): React.JSX.Element {
+  const boxClassName = clsx(
+    'inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-md border transition-colors',
+    selected ? 'border-sys-blue bg-sys-blue text-white' : 'border-separator bg-bg-elevated text-transparent',
+    className,
+  );
+
+  if (onClick) {
+    return (
+      <button
+        type="button"
+        role="checkbox"
+        aria-checked={selected}
+        aria-label={label}
+        className={clsx('press disabled:cursor-not-allowed disabled:opacity-40', boxClassName)}
+        disabled={disabled}
+        onClick={onClick}
+      >
+        <SelectionBoxMark />
+      </button>
+    );
+  }
+
+  return (
+    <span
+      className={boxClassName}
+      role={label ? 'checkbox' : undefined}
+      aria-checked={label ? selected : undefined}
+      aria-label={label}
+      aria-hidden={label ? undefined : true}
+    >
+      <SelectionBoxMark />
+    </span>
+  );
+}
+
 interface DisclosureProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   trigger: ReactNode;
   children: ReactNode;
+  variant?: 'flat' | 'card';
   className?: string;
 }
 
-export function Disclosure({ open, onOpenChange, trigger, children, className }: DisclosureProps): React.JSX.Element {
+const DISCLOSURE_VARIANT_CLASSES: Record<'flat' | 'card', string> = {
+  flat: 'bg-transparent shadow-none',
+  card: 'rounded-xl border border-separator-thin bg-bg-raised/60 px-3 py-2',
+};
+
+export function Disclosure({ open, onOpenChange, trigger, children, variant = 'flat', className }: DisclosureProps): React.JSX.Element {
   const expandedKeys: Key[] = open ? ['open'] : [];
   const handleExpandedChange: NonNullable<LobeAccordionProps['onExpandedChange']> = (keys) => {
     onOpenChange(keys.includes('open'));
@@ -276,7 +514,7 @@ export function Disclosure({ open, onOpenChange, trigger, children, className }:
     <LobeAccordion
       accordion
       className={clsx(
-        'bg-transparent shadow-none [&_.ant-collapse-content]:border-0 [&_.ant-collapse-content-box]:p-0 [&_.ant-collapse-header]:p-0 [&_.ant-collapse-item]:border-0',
+        DISCLOSURE_VARIANT_CLASSES[variant],
         className,
       )}
       expandedKeys={expandedKeys}

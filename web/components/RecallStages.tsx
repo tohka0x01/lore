@@ -3,9 +3,11 @@
 import React, { useMemo, useState, ReactNode } from 'react';
 import clsx from 'clsx';
 import {
+  ActionPanel,
   Badge,
+  TextButton,
   StatCard,
-  EmptyState,
+  Empty,
   Table,
   BreakdownGrid,
   CueList,
@@ -26,20 +28,18 @@ interface StageSegmentProps {
 
 function StageSegment({ active, onClick, label, count }: StageSegmentProps): React.JSX.Element {
   return (
-    <button
+    <TextButton
+      tone={active ? 'blue' : 'default'}
+      active={active}
+      aria-pressed={active}
       onClick={onClick}
-      className={clsx(
-        'press shrink-0 rounded-full px-3.5 py-1.5 text-[13px] transition-all duration-200 ease-spring',
-        active
-          ? 'bg-sys-blue/15 text-sys-blue font-semibold'
-          : 'font-medium text-txt-secondary hover:text-txt-primary hover:bg-fill-quaternary',
-      )}
+      className="shrink-0 gap-1.5 px-3.5 py-1.5 transition-all duration-200 ease-spring"
     >
       <span>{label}</span>
-      <span className={clsx('ml-1.5 inline-block tabular-nums', active ? 'opacity-70' : 'opacity-60')}>
+      <span className={clsx('inline-block tabular-nums', active ? 'opacity-70' : 'opacity-60')}>
         {count}
       </span>
-    </button>
+    </TextButton>
   );
 }
 
@@ -107,7 +107,7 @@ function CandidateDetail({ candidate, data, exactColumns, glossarySemanticColumn
   const displayed = finalItems.some((r) => r?.uri === uri);
 
   return (
-    <div className="animate-in mt-4 rounded-2xl bg-sys-blue/[0.06] border border-sys-blue/20 p-5 space-y-4">
+    <ActionPanel tone="blue" className="animate-in mt-4">
       <div className="flex flex-wrap items-center gap-3">
         <code className="font-mono text-[12.5px] text-txt-primary break-all">{String(uri ?? '')}</code>
         <span className="text-[28px] font-bold leading-none tabular-nums tracking-tight text-sys-blue">{fmt(candidate.score, 3)}</span>
@@ -145,7 +145,7 @@ function CandidateDetail({ candidate, data, exactColumns, glossarySemanticColumn
           <div className="col-span-full text-[13px] text-txt-tertiary">{t('No matching source records.')}</div>
         )}
       </div>
-    </div>
+    </ActionPanel>
   );
 }
 
@@ -322,7 +322,7 @@ export default function RecallStages({
   ], [t]);
 
   function renderStage(): ReactNode {
-    if (!data) return <EmptyState text={t('No data yet.')} />;
+    if (!data) return <Empty text={t('No data yet.')} />;
 
     switch (activeStage) {
       case 'query':

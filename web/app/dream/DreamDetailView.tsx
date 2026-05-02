@@ -294,7 +294,7 @@ export function DreamDetailView({ entry, loading, canRollback, rollingBack, onBa
           <Badge className="min-w-[3.9rem] justify-center" tone={statusTone(entry.status)}>{t(entry.status)}</Badge>
           <span className="text-sm text-txt-tertiary">{fmtDate(entry.started_at)} · {fmtDuration(entry.duration_ms)}</span>
           {canRollback && (
-            <Button variant="destructive" size="sm" onClick={onRollback} disabled={rollingBack}>
+            <Button variant="destructive" onClick={onRollback} disabled={rollingBack}>
               {rollingBack ? t('Rolling back…') : t('Rollback')}
             </Button>
           )}
@@ -370,7 +370,7 @@ function AgentWorkflowSection({ workflowEvents, defaultExpanded, t }: AgentWorkf
       title={t('Agent Workflow')}
       subtitle={`${rows.length}`}
       right={
-        <Button variant="ghost" size="sm" onClick={() => setExpanded(!expanded)}>
+        <Button variant="ghost" onClick={() => setExpanded(!expanded)}>
           <span aria-hidden>{expanded ? '▲' : '▼'}</span>
         </Button>
       }
@@ -380,7 +380,7 @@ function AgentWorkflowSection({ workflowEvents, defaultExpanded, t }: AgentWorkf
         rows.length > 0 ? (
           <div className="space-y-2 max-h-[360px] overflow-y-auto sm:max-h-[560px]">
             {rows.map((row) => (
-              <div key={row.key} className="flex items-start gap-2 rounded-xl border border-[var(--separator-thin)] bg-[var(--bg-primary)] px-3 py-3">
+              <div key={row.key} className="flex items-start gap-2 rounded-xl border border-separator-thin bg-bg-raised px-3 py-3">
                 <Badge tone={row.tone}>{t(row.label)}</Badge>
                 <div className="min-w-0 flex-1">
                   {row.detail && <div className="truncate text-xs font-mono text-txt-secondary">{row.detail}</div>}
@@ -409,9 +409,9 @@ function MemoryChangesSection({ changes, t }: MemoryChangesSectionProps): React.
     <Section title={t('Memory Changes')} subtitle={`${changes.length}`} className="mb-5">
       <div className="space-y-2">
         {changes.map((change, index) => (
-          <div key={index} className="rounded-xl border border-[var(--separator-thin)] bg-[var(--bg-primary)] overflow-hidden">
+          <div key={index} className="rounded-xl border border-separator-thin bg-bg-raised overflow-hidden">
             <div
-              className="flex cursor-pointer items-center gap-2 px-3 py-2 transition-colors hover:bg-[var(--fill-quaternary)]"
+              className="flex cursor-pointer items-center gap-2 px-3 py-2 transition-colors hover:bg-fill-quaternary"
               onClick={() => setExpandedIdx(expandedIdx === index ? null : index)}
             >
               <Badge tone={changeTone(change.type)}>{t(change.type)}</Badge>
@@ -425,7 +425,7 @@ function MemoryChangesSection({ changes, t }: MemoryChangesSectionProps): React.
               <span className="text-[11px] text-txt-quaternary">{expandedIdx === index ? '▲' : '▼'}</span>
             </div>
             {expandedIdx === index && (
-              <div className="space-y-2 border-t border-[var(--separator-thin)] px-3 py-3">
+              <div className="space-y-2 border-t border-separator-thin px-3 py-3">
                 {change.type === 'update' && change.before?.content !== undefined && change.after?.content !== undefined ? (
                   <DiffViewer oldText={change.before.content} newText={change.after.content} />
                 ) : change.type === 'move' && change.before?.uri && change.after?.uri ? (

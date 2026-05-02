@@ -3,9 +3,8 @@
 import React, { useEffect, useState, useCallback, MouseEvent } from 'react';
 import { useRouter } from 'next/navigation';
 import { format } from 'date-fns';
-import clsx from 'clsx';
 import { api } from '../../lib/api';
-import { PageCanvas, PageTitle, Button, Badge, EmptyState } from '../../components/ui';
+import { PageCanvas, PageTitle, Button, Badge, Card, Empty, LoadingBlock, Notice, SelectionBox, StatCard, TextButton } from '../../components/ui';
 import { useT } from '../../lib/i18n';
 import { AxiosError } from 'axios';
 import { useConfirm } from '../../components/ConfirmDialog';
@@ -79,23 +78,14 @@ export default function MaintenancePage(): React.JSX.Element {
     const cat = item.category === 'deprecated' ? { tone: 'orange' as const, label: t('Deprecated') } : { tone: 'red' as const, label: t('Orphaned') };
 
     return (
-      <div key={item.id}
-        className={clsx('rounded-2xl border shadow-card transition-all duration-200', isChecked ? 'border-sys-blue/50 bg-sys-blue/[0.04]' : 'border-separator-thin bg-bg-elevated')}>
-        <div className="flex items-start gap-4 p-5 cursor-pointer group" onClick={() => handleExpand(item.id)}>
-          <button
+      <Card key={item.id} padded={false} interactive selected={isChecked}>
+        <div className="flex cursor-pointer items-start gap-4 p-5 group" onClick={() => handleExpand(item.id)}>
+          <SelectionBox
+            selected={isChecked}
+            label={isChecked ? t('Deselect') : t('Select')}
+            className="mt-0.5"
             onClick={(e) => toggleSelect(item.id, e)}
-            aria-label={isChecked ? 'deselect' : 'select'}
-            className={clsx(
-              'press mt-0.5 shrink-0 h-[18px] w-[18px] rounded-md border transition-colors flex items-center justify-center',
-              isChecked ? 'border-sys-blue bg-sys-blue' : 'border-separator group-hover:border-txt-tertiary',
-            )}
-          >
-            {isChecked && (
-              <svg width="10" height="10" viewBox="0 0 10 10" fill="none" className="text-white">
-                <path d="M1.5 5.2l2 2L8.5 2.5" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
-              </svg>
-            )}
-          </button>
+          />
           <div className="flex-1 min-w-0">
             <div className="flex items-center gap-2.5 flex-wrap">
               <Badge tone={cat.tone}>{cat.label}</Badge>
@@ -117,10 +107,12 @@ export default function MaintenancePage(): React.JSX.Element {
             </p>
           </div>
           <div className="flex items-center gap-2 shrink-0 self-start">
-            <span className="text-[11px] text-sys-blue group-hover:opacity-80">{t('View')} →</span>
+            <TextButton onClick={(event) => { event.stopPropagation(); handleExpand(item.id); }}>
+              {t('View')} →
+            </TextButton>
           </div>
         </div>
-      </div>
+      </Card>
     );
   };
 
@@ -145,30 +137,20 @@ export default function MaintenancePage(): React.JSX.Element {
       />
 
       <div className="animate-in stagger-1 mb-5 grid grid-cols-2 gap-3">
-        <div className="rounded-2xl border border-separator-thin bg-bg-elevated shadow-card px-5 py-4">
-          <div className="text-[11px] font-medium text-txt-tertiary">{t('Deprecated')}</div>
-          <div className="mt-1.5 text-[28px] font-bold leading-none tracking-tight tabular-nums text-sys-orange">{deprecated.length}</div>
-        </div>
-        <div className="rounded-2xl border border-separator-thin bg-bg-elevated shadow-card px-5 py-4">
-          <div className="text-[11px] font-medium text-txt-tertiary">{t('Orphaned')}</div>
-          <div className="mt-1.5 text-[28px] font-bold leading-none tracking-tight tabular-nums text-sys-red">{orphaned.length}</div>
-        </div>
+        <StatCard compact label={t('Deprecated')} value={deprecated.length} tone="orange" />
+        <StatCard compact label={t('Orphaned')} value={orphaned.length} tone="red" />
       </div>
 
       {error && (
-        <div className="animate-scale mb-4 rounded-xl bg-sys-red/10 border border-sys-red/20 px-3.5 py-2.5 text-[13px] text-sys-red">
+        <Notice tone="danger" className="animate-scale mb-4">
           {error}
-        </div>
+        </Notice>
       )}
 
-      {loading && !orphans.length && (
-        <div className="flex justify-center py-20">
-          <div className="h-6 w-6 animate-spin rounded-full border-2 border-fill-tertiary border-t-sys-blue" />
-        </div>
-      )}
+      {loading && !orphans.length && <LoadingBlock />}
 
       {!loading && !error && !orphans.length && (
-        <EmptyState text={t('All clear. No orphans to review.')} />
+        <Empty text={t('All clear. No orphans to review.')} />
       )}
 
       {!error && orphans.length > 0 && (

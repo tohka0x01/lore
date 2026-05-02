@@ -3,12 +3,17 @@ import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it, vi } from 'vitest';
 
 vi.mock('@lobehub/ui/es/Block/index', () => ({
-  default: ({ children, className, clickable, padding }: { children: React.ReactNode; className?: string; clickable?: boolean; padding?: number }) => (
-    <section data-lobe-block="true" data-clickable={clickable} data-padding={padding} className={className}>{children}</section>
+  default: ({ children, className, clickable, padding, onClick }: { children: React.ReactNode; className?: string; clickable?: boolean; padding?: number; onClick?: () => void }) => (
+    <section data-lobe-block="true" data-clickable={clickable} data-has-on-click={String(Boolean(onClick))} data-padding={padding} className={className}>{children}</section>
   ),
 }));
 
-import { Card } from '../layout';
+vi.mock('../controls', () => ({
+  Spinner: ({ size }: { size?: string }) => <span data-spinner-size={size || 'md'} />,
+  surfaceCardClassName: 'rounded-2xl border border-separator-thin bg-bg-elevated shadow-card',
+}));
+
+import { ActionPanel, Card, InlineMeta, LoadingBlock, Section, surfaceCardClassName } from '../layout';
 
 describe('ui layout Card', () => {
   it('renders through Lobe Block with default padding 16', () => {
@@ -33,5 +38,53 @@ describe('ui layout Card', () => {
     expect(html).toContain('data-clickable="true"');
     expect(html).toContain('hover:border-separator');
     expect(html).toContain('hover:bg-bg-raised');
+  });
+
+  it('uses the canonical surface class and supports selected cards', () => {
+    const html = renderToStaticMarkup(<Card selected onClick={() => undefined}>Content</Card>);
+
+    expect(surfaceCardClassName).toContain('bg-bg-elevated');
+    expect(html).toContain('data-clickable="true"');
+    expect(html).toContain('data-has-on-click="true"');
+    expect(html).toContain('border-sys-blue/50');
+  });
+
+  it('renders ActionPanel with tone, header, compact, body, and footer affordances', () => {
+    const html = renderToStaticMarkup(
+      <ActionPanel tone="red" title="Danger" description="Delete path" right={<span>!</span>} footer="Footer" compact bodyClassName="grid gap-2">
+        Body
+      </ActionPanel>,
+    );
+
+    expect(html).toContain('border-sys-red/30');
+    expect(html).toContain('p-4');
+    expect(html).toContain('Danger');
+    expect(html).toContain('Delete path');
+    expect(html).toContain('grid gap-2');
+    expect(html).toContain('Body');
+    expect(html).toContain('Footer');
+  });
+
+  it('renders LoadingBlock with shared spinner, compact spacing, and extra content', () => {
+    const html = renderToStaticMarkup(<LoadingBlock label="Loading" size="sm" compact>Details</LoadingBlock>);
+
+    expect(html).toContain('data-spinner-size="sm"');
+    expect(html).toContain('py-10');
+    expect(html).toContain('Loading');
+    expect(html).toContain('Details');
+  });
+
+  it('renders InlineMeta and Section helpers', () => {
+    const meta = renderToStaticMarkup(<InlineMeta>core://agent</InlineMeta>);
+    const section = renderToStaticMarkup(<Section title="Title" subtitle="Hint" right={<button>Act</button>} footer="Footer" compact bodyClassName="grid gap-3">Body</Section>);
+
+    expect(meta).toContain('text-txt-tertiary');
+    expect(section).toContain('Title');
+    expect(section).toContain('Hint');
+    expect(section).toContain('Body');
+    expect(section).toContain('Act');
+    expect(section).toContain('Footer');
+    expect(section).toContain('grid gap-3');
+    expect(section).toContain('text-[15px]');
   });
 });

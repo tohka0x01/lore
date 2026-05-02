@@ -3,7 +3,7 @@
 import React, { type ReactNode, useMemo } from 'react';
 import clsx from 'clsx';
 import { flexRender, getCoreRowModel, useReactTable } from '@tanstack/react-table';
-import { EmptyState } from './controls';
+import { Empty } from './controls';
 
 type RowData = Record<string, unknown>;
 
@@ -46,7 +46,7 @@ export function Table<T extends RowData = RowData>({ columns, rows, empty = '暂
     meta: { className: col.className },
   })), [columns]);
   const table = useReactTable({ data, columns: tableColumns, getCoreRowModel: getCoreRowModel() });
-  if (!data.length) return <EmptyState text={empty} />;
+  if (!data.length) return <Empty text={empty} />;
   return (
     <div className="w-full overflow-x-auto">
       <table className="min-w-full border-collapse text-left">

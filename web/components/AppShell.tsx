@@ -13,6 +13,7 @@ import { LanguageProvider, useT } from '../lib/i18n';
 import { ThemeProvider, useTheme } from '../lib/theme';
 import TokenAuth from './TokenAuth';
 import { ConfirmProvider, useConfirm } from './ConfirmDialog';
+import { Button } from './ui';
 import { AxiosError } from 'axios';
 
 const BOOT_SETUP_ACK_KEY = 'lore-boot-setup-confirmed';
@@ -35,10 +36,10 @@ export function navIndicatorClassName(isHovering: boolean): string {
   return 'bg-fill-primary shadow-none';
 }
 
-export function LobeThemeBridge({ children }: { children: ReactNode }): React.JSX.Element {
+export function LobeThemeWrapper({ children }: { children: ReactNode }): React.JSX.Element {
   const { theme } = useTheme();
   return (
-    <LobeThemeProvider appearance={theme === 'light' ? 'light' : 'dark'} enableCustomFonts={false} enableGlobalStyle={false}>
+    <LobeThemeProvider appearance={theme === 'light' ? 'light' : 'dark'}>
       {children}
     </LobeThemeProvider>
   );
@@ -99,7 +100,7 @@ function NavDock(): React.JSX.Element {
   }, [targetHref, pathname]);
 
   return (
-    <header className="fixed top-3 md:top-4 left-1/2 z-50 max-w-[calc(100vw-16px)]" style={{ transform: 'translateX(-50%)' }}>
+    <header className="fixed top-3 md:top-4 left-1/2 z-50 max-w-[calc(100vw-16px)] -translate-x-1/2">
       <div className="animate-in relative flex items-center gap-0.5 md:gap-1.5 rounded-full border border-separator-thin bg-bg-elevated/80 backdrop-blur-2xl backdrop-saturate-150 pl-1.5 md:pl-2.5 pr-1 md:pr-2 py-1.5 md:py-2 shadow-dock">
         <button
           onClick={() => router.push('/memory')}
@@ -162,7 +163,7 @@ function NavDock(): React.JSX.Element {
               );
             })}
           </nav>
-          <div className="pointer-events-none absolute inset-y-0 right-0 w-6 bg-gradient-to-l from-[var(--bg-elevated)] to-transparent md:hidden" />
+          <div className="pointer-events-none absolute inset-y-0 right-0 w-6 bg-gradient-to-l from-bg-elevated to-transparent md:hidden" />
         </div>
 
         <div className="hidden md:block h-5 w-px bg-separator-thin mx-0.5" />
@@ -405,12 +406,9 @@ function AppShellInner({ children }: AppShellInnerProps): React.JSX.Element {
           <h1 className="text-[22px] font-semibold tracking-tight text-txt-primary">{t('Unable to connect')}</h1>
           <p className="mt-1 text-[14px] text-txt-secondary">{t('Check that the backend service is running.')}</p>
         </div>
-        <button
-          onClick={() => window.location.reload()}
-          className="press mt-2 h-9 rounded-full bg-sys-blue px-5 text-[13px] font-medium text-white hover:bg-[#1E90FF]"
-        >
+        <Button variant="primary" onClick={() => window.location.reload()}>
           {t('Try Again')}
-        </button>
+        </Button>
       </div>
     );
   }
@@ -435,13 +433,13 @@ export default function AppShell({ children }: AppShellProps): React.JSX.Element
   return (
     <ThemeProvider>
       <ConfigProvider motion={motion}>
-        <LobeThemeBridge>
+        <LobeThemeWrapper>
           <LanguageProvider>
             <ConfirmProvider>
               <AppShellInner>{children}</AppShellInner>
             </ConfirmProvider>
           </LanguageProvider>
-        </LobeThemeBridge>
+        </LobeThemeWrapper>
       </ConfigProvider>
     </ThemeProvider>
   );

@@ -1,5 +1,5 @@
 import React, { useState, ChangeEvent } from 'react';
-import { AppInput, Button } from '../../../components/ui';
+import { ActionPanel, AppInput, Button } from '../../../components/ui';
 import { useT } from '../../../lib/i18n';
 import { api } from '../../../lib/api';
 import { AxiosError } from 'axios';
@@ -37,16 +37,14 @@ export default function MoveDialog({ domain, path, onMoved, onCancel }: MoveDial
   };
 
   return (
-    <div className="mb-8 rounded-2xl border border-sys-orange/30 bg-sys-orange/[0.04] p-5 space-y-4">
-      <div className="flex items-center justify-between gap-3">
-        <h3 className="text-[13px] font-semibold uppercase tracking-[0.04em] text-sys-orange">{t('Move / Rename')}</h3>
-        <div className="flex items-center gap-2">
-          <Button variant="ghost" size="sm" onClick={onCancel}>{t('Cancel')}</Button>
-          <Button variant="primary" size="sm" onClick={handleSave} disabled={saving || !newUri.trim()}>
-            {saving ? t('Moving…') : t('Move')}
-          </Button>
-        </div>
+    <ActionPanel tone="orange" className="mb-8" title={t('Move / Rename')} right={
+      <div className="flex items-center gap-2">
+        <Button variant="ghost" onClick={onCancel}>{t('Cancel')}</Button>
+        <Button variant="primary" onClick={handleSave} disabled={saving || !newUri.trim()}>
+          {saving ? t('Moving…') : t('Move')}
+        </Button>
       </div>
+    }>
       {error && <p className="text-[13px] text-sys-red">{error}</p>}
       <label className="block">
         <span className="block mb-1 text-[11px] font-medium text-txt-tertiary">{t('New URI')}</span>
@@ -54,11 +52,12 @@ export default function MoveDialog({ domain, path, onMoved, onCancel }: MoveDial
           type="text" value={newUri}
           onChange={(e: ChangeEvent<HTMLInputElement>) => setNewUri(e.target.value)}
           placeholder="domain://path/to/node"
-          className="font-mono text-[14px]"
+          size="lg"
+          mono
           autoFocus
         />
       </label>
       <p className="text-[11px] text-txt-quaternary">{t('Child nodes will follow automatically.')}</p>
-    </div>
+    </ActionPanel>
   );
 }

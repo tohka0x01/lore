@@ -4,7 +4,7 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import clsx from 'clsx';
 import { AxiosError } from 'axios';
 import { api } from '@/lib/api';
-import { PageCanvas, PageTitle, Section, Badge, Button } from '@/components/ui';
+import { PageCanvas, PageTitle, Section, Badge, Button, LoadingBlock, Notice } from '@/components/ui';
 import { useT } from '@/lib/i18n';
 import { useConfirm } from '@/components/ConfirmDialog';
 import {
@@ -75,7 +75,7 @@ export default function SettingsPage(): React.JSX.Element {
     }
     if (section.id === 'embedding') {
       return (
-        <Button size="sm" variant="secondary" onClick={() => void handleRebuild()} disabled={rebuilding || saving}>
+        <Button variant="secondary" onClick={() => void handleRebuild()} disabled={rebuilding || saving}>
           {rebuilding ? t('Rebuilding…') : t('Rebuild Index')}
         </Button>
       );
@@ -104,21 +104,17 @@ export default function SettingsPage(): React.JSX.Element {
       />
 
       {toast && (
-        <div className="animate-scale mb-4 rounded-xl bg-sys-green/10 border border-sys-green/20 px-3.5 py-2.5 text-[13px] text-sys-green">
+        <Notice tone={toast.type === 'success' ? 'success' : 'danger'} className="animate-scale mb-4">
           {toast.text}
-        </div>
+        </Notice>
       )}
       {error && (
-        <div className="animate-scale mb-4 rounded-xl bg-sys-red/10 border border-sys-red/20 px-3.5 py-2.5 text-[13px] text-sys-red">
+        <Notice tone="danger" className="animate-scale mb-4">
           {error}
-        </div>
+        </Notice>
       )}
 
-      {loading && (
-        <div className="flex justify-center py-20">
-          <div className="h-6 w-6 animate-spin rounded-full border-2 border-fill-tertiary border-t-sys-blue" />
-        </div>
-      )}
+      {loading && <LoadingBlock />}
 
       {data && !loading && (
         <div className="space-y-5">
@@ -294,16 +290,9 @@ function BackupActionPanel(): React.JSX.Element {
       >
         <div className="px-4 md:px-6 py-4 space-y-4">
           {message && (
-            <div
-              className={clsx(
-                'rounded-xl px-3.5 py-2.5 text-[13px]',
-                message.type === 'success'
-                  ? 'bg-sys-green/10 border border-sys-green/20 text-sys-green'
-                  : 'bg-sys-red/10 border border-sys-red/20 text-sys-red',
-              )}
-            >
+            <Notice tone={message.type === 'success' ? 'success' : 'danger'}>
               {message.text}
-            </div>
+            </Notice>
           )}
 
           <div className="flex gap-3 flex-wrap">
@@ -343,7 +332,7 @@ function BackupActionPanel(): React.JSX.Element {
                       </td>
                       <td className="px-0 py-2 text-right text-txt-tertiary">{fmtBytes(backup.size)}</td>
                       <td className="px-0 py-2 text-right last:pl-4">
-                        <Button variant="ghost" size="sm" onClick={() => void handleRestoreFile(backup.filename)} disabled={!!restoringFile}>
+                        <Button variant="ghost" onClick={() => void handleRestoreFile(backup.filename)} disabled={!!restoringFile}>
                           {restoringFile === backup.filename ? t('Restoring…') : t('Restore')}
                         </Button>
                       </td>

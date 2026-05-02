@@ -2,7 +2,7 @@
 
 import React, { ChangeEvent } from 'react';
 import clsx from 'clsx';
-import { AppInput, AppPasswordInput, AppSelect, Badge, Button } from '@/components/ui';
+import { AppInput, AppPasswordInput, AppSelect, Badge, Button, TextButton, ToggleSwitch } from '@/components/ui';
 import { useT } from '@/lib/i18n';
 
 export type SettingSource = 'db' | 'default';
@@ -77,7 +77,9 @@ function NumberInput({ value, onChange, schema, disabled }: NumberInputProps): R
       value={value == null ? '' : String(value)}
       disabled={disabled}
       onChange={(e: ChangeEvent<HTMLInputElement>) => onChange(e.target.value === '' ? '' : Number(e.target.value))}
-      className="w-32 text-right font-mono text-[13px] tabular-nums"
+      className="w-32 text-right tabular-nums"
+      size="md"
+      mono
     />
   );
 }
@@ -116,7 +118,8 @@ function EnumInput({ value, onChange, schema, disabled }: EnumInputProps): React
   const labels = schema.option_labels || {};
   return (
     <AppSelect
-      className="font-mono text-[13px]"
+      size="md"
+      mono
       disabled={disabled}
       value={value == null ? '' : String(value)}
       onValueChange={onChange}
@@ -138,29 +141,13 @@ function BooleanInput({ value, onChange, disabled }: BooleanInputProps): React.J
   const { t } = useT();
   const checked = Boolean(value);
   return (
-    <label className="inline-flex items-center gap-3 text-[13px] text-txt-primary">
-      <button
-        type="button"
-        role="switch"
-        aria-checked={checked}
-        disabled={disabled}
-        onClick={() => onChange(!checked)}
-        className={clsx(
-          'relative inline-flex h-6 w-11 shrink-0 rounded-full border transition-colors disabled:opacity-40',
-          checked
-            ? '!bg-[rgba(0,122,255,0.15)] border-[rgba(0,122,255,0.35)]'
-            : 'border-separator-thin bg-fill-primary',
-        )}
-      >
-        <span
-          className={clsx(
-            'absolute top-0.5 h-[18px] w-[18px] rounded-full bg-white shadow transition-transform',
-            checked ? 'translate-x-[22px]' : 'translate-x-0.5',
-          )}
-        />
-      </button>
-      <span>{checked ? t('true') : t('false')}</span>
-    </label>
+    <ToggleSwitch
+      checked={checked}
+      onCheckedChange={(v) => onChange(v)}
+      disabled={disabled}
+      label={checked ? t('true') : t('false')}
+      className="text-[13px] text-txt-primary"
+    />
   );
 }
 
@@ -200,14 +187,9 @@ export function FieldRow({ schema, value, source, dirty, secretConfigured, onCha
           {schema.secret && secretConfigured && !dirty && <Badge tone="green">{t('Stored')}</Badge>}
           {dirty && <Badge tone="blue">{t('Unsaved')}</Badge>}
           {source !== 'default' && !dirty && (
-            <button
-              type="button"
-              onClick={onReset}
-              disabled={saving}
-              className="text-[11px] text-sys-blue hover:opacity-80 disabled:opacity-30"
-            >
+            <TextButton tone="blue" onClick={onReset} disabled={saving}>
               {t('Reset')}
-            </button>
+            </TextButton>
           )}
         </div>
         {schema.description && (
@@ -321,7 +303,7 @@ export function SectionActionButton({
   disabled?: boolean;
 }): React.JSX.Element {
   return (
-    <Button size="sm" variant="secondary" onClick={onClick} disabled={disabled}>
+    <Button variant="secondary" onClick={onClick} disabled={disabled}>
       {children}
     </Button>
   );

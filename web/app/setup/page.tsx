@@ -2,7 +2,7 @@
 
 import React, { useEffect } from 'react';
 import { useRouter } from 'next/navigation';
-import { Notice } from '@/components/ui';
+import { LoadingBlock, Notice } from '@/components/ui';
 import { SetupFlowShell } from '@/components/setup/SetupFlowShell';
 import { getSetupFlowStatus } from '@/lib/api';
 import { useT } from '@/lib/i18n';
@@ -43,9 +43,7 @@ export default function SetupLandingPage(): React.JSX.Element {
           {error}
         </Notice>
       ) : (
-        <div className="flex justify-center py-20">
-          <div className="h-6 w-6 animate-spin rounded-full border-2 border-fill-tertiary border-t-sys-blue" />
-        </div>
+        <LoadingBlock />
       )}
     </SetupFlowShell>
   );

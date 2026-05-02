@@ -1,10 +1,11 @@
 'use client';
 
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import clsx from 'clsx';
 import { AxiosError } from 'axios';
 import { Bot, RefreshCw, Save, Sparkles, User } from 'lucide-react';
 import { usePathname, useRouter } from 'next/navigation';
-import { AppTextArea, Badge, Button, Notice } from '@/components/ui';
+import { AppTextArea, Badge, Button, LoadingBlock, Notice, surfaceCardClassName } from '@/components/ui';
 import { SetupBackButton, SetupFlowShell } from '@/components/setup/SetupFlowShell';
 import { useConfirm } from '@/components/ConfirmDialog';
 import { getBootStatus, getSetupFlowStatus, saveBootStatus } from '@/lib/api';
@@ -193,11 +194,7 @@ export default function BootSetupStep({ setupSlug }: BootSetupStepProps): React.
         </Notice>
       )}
 
-      {loading && (
-        <div className="flex justify-center py-20">
-          <div className="h-6 w-6 animate-spin rounded-full border-2 border-fill-tertiary border-t-sys-blue" />
-        </div>
-      )}
+      {loading && <LoadingBlock />}
 
       {!loading && !node && (
         <Notice tone="danger" title={t('Not found')}>
@@ -206,7 +203,7 @@ export default function BootSetupStep({ setupSlug }: BootSetupStepProps): React.
       )}
 
       {!loading && node && (
-        <div className="animate-in stagger-2 overflow-hidden rounded-2xl border border-separator-thin bg-bg-elevated shadow-card">
+        <div className={clsx('animate-in stagger-2 overflow-hidden', surfaceCardClassName)}>
           <div className="flex items-start justify-between gap-4 border-b border-separator-thin px-4 py-4 md:px-6 md:py-5">
             <div className="flex min-w-0 items-start gap-3">
               <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl border border-sys-blue/20 bg-sys-blue/10 text-sys-blue">
@@ -241,7 +238,8 @@ export default function BootSetupStep({ setupSlug }: BootSetupStepProps): React.
                   setDirty(true);
                 }}
                 placeholder={t('Write the final memory content here')}
-                className="bg-bg-inset text-[14px] leading-relaxed"
+                className="bg-bg-inset leading-relaxed"
+                size="lg"
                 style={{ height: 460, minHeight: 460 }}
               />
             </div>

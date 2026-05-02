@@ -41,17 +41,17 @@ export function ConfirmModalForTest({ dialog, onConfirm, onCancel }: { dialog: D
   return (
     <LobeModal
       centered
-      className="rounded-2xl border border-separator-thin bg-bg-elevated shadow-xl [&_.ant-modal-content]:rounded-2xl [&_.ant-modal-content]:border [&_.ant-modal-content]:border-separator-thin [&_.ant-modal-content]:bg-bg-elevated [&_.ant-modal-content]:shadow-xl"
+      className="rounded-2xl border border-separator-thin bg-bg-elevated shadow-xl"
       closable={dismissible}
       footer={(
         <div className="flex items-center justify-end gap-2">
           {dialog.hideCancel ? null : (
-            <Button className="!rounded-full focus-visible:!rounded-full" size="sm" variant="secondary" onClick={onCancel}>
+            <Button variant="secondary" onClick={onCancel}>
               {dialog.cancelLabel || t('Cancel')}
             </Button>
           )}
           <Button
-            size="sm"
+           
             variant={dialog.destructive ? 'destructive' : 'secondary'}
             onClick={onConfirm}
           >

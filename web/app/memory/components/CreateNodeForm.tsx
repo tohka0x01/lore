@@ -1,5 +1,5 @@
 import React, { useState, ChangeEvent } from 'react';
-import { AppInput, AppTextArea, Button } from '../../../components/ui';
+import { ActionPanel, AppInput, AppTextArea, Button } from '../../../components/ui';
 import { useT } from '../../../lib/i18n';
 import { api } from '../../../lib/api';
 import { AxiosError } from 'axios';
@@ -40,16 +40,14 @@ export default function CreateNodeForm({ domain, parentPath, onCreated, onCancel
   };
 
   return (
-    <div className="mb-6 rounded-2xl border border-sys-green/30 bg-sys-green/[0.04] p-5 space-y-4">
-      <div className="flex items-center justify-between gap-3">
-        <h3 className="text-[13px] font-semibold uppercase tracking-[0.04em] text-sys-green">{t('New Child Node')}</h3>
-        <div className="flex items-center gap-2">
-          <Button variant="ghost" size="sm" onClick={onCancel}>{t('Cancel')}</Button>
-          <Button variant="primary" size="sm" onClick={handleSave} disabled={saving || !title.trim()}>
-            {saving ? t('Creating…') : t('Create')}
-          </Button>
-        </div>
+    <ActionPanel tone="green" className="mb-6" title={t('New Child Node')} right={
+      <div className="flex items-center gap-2">
+        <Button variant="ghost" onClick={onCancel}>{t('Cancel')}</Button>
+        <Button variant="primary" onClick={handleSave} disabled={saving || !title.trim()}>
+          {saving ? t('Creating…') : t('Create')}
+        </Button>
       </div>
+    }>
       {error && <p className="text-[13px] text-sys-red">{error}</p>}
       <div className="grid gap-4 sm:grid-cols-[1fr_auto] items-start">
         <label className="block">
@@ -58,7 +56,8 @@ export default function CreateNodeForm({ domain, parentPath, onCreated, onCancel
             type="text" value={title}
             onChange={(e: ChangeEvent<HTMLInputElement>) => setTitle(e.target.value)}
             placeholder="snake_case_name"
-            className="font-mono text-[14px]"
+            size="lg"
+            mono
             autoFocus
           />
         </label>
@@ -84,12 +83,13 @@ export default function CreateNodeForm({ domain, parentPath, onCreated, onCancel
         value={content}
         onChange={(e: ChangeEvent<HTMLTextAreaElement>) => setContent(e.target.value)}
         placeholder={t('Memory content…')}
-        className="h-40 text-[15px] leading-relaxed"
+        className="h-40 leading-relaxed"
+        size="lg"
         spellCheck={false}
       />
       <p className="text-[11px] text-txt-quaternary">
         {t('Will create')}: <code className="font-mono">{domain}://{parentPath ? `${parentPath}/` : ''}{title || '…'}</code>
       </p>
-    </div>
+    </ActionPanel>
   );
 }

@@ -1,8 +1,10 @@
 import React from 'react';
+import clsx from 'clsx';
 import UpdaterDisplay, { type UpdaterSummary } from '../../../components/UpdaterDisplay';
 import type { MemoryNode } from '../useMemoryBrowserController';
 import KeywordManager from './KeywordManager';
 import GlossaryHighlighter from './GlossaryHighlighter';
+import { surfaceCardClassName } from '../../../components/ui';
 import MemoryViewsSection from './MemoryViewsSection';
 
 function MemoryNodeProperties({
@@ -85,7 +87,7 @@ export default function MemoryNodeMeta({
   return (
     <div className="mb-6 space-y-4">
       {hasProperties && (
-        <div className="rounded-2xl border border-separator-thin bg-bg-elevated px-4 py-4 shadow-card md:px-6 md:py-5">
+        <div className={clsx(surfaceCardClassName, 'px-4 py-4 md:px-6 md:py-5')}>
           <MemoryNodeProperties node={node} refreshData={refreshData} navigateToHistory={navigateToHistory} t={t} />
         </div>
       )}
@@ -93,7 +95,7 @@ export default function MemoryNodeMeta({
         <MemoryViewsSection memoryViews={node.memory_views} t={t} />
       )}
       {node.content && (
-        <div className="rounded-2xl border border-separator-thin bg-bg-elevated px-4 py-4 shadow-card md:px-6 md:py-5">
+        <div className={clsx(surfaceCardClassName, 'px-4 py-4 md:px-6 md:py-5')}>
           <div className="prose max-w-none">
             <GlossaryHighlighter
               key={node.node_uuid}

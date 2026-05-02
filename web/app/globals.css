@@ -158,21 +158,8 @@
 .stagger-5 { animation-delay: 200ms; }
 .stagger-6 { animation-delay: 240ms; }
 
-button, a, input, textarea, select {
-  transition-property: background-color, border-color, color, opacity, transform, box-shadow;
-  transition-duration: 240ms;
-  transition-timing-function: var(--ease-spring);
-}
-button, a, [role="button"] { cursor: pointer; }
-
 .press:active { transform: scale(0.97); }
 
-@media (prefers-reduced-motion: reduce) {
-  *, *::before, *::after {
-    animation-duration: 0.01ms !important;
-    transition-duration: 0.01ms !important;
-  }
-}
 
 /* ── scrollbar ──────────────────────────────────────────── */
 
@@ -247,7 +234,7 @@ button, a, [role="button"] { cursor: pointer; }
 /* ── glossary / sidebar helpers ─────────────────────────── */
 
 .glossary-keyword {
-  color: var(--sys-yellow) !important;
+  color: var(--sys-yellow);
   cursor: pointer;
   text-decoration: underline;
   text-decoration-style: dotted;
@@ -256,7 +243,7 @@ button, a, [role="button"] { cursor: pointer; }
   transition: color 180ms var(--ease-out);
 }
 .glossary-keyword:hover {
-  color: #FFF !important;
+  color: #FFF;
   text-decoration-color: var(--sys-yellow);
 }
 

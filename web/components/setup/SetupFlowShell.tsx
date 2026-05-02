@@ -4,7 +4,7 @@ import React from 'react';
 import clsx from 'clsx';
 import { useRouter } from 'next/navigation';
 import { ArrowLeft } from 'lucide-react';
-import { Badge, Button, PageCanvas, PageTitle } from '@/components/ui';
+import { Badge, Button, PageCanvas, PageTitle, surfaceCardClassName } from '@/components/ui';
 import { useT } from '@/lib/i18n';
 import type { SetupFlowStatus, SetupStepId } from '@/lib/bootSetup';
 
@@ -26,7 +26,7 @@ function stepPillClass(current: boolean, complete: boolean): string {
 }
 
 function stepDotClass(current: boolean, complete: boolean): string {
-  if (current) return 'bg-sys-blue shadow-[0_0_0_3px_rgba(64,156,255,0.16)]';
+  if (current) return 'bg-sys-blue';
   if (complete) return 'bg-sys-green';
   return 'bg-fill-primary';
 }
@@ -58,7 +58,7 @@ export function SetupFlowShell({
       />
 
       {setupStatus && (
-        <div className="animate-in stagger-1 mb-5 overflow-hidden rounded-2xl border border-separator-thin bg-bg-elevated shadow-card">
+        <div className={clsx('animate-in stagger-1 mb-5 overflow-hidden', surfaceCardClassName)}>
           <div className="flex items-center justify-between gap-3 border-b border-separator-thin px-4 py-3.5 md:px-5">
             <div className="min-w-0">
               <div className="text-[11px] font-medium uppercase tracking-[0.08em] text-txt-tertiary">{t('Setup progress')}</div>
@@ -66,7 +66,7 @@ export function SetupFlowShell({
                 {t('Step')} {currentIndex}/{totalSteps} · {t(setupStatus.steps[currentIndex - 1]?.label || '')}
               </div>
             </div>
-            <Badge tone={setupStatus.complete ? 'green' : 'blue'} className="px-2.5 py-1 text-[12px]">
+            <Badge tone={setupStatus.complete ? 'green' : 'blue'} size="lg">
               {completedCount}/{totalSteps}
             </Badge>
           </div>

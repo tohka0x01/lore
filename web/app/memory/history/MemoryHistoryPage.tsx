@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import clsx from 'clsx';
 import { AxiosError } from 'axios';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { ArrowLeft, RotateCcw } from 'lucide-react';
@@ -8,7 +9,7 @@ import { api } from '../../../lib/api';
 import { buildUrlWithSearchParams, readStringParam } from '../../../lib/url-state';
 import { useT } from '../../../lib/i18n';
 import { useConfirm } from '../../../components/ConfirmDialog';
-import { Badge, Button, CodeDiff, Disclosure, Empty, PageCanvas, PageTitle } from '../../../components/ui';
+import { Badge, Button, CodeDiff, Disclosure, Empty, PageCanvas, PageTitle, surfaceCardClassName } from '../../../components/ui';
 import { ChannelAvatar } from '../../../components/UpdaterDisplay';
 import { clientTypeLabel } from '../../../components/clientTypeMeta';
 import type { HistoryDiff, NodeHistoryPayload, NormalizedHistoryEvent } from '../../../server/lore/memory/history';
@@ -89,7 +90,7 @@ function HistoryDiffItem({ diff, t }: { diff: HistoryDiff; t: Translate }): Reac
 
   return (
     <Disclosure
-      className="rounded-xl border border-separator-thin bg-bg-raised/60 px-3 py-2"
+      variant="card"
       open={open}
       onOpenChange={setOpen}
       trigger={(
@@ -129,7 +130,7 @@ export function HistoryEventCard({ event, onRollback, rollingBack, t }: {
   const createdAt = formatDate(event.created_at, t);
 
   return (
-    <article className="overflow-hidden rounded-xl border border-separator-thin bg-bg-elevated shadow-card">
+    <article className={clsx('overflow-hidden', surfaceCardClassName)}>
       <header className="flex items-center justify-between gap-3 border-b border-separator-thin px-3 py-2 md:px-4">
         <div className="min-w-0 flex flex-wrap items-center gap-x-2 gap-y-1 text-[13px]">
           <Badge tone={badgeTone(event.event_type)}>{t(event.event_type)}</Badge>
@@ -146,7 +147,7 @@ export function HistoryEventCard({ event, onRollback, rollingBack, t }: {
         {event.rollback_supported ? (
           <Button
             disabled={rollingBack}
-            size="sm"
+           
             variant="ghost"
             onClick={() => onRollback(event.id)}
           >

@@ -46,11 +46,15 @@ vi.mock('../../lib/theme', () => ({
   useTheme: () => ({ theme: 'light', toggleTheme: vi.fn() }),
 }));
 
-import { LobeThemeBridge, navIndicatorClassName } from '../AppShell';
+vi.mock('../ui', () => ({
+  Button: ({ children }: { children: React.ReactNode }) => <button>{children}</button>,
+}));
+
+import { LobeThemeWrapper, navIndicatorClassName } from '../AppShell';
 
 describe('AppShell theme contrast', () => {
   it('passes the app theme into Lobe UI components', () => {
-    const html = renderToStaticMarkup(<LobeThemeBridge><div>content</div></LobeThemeBridge>);
+    const html = renderToStaticMarkup(<LobeThemeWrapper><div>content</div></LobeThemeWrapper>);
 
     expect(html).toContain('data-lobe-theme-provider="true"');
     expect(html).toContain('data-appearance="light"');

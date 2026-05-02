@@ -12,9 +12,13 @@ vi.mock('@/components/ui', () => ({
   ),
   Badge: ({ children }: { children: React.ReactNode }) => <span>{children}</span>,
   Button: ({ children }: { children: React.ReactNode }) => <button>{children}</button>,
-  inputClass: '',
+  ToggleSwitch: ({ checked, label, ...props }: Record<string, unknown> & { checked?: boolean; label?: React.ReactNode }) => (
+    <button role="switch" aria-checked={checked} data-toggle-switch="true" {...props}>{label}</button>
+  ),
+  TextButton: ({ children, ...props }: Record<string, unknown> & { children?: React.ReactNode }) => (
+    <button data-text-button="true" {...props}>{children}</button>
+  ),
 }));
-
 vi.mock('@/lib/i18n', () => ({
   useT: () => ({ t: (key: string) => key }),
 }));
@@ -118,10 +122,9 @@ describe('SettingsSectionEditor fields', () => {
       />,
     );
 
+    expect(html).toContain('data-toggle-switch="true"');
     expect(html).toContain('role="switch"');
     expect(html).toContain('aria-checked="true"');
-    expect(html).toContain('!bg-[rgba(0,122,255,0.15)]');
-    expect(html).toContain('border-[rgba(0,122,255,0.35)]');
   });
 
   it('renders read-before-modify as a high-contrast green selected switch', () => {
@@ -139,9 +142,8 @@ describe('SettingsSectionEditor fields', () => {
     );
 
     expect(html).toContain('改前必读检查');
+    expect(html).toContain('data-toggle-switch="true"');
     expect(html).toContain('aria-checked="true"');
-    expect(html).toContain('!bg-[rgba(0,122,255,0.15)]');
-    expect(html).toContain('border-[rgba(0,122,255,0.35)]');
   });
 
   it('renders text and secret fields through Lobe input wrappers', () => {

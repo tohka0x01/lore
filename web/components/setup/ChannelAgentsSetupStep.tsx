@@ -1,10 +1,11 @@
 'use client';
 
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import clsx from 'clsx';
 import { AxiosError } from 'axios';
 import { Bot, RefreshCw, Save } from 'lucide-react';
 import { usePathname, useRouter } from 'next/navigation';
-import { AppTextArea, Badge, Button, Notice } from '@/components/ui';
+import { AppTextArea, Badge, Button, LoadingBlock, Notice, surfaceCardClassName } from '@/components/ui';
 import { SetupBackButton, SetupFlowShell } from '@/components/setup/SetupFlowShell';
 import { useConfirm } from '@/components/ConfirmDialog';
 import { getBootStatus, getSetupFlowStatus, saveBootStatus } from '@/lib/api';
@@ -170,11 +171,7 @@ export default function ChannelAgentsSetupStep(): React.JSX.Element {
         </Notice>
       )}
 
-      {loading && (
-        <div className="flex justify-center py-20">
-          <div className="h-6 w-6 animate-spin rounded-full border-2 border-fill-tertiary border-t-sys-blue" />
-        </div>
-      )}
+      {loading && <LoadingBlock />}
 
       {!loading && nodes.length === 0 && (
         <Notice tone="info" title={t('Not found')}>
@@ -183,7 +180,7 @@ export default function ChannelAgentsSetupStep(): React.JSX.Element {
       )}
 
       {!loading && nodes.length > 0 && (
-        <div className="animate-in stagger-2 overflow-hidden rounded-2xl border border-separator-thin bg-bg-elevated shadow-card">
+        <div className={clsx('animate-in stagger-2 overflow-hidden', surfaceCardClassName)}>
           <div className="flex items-start justify-between gap-4 border-b border-separator-thin px-4 py-4 md:px-6 md:py-5">
             <div className="min-w-0">
               <h2 className="text-[18px] font-semibold tracking-tight text-txt-primary">{t('Channel agent boot memories')}</h2>
@@ -191,7 +188,7 @@ export default function ChannelAgentsSetupStep(): React.JSX.Element {
                 {t('Each channel keeps only its runtime-specific delta; shared rules stay in core://agent.')}
               </p>
             </div>
-            <Badge tone={completedCount === nodes.length ? 'green' : 'blue'} className="px-2.5 py-1 text-[12px]">
+            <Badge tone={completedCount === nodes.length ? 'green' : 'blue'} size="lg">
               {completedCount}/{nodes.length}
             </Badge>
           </div>
@@ -233,8 +230,8 @@ export default function ChannelAgentsSetupStep(): React.JSX.Element {
                       value={value}
                       onChange={(event) => handleChange(node.uri, event.target.value)}
                       placeholder={t('Write the final memory content here')}
-                      className="bg-bg-inset text-[14px] leading-relaxed"
-                      style={{ height: 320, minHeight: 320 }}
+                      className="bg-bg-inset leading-relaxed h-80 min-h-80"
+                      size="lg"
                     />
                   </div>
                 </section>

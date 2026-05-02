@@ -1,8 +1,9 @@
 'use client';
 
 import React, { useCallback, useMemo, useState } from 'react';
+import clsx from 'clsx';
 import { usePathname, useRouter } from 'next/navigation';
-import { Button, Notice } from '@/components/ui';
+import { Button, LoadingBlock, Notice, surfaceCardClassName } from '@/components/ui';
 import {
   buildSettingsSaveLabel,
   findSettingsSection,
@@ -123,11 +124,7 @@ export default function SettingsSetupStep({ sectionId }: SettingsSetupStepProps)
         </Notice>
       )}
 
-      {loading && (
-        <div className="flex justify-center py-20">
-          <div className="h-6 w-6 animate-spin rounded-full border-2 border-fill-tertiary border-t-sys-blue" />
-        </div>
-      )}
+      {loading && <LoadingBlock />}
 
       {!loading && !section && (
         <Notice tone="danger" title={t('Not found')}>
@@ -136,7 +133,7 @@ export default function SettingsSetupStep({ sectionId }: SettingsSetupStepProps)
       )}
 
       {!loading && section && data && (
-        <div className="animate-in stagger-2 overflow-hidden rounded-2xl border border-separator-thin bg-bg-elevated shadow-card">
+        <div className={clsx('animate-in stagger-2 overflow-hidden', surfaceCardClassName)}>
           <SettingsSectionEditor
             section={section}
             data={data}

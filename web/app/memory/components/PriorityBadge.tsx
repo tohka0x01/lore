@@ -1,13 +1,14 @@
 'use client';
 
 import React from 'react';
-import clsx from 'clsx';
-import { Badge, type BadgeTone } from '../../../components/ui';
+import { Badge, type BadgeTone, type BadgeSize } from '../../../components/ui';
 
 interface PriorityBadgeProps {
   priority: number | null | undefined;
   size?: 'sm' | 'lg';
 }
+
+const SIZE_MAP: Record<'sm' | 'lg', BadgeSize> = { sm: 'sm', lg: 'md' };
 
 const PriorityBadge = ({ priority, size = 'sm' }: PriorityBadgeProps): React.JSX.Element | null => {
   if (priority === null || priority === undefined) return null;
@@ -19,13 +20,7 @@ const PriorityBadge = ({ priority, size = 'sm' }: PriorityBadgeProps): React.JSX
     : 'soft';
 
   return (
-    <Badge
-      tone={tone}
-      className={clsx(
-        'font-mono tabular-nums',
-        size === 'lg' ? 'px-2 py-0.5 text-[11px]' : 'px-1.5 py-0.5 text-[10px]',
-      )}
-    >
+    <Badge tone={tone} size={SIZE_MAP[size]} mono>
       <span className="opacity-70">P</span>{priority}
     </Badge>
   );

@@ -1,10 +1,11 @@
 'use client';
 
 import React, { useState, useCallback, KeyboardEvent, ChangeEvent, useMemo, useEffect } from 'react';
+import clsx from 'clsx';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { api } from '../../lib/api';
 import {
-  PageCanvas, PageTitle, Section, Button, EmptyState, AppCheckbox, AppInput, AppSelect, AppTextArea,
+  PageCanvas, PageTitle, Section, Card, Button, TextButton, Notice, Empty, AppCheckbox, AppInput, AppSelect, AppTextArea, surfaceCardClassName,
   fmt, asNumber,
 } from '../../components/ui';
 import RecallStages from '../../components/RecallStages';
@@ -171,10 +172,11 @@ export default function RecallWorkbench(): React.JSX.Element {
       {/* Query card — custom container so we can use focus-within for a subtle glow */}
       <div className="animate-in stagger-1 mb-5">
         <div
-          className={
-            'rounded-2xl border bg-bg-elevated transition-colors duration-200 ease-spring ' +
-            (focused ? 'border-sys-blue/40 shadow-[0_0_0_4px_rgba(10,132,255,0.08)]' : 'border-separator-thin')
-          }
+          className={clsx(
+            surfaceCardClassName,
+            'transition-colors duration-200 ease-spring',
+            focused && 'border-sys-blue/40',
+          )}
         >
           <div className="p-4 md:p-5 space-y-3 md:space-y-4">
             <AppTextArea
@@ -199,12 +201,9 @@ export default function RecallWorkbench(): React.JSX.Element {
                 >
                   {t('Exclude boot')}
                 </AppCheckbox>
-                <button
-                  onClick={() => setShowAdvanced((v) => !v)}
-                  className="text-sys-blue hover:opacity-80"
-                >
+                <TextButton onClick={() => setShowAdvanced((v) => !v)}>
                   {showAdvanced ? t('Hide options') : t('More options')}
-                </button>
+                </TextButton>
               </div>
               <Button variant="primary" onClick={submitDebug} disabled={debugLoading || !debugForm.query.trim()}>
                 {debugLoading ? t('Running…') : t('Run')}
@@ -259,9 +258,9 @@ export default function RecallWorkbench(): React.JSX.Element {
             )}
 
             {debugError && (
-              <div className="rounded-xl bg-sys-red/10 border border-sys-red/20 px-3.5 py-2.5 text-[13px] text-sys-red">
+              <Notice tone="danger" className="text-[13px]">
                 {debugError}
-              </div>
+              </Notice>
             )}
           </div>
         </div>
@@ -270,20 +269,22 @@ export default function RecallWorkbench(): React.JSX.Element {
       {/* Results */}
       <div className="animate-in stagger-2">
         {!debugData ? (
-          <EmptyState text={t('Run a query to inspect each stage of retrieval.')} />
+          <Empty text={t('Run a query to inspect each stage of retrieval.')} />
         ) : (
-          <div className="rounded-2xl border border-separator-thin bg-bg-elevated shadow-card p-5">
-            <RecallStages
-              data={debugData as Parameters<typeof RecallStages>[0]['data']}
-              runtime={runtime as Parameters<typeof RecallStages>[0]['runtime']}
-              minDisplayScore={asNumber(debugForm.minDisplayScore, 0.60)}
-              maxDisplayItems={asNumber(debugForm.maxDisplayItems, 3)}
-              scorePrecision={asNumber(debugForm.scorePrecision, 2)}
-              sessionId={debugForm.sessionId}
-              readNodeDisplayMode={debugForm.readNodeDisplayMode}
-              initialStage="query"
-            />
-          </div>
+          <Card padded={false}>
+            <div className="p-5">
+              <RecallStages
+                data={debugData as Parameters<typeof RecallStages>[0]['data']}
+                runtime={runtime as Parameters<typeof RecallStages>[0]['runtime']}
+                minDisplayScore={asNumber(debugForm.minDisplayScore, 0.60)}
+                maxDisplayItems={asNumber(debugForm.maxDisplayItems, 3)}
+                scorePrecision={asNumber(debugForm.scorePrecision, 2)}
+                sessionId={debugForm.sessionId}
+                readNodeDisplayMode={debugForm.readNodeDisplayMode}
+                initialStage="query"
+              />
+            </div>
+          </Card>
         )}
       </div>
 

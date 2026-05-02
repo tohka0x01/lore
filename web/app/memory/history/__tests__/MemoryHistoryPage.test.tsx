@@ -28,6 +28,7 @@ vi.mock('../../../../components/ui', () => ({
     subtitle?: React.ReactNode;
     title?: React.ReactNode;
   }) => <section>{title}{subtitle}{right}{children}</section>,
+  surfaceCardClassName: 'rounded-2xl border border-separator-thin bg-bg-elevated shadow-card',
 }));
 
 vi.mock('next/navigation', () => ({

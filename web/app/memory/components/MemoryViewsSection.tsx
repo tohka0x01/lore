@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { ChevronRight } from 'lucide-react';
-import { Badge } from '../../../components/ui';
+import { Badge, surfaceCardClassName } from '../../../components/ui';
 import type { MemoryView } from '../useMemoryBrowserController';
 
 interface MemoryViewsSectionProps {
@@ -13,7 +13,7 @@ export default function MemoryViewsSection({ memoryViews, t, defaultOpen = false
   const [open, setOpen] = useState(defaultOpen);
 
   return (
-    <section className="rounded-2xl border border-separator-thin bg-bg-elevated shadow-card">
+    <section className={surfaceCardClassName}>
       <button
         type="button"
         onClick={() => setOpen((value) => !value)}

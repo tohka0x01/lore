@@ -5,7 +5,7 @@ import { useRouter, useSearchParams } from 'next/navigation';
 import { RefreshCw } from 'lucide-react';
 import { api } from '../../lib/api';
 import {
-  PageCanvas, PageTitle, Section, Button, Table, StatCard, Notice, AppInput, AppSelect,
+  PageCanvas, PageTitle, Section, Button, TextButton, Table, StatCard, Notice, AppInput, AppSelect, FilterPill,
   fmt, trunc, asNumber,
 } from '../../components/ui';
 import RecallStages from '../../components/RecallStages';
@@ -168,8 +168,12 @@ export default function RecallDrilldown(): React.JSX.Element {
     { key: 'used_in_answer', label: t('Used'), className: 'text-right', render: (v: unknown) => <span className="block font-mono tabular-nums text-sys-green text-right">{String(v ?? '—')}</span> },
     { key: 'avg_final_rank_score', label: t('Avg'), className: 'text-right', render: (v: unknown) => <span className="block font-mono tabular-nums text-txt-secondary text-right">{fmt(v)}</span> },
     { key: '_drill', label: '', className: 'text-right', render: (_: unknown, row: RowData) => (
-      <button onClick={(e) => { e.stopPropagation(); applyFilters({ queryId: String(row.query_id || ''), queryText: '', nodeUri: '' }, 'push'); }}
-        className="text-[11px] text-sys-blue hover:opacity-80">{t('Open')} →</button>
+      <TextButton
+       
+        onClick={(e) => { e.stopPropagation(); applyFilters({ queryId: String(row.query_id || ''), queryText: '', nodeUri: '' }, 'push'); }}
+      >
+        {t('Open')} →
+      </TextButton>
     ) },
   ], [applyFilters, t]);
 
@@ -216,33 +220,44 @@ export default function RecallDrilldown(): React.JSX.Element {
     { key: 'separation_gap', label: t('Separation'), className: 'text-right', render: (v: unknown) => <span className="block font-mono tabular-nums text-right">{fmt(v)}</span> },
   ], [t]);
 
-  const filterControlClass = 'press inline-flex h-8 items-center gap-1.5 rounded-full px-3 text-[13px] font-medium text-txt-secondary transition-colors hover:bg-fill-quaternary focus-within:bg-fill-quaternary';
   const titleFilters = (
     <div className="flex flex-wrap items-center gap-1">
-      <label className={filterControlClass}>
+      <FilterPill
+        as="label"
+        htmlFor="recall-days-filter"
+        active={String(filters.days) !== String(DEFAULT_FILTERS.days)}
+        className="press h-8 hover:bg-fill-quaternary focus-within:bg-fill-quaternary"
+      >
         <span>{t('Days')}</span>
         <AppInput
+          id="recall-days-filter"
           variant="borderless"
           type="number"
+          narrow
+          mono
           min={1}
           value={String(filters.days)}
           onChange={(e) => applyFilters({ days: e.target.value }, 'replace')}
-          className="!h-5 !w-10 !bg-transparent !p-0 text-right font-mono text-[13px] font-semibold tabular-nums text-txt-primary [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
+          className="!w-8 text-right font-semibold tabular-nums"
         />
-      </label>
-      <label className={filterControlClass}>
+      </FilterPill>
+      <FilterPill
+        as="label"
+        active={Boolean(filters.clientType)}
+        className="press h-8 hover:bg-fill-quaternary focus-within:bg-fill-quaternary"
+      >
         <span>{t('Source')}</span>
         <AppSelect
           variant="borderless"
-          size="small"
+          size="md"
+          narrow
           value={filters.clientType}
           onValueChange={(value) => applyFilters({ clientType: value }, 'replace')}
           options={[{ value: '', label: t('All sources') }, ...sourceOptions]}
           placeholder={t('All sources')}
-          style={{ width: 'max-content' }}
-          className="text-[13px] font-semibold text-txt-primary [&_.ant-select-selector]:!bg-transparent [&_.ant-select-selector]:!px-0 [&_.ant-select-selection-item]:!font-semibold"
+          className="font-semibold text-txt-primary"
         />
-      </label>
+      </FilterPill>
     </div>
   );
 
@@ -347,7 +362,7 @@ export default function RecallDrilldown(): React.JSX.Element {
               </div>
               <div className="flex items-center gap-2">
                 <Button
-                  size="sm"
+                 
                   variant="ghost"
                   disabled={recentQueriesBlock.offset <= 0}
                   onClick={() => applyFilters({ recentQueriesOffset: Math.max(0, recentQueriesBlock.offset - recentQueriesBlock.limit) }, 'push')}
@@ -355,7 +370,7 @@ export default function RecallDrilldown(): React.JSX.Element {
                   {t('Previous')}
                 </Button>
                 <Button
-                  size="sm"
+                 
                   variant="ghost"
                   disabled={!recentQueriesBlock.has_more}
                   onClick={() => applyFilters({ recentQueriesOffset: recentQueriesBlock.offset + recentQueriesBlock.limit }, 'push')}

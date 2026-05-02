@@ -4,6 +4,9 @@ import { describe, expect, it, vi } from 'vitest';
 
 vi.mock('@/components/ui', () => ({
   AppPasswordInput: (props: React.InputHTMLAttributes<HTMLInputElement>) => <input data-app-password-input="true" type="password" {...props} />,
+  Button: ({ children }: { children: React.ReactNode }) => <button>{children}</button>,
+  Card: ({ children }: { children: React.ReactNode }) => <div data-card="true">{children}</div>,
+  Notice: ({ children }: { children: React.ReactNode }) => <aside>{children}</aside>,
 }));
 
 vi.mock('../lib/i18n', () => ({

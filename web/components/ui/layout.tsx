@@ -3,6 +3,9 @@
 import React, { type ReactNode } from 'react';
 import clsx from 'clsx';
 import LobeBlock from '@lobehub/ui/es/Block/index';
+import { Spinner, surfaceCardClassName } from './controls';
+
+export { surfaceCardClassName };
 
 export type MaxWidth = '3xl' | '4xl' | '5xl' | '6xl' | '7xl' | 'full';
 
@@ -73,22 +76,39 @@ export function PageTitle({ eyebrow, title, description, right, titleText, trunc
   );
 }
 
+type SurfaceTone = 'default' | 'blue' | 'green' | 'orange' | 'red';
+
+const SURFACE_TONE_CLASSNAMES: Record<SurfaceTone, string> = {
+  default: '',
+  blue: 'border-sys-blue/40 bg-sys-blue/[0.04]',
+  green: 'border-sys-green/30 bg-sys-green/[0.04]',
+  orange: 'border-sys-orange/30 bg-sys-orange/[0.04]',
+  red: 'border-sys-red/30 bg-sys-red/[0.04]',
+};
+
 interface CardProps {
   children: ReactNode;
   className?: string;
   padded?: boolean;
   interactive?: boolean;
+  selected?: boolean;
+  tone?: SurfaceTone;
+  onClick?: () => void;
 }
 
-export function Card({ children, className, padded = true, interactive = false }: CardProps): React.JSX.Element {
+export function Card({ children, className, padded = true, interactive = false, selected = false, tone = 'default', onClick }: CardProps): React.JSX.Element {
+  const clickable = interactive || Boolean(onClick);
   return (
     <LobeBlock
       className={clsx(
-        'rounded-2xl border border-separator-thin bg-bg-elevated shadow-card',
-        interactive && 'transition-all duration-200 ease-spring hover:border-separator hover:bg-bg-raised',
+        surfaceCardClassName,
+        clickable && 'transition-all duration-200 ease-spring hover:border-separator hover:bg-bg-raised',
+        selected && 'border-sys-blue/50 bg-sys-blue/[0.04]',
+        SURFACE_TONE_CLASSNAMES[tone],
         className,
       )}
-      clickable={interactive}
+      clickable={clickable}
+      onClick={onClick}
       padding={padded ? 16 : 0}
     >
       {children}
@@ -96,29 +116,91 @@ export function Card({ children, className, padded = true, interactive = false }
   );
 }
 
+interface ActionPanelProps {
+  children?: ReactNode;
+  tone?: Exclude<SurfaceTone, 'default'>;
+  title?: ReactNode;
+  description?: ReactNode;
+  right?: ReactNode;
+  footer?: ReactNode;
+  compact?: boolean;
+  className?: string;
+  bodyClassName?: string;
+}
+
+export function ActionPanel({ children, tone = 'blue', title, description, right, footer, compact = false, className, bodyClassName }: ActionPanelProps): React.JSX.Element {
+  const hasHeader = title !== undefined || description !== undefined || right !== undefined;
+  return (
+    <div className={clsx('rounded-2xl border', compact ? 'space-y-3 p-4' : 'space-y-4 p-5', SURFACE_TONE_CLASSNAMES[tone], className)}>
+      {hasHeader ? (
+        <div className="flex items-start justify-between gap-3">
+          <div className="min-w-0">
+            {title ? <div className="text-[14px] font-semibold text-txt-primary">{title}</div> : null}
+            {description ? <div className="mt-0.5 text-[12px] leading-relaxed text-txt-secondary">{description}</div> : null}
+          </div>
+          {right ? <div className="shrink-0">{right}</div> : null}
+        </div>
+      ) : null}
+      {children !== undefined ? (bodyClassName ? <div className={bodyClassName}>{children}</div> : children) : null}
+      {footer ? <div className="border-t border-separator-thin pt-3 text-[12px] text-txt-tertiary">{footer}</div> : null}
+    </div>
+  );
+}
+
+interface LoadingBlockProps {
+  className?: string;
+  label?: ReactNode;
+  size?: 'sm' | 'md' | 'lg';
+  compact?: boolean;
+  children?: ReactNode;
+}
+
+export function LoadingBlock({ className, label, size = 'md', compact = false, children }: LoadingBlockProps): React.JSX.Element {
+  return (
+    <div className={clsx('flex flex-col items-center justify-center gap-3 text-[13px] text-txt-tertiary', compact ? 'py-10' : 'py-20', className)}>
+      <Spinner size={size} />
+      {label ? <div>{label}</div> : null}
+      {children}
+    </div>
+  );
+}
+
+interface InlineMetaProps {
+  children: ReactNode;
+  className?: string;
+}
+
+export function InlineMeta({ children, className }: InlineMetaProps): React.JSX.Element {
+  return <div className={clsx('text-[12px] text-txt-tertiary', className)}>{children}</div>;
+}
+
 interface SectionProps {
   title?: ReactNode;
   subtitle?: ReactNode;
   right?: ReactNode;
+  footer?: ReactNode;
   children?: ReactNode;
   className?: string;
+  bodyClassName?: string;
   padded?: boolean;
+  compact?: boolean;
 }
 
-export function Section({ title, subtitle, right, children, className, padded = true }: SectionProps): React.JSX.Element {
+export function Section({ title, subtitle, right, footer, children, className, bodyClassName, padded = true, compact = false }: SectionProps): React.JSX.Element {
   const hasHeader = title !== undefined || right !== undefined;
   return (
-    <section className={clsx('rounded-2xl border border-separator-thin bg-bg-elevated shadow-card overflow-hidden', className)}>
+    <section className={clsx(surfaceCardClassName, 'overflow-hidden', className)}>
       {hasHeader && (
-        <header className="flex items-end justify-between gap-3 md:gap-4 px-4 md:px-6 pt-4 md:pt-5 pb-3 md:pb-4 border-b border-separator-thin">
+        <header className={clsx('flex items-end justify-between gap-3 border-b border-separator-thin', compact ? 'px-4 py-3' : 'px-4 pb-3 pt-4 md:px-6 md:pb-4 md:pt-5 md:gap-4')}>
           <div className="min-w-0">
-            {title && <h2 className="text-[17px] md:text-[19px] font-semibold tracking-tight text-txt-primary">{title}</h2>}
-            {subtitle && <p className="mt-0.5 text-[12px] md:text-[13px] text-txt-secondary">{subtitle}</p>}
+            {title && <h2 className={clsx('font-semibold tracking-tight text-txt-primary', compact ? 'text-[15px]' : 'text-[17px] md:text-[19px]')}>{title}</h2>}
+            {subtitle && <p className={clsx('mt-0.5 text-txt-secondary', compact ? 'text-[12px]' : 'text-[12px] md:text-[13px]')}>{subtitle}</p>}
           </div>
           {right && <div className="flex items-center gap-2 shrink-0">{right}</div>}
         </header>
       )}
-      {children !== undefined && <div className={padded ? 'px-4 md:px-6 py-4 md:py-5' : ''}>{children}</div>}
+      {children !== undefined && <div className={clsx(padded && (compact ? 'px-4 py-3' : 'px-4 py-4 md:px-6 md:py-5'), bodyClassName)}>{children}</div>}
+      {footer ? <footer className={clsx('border-t border-separator-thin text-[12px] text-txt-tertiary', compact ? 'px-4 py-3' : 'px-4 py-3 md:px-6')}>{footer}</footer> : null}
     </section>
   );
 }
