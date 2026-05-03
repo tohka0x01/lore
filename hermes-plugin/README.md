@@ -60,7 +60,7 @@ Environment variables:
 - `boot()` - Load boot memories
 - `get_node(uri, nav_only, session_id, query_id)` - Read memory node
 - `create_node(content, priority, glossary, uri, domain, parent_path, title, disclosure)` - Create new memory
-- `update_node(uri, content, priority, disclosure, glossary_add, glossary_remove, session_id)` - Update existing memory
+- `update_node(uri, content, priority, disclosure, glossary, glossary_add, glossary_remove, session_id)` - Update existing memory
 - `delete_node(uri, session_id)` - Delete memory
 - `move_node(old_uri, new_uri)` - Move or rename a memory node
 - `search(query, domain, limit, content_limit)` - Search memories

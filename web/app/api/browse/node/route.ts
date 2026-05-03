@@ -62,6 +62,9 @@ export async function PUT(request: NextRequest): Promise<NextResponse> {
       content: body?.content,
       priority: body?.priority,
       disclosure: Object.prototype.hasOwnProperty.call(body || {}, 'disclosure') ? body.disclosure : undefined,
+      glossary: Object.prototype.hasOwnProperty.call(body || {}, 'glossary') && Array.isArray(body?.glossary) ? body.glossary : undefined,
+      glossaryAdd: Array.isArray(body?.glossary_add) ? body.glossary_add : [],
+      glossaryRemove: Array.isArray(body?.glossary_remove) ? body.glossary_remove : [],
     }, { source: 'api:PUT /browse/node', client_type: clientType });
     return NextResponse.json(withContractWarnings(withLegacyNodeCompat(data), policyResult.warnings));
   } catch (error) {
@@ -94,6 +97,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
       priority: Number(body?.priority ?? 0),
       title: body?.title || '',
       disclosure: body?.disclosure ?? null,
+      glossary: Array.isArray(body?.glossary) ? body.glossary : [],
     }, { source: 'api:POST /browse/node', client_type: clientType });
     return NextResponse.json(
       withContractWarnings(

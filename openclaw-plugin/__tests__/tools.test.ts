@@ -212,19 +212,13 @@ describe('tool response formatting', () => {
     expect(result.content[0].text).toContain('Moved core://original');
   });
 
-  it('lore_create_node uses top-level receipt fields for glossary mutations', async () => {
+  it('lore_create_node sends glossary in the node create request', async () => {
     (fetch as any)
       .mockResolvedValueOnce({
         ok: true,
         status: 200,
         statusText: 'OK',
         text: async () => JSON.stringify({ uri: 'core://agent/profile', node_uuid: 'uuid-create' }),
-      })
-      .mockResolvedValueOnce({
-        ok: true,
-        status: 200,
-        statusText: 'OK',
-        text: async () => JSON.stringify({ ok: true }),
       });
 
     const result = await tools.lore_create_node.execute(null, {
@@ -238,36 +232,31 @@ describe('tool response formatting', () => {
 
     expect(result.details.ok).toBe(true);
     expect(result.content[0].text).toContain('Created core://agent/profile');
-    expect((fetch as any).mock.calls).toHaveLength(2);
-    expect(JSON.parse((fetch as any).mock.calls[1][1].body)).toEqual({ keyword: 'memory', node_uuid: 'uuid-create' });
+    expect((fetch as any).mock.calls).toHaveLength(1);
+    expect(JSON.parse((fetch as any).mock.calls[0][1].body)).toMatchObject({ glossary: ['memory'] });
   });
 
-  it('lore_update_node uses canonical receipt fields without refetching the node', async () => {
+  it('lore_update_node sends glossary mutations in the node update request', async () => {
     (fetch as any)
       .mockResolvedValueOnce({
         ok: true,
         status: 200,
         statusText: 'OK',
         text: async () => JSON.stringify({ uri: 'core://agent/profile-renamed', node_uuid: 'uuid-update' }),
-      })
-      .mockResolvedValueOnce({
-        ok: true,
-        status: 200,
-        statusText: 'OK',
-        text: async () => JSON.stringify({ ok: true }),
       });
 
     const result = await tools.lore_update_node.execute(null, {
       uri: 'core://agent/profile',
       content: 'updated',
+      glossary: ['fresh'],
       glossary_add: ['memory'],
     });
 
     expect(result.details.ok).toBe(true);
     expect(result.content[0].text).toContain('Updated core://agent/profile-renamed');
-    expect((fetch as any).mock.calls).toHaveLength(2);
+    expect((fetch as any).mock.calls).toHaveLength(1);
     expect((fetch as any).mock.calls.map((call: any[]) => call[1].method)).not.toContain('GET');
-    expect(JSON.parse((fetch as any).mock.calls[1][1].body)).toEqual({ keyword: 'memory', node_uuid: 'uuid-update' });
+    expect(JSON.parse((fetch as any).mock.calls[0][1].body)).toMatchObject({ content: 'updated', glossary: ['fresh'], glossary_add: ['memory'] });
   });
 
   it('lore_delete_node prefers canonical delete receipts', async () => {

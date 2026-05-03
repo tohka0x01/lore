@@ -26,17 +26,16 @@ from lore_memory.client import LoreClient
 
 
 class LoreClientThinAdapterTests(unittest.TestCase):
-    def test_create_node_uses_top_level_node_uuid_for_glossary(self):
+    def test_create_node_sends_glossary_in_node_request(self):
         client = LoreClient(base_url="http://example.com")
-        glossary_calls = []
+        requests = []
         client._request = lambda *args, **kwargs: {
             "success": True,
             "operation": "create",
             "uri": "core://agent/profile",
             "path": "agent/profile",
             "node_uuid": "uuid-create",
-        }
-        client.add_glossary = lambda keyword, node_uuid: glossary_calls.append((keyword, node_uuid))
+        } if not requests.append((args, kwargs)) else {}
 
         result = client.create_node(
             domain="core",
@@ -48,34 +47,35 @@ class LoreClientThinAdapterTests(unittest.TestCase):
         )
 
         self.assertEqual(result["node_uuid"], "uuid-create")
-        self.assertEqual(glossary_calls, [("memory", "uuid-create")])
+        self.assertEqual(len(requests), 1)
+        self.assertEqual(requests[0][1]["data"]["glossary"], ["memory"])
 
-    def test_update_node_uses_receipt_node_uuid_without_refetch(self):
+    def test_update_node_sends_glossary_mutations_in_node_request(self):
         client = LoreClient(base_url="http://example.com")
-        glossary_add_calls = []
-        glossary_remove_calls = []
+        requests = []
         client._request = lambda *args, **kwargs: {
             "success": True,
             "operation": "update",
             "uri": "core://agent/profile-renamed",
             "path": "agent/profile-renamed",
             "node_uuid": "uuid-update",
-        }
+        } if not requests.append((args, kwargs)) else {}
         client.get_node = lambda *args, **kwargs: (_ for _ in ()).throw(AssertionError("get_node should not be called"))
-        client.add_glossary = lambda keyword, node_uuid: glossary_add_calls.append((keyword, node_uuid))
-        client.remove_glossary = lambda keyword, node_uuid: glossary_remove_calls.append((keyword, node_uuid))
 
         result = client.update_node(
             domain="core",
             path="agent/profile",
             content="updated",
+            glossary=["fresh"],
             glossary_add=["memory"],
             glossary_remove=["archive"],
         )
 
         self.assertEqual(result["uri"], "core://agent/profile-renamed")
-        self.assertEqual(glossary_add_calls, [("memory", "uuid-update")])
-        self.assertEqual(glossary_remove_calls, [("archive", "uuid-update")])
+        self.assertEqual(len(requests), 1)
+        self.assertEqual(requests[0][1]["data"]["glossary"], ["fresh"])
+        self.assertEqual(requests[0][1]["data"]["glossary_add"], ["memory"])
+        self.assertEqual(requests[0][1]["data"]["glossary_remove"], ["archive"])
 
 
 class FakeClient:

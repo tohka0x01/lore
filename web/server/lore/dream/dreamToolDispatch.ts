@@ -9,7 +9,6 @@ import {
   getDreamQueryRecallDetail,
 } from '../recall/recallAnalytics';
 import { searchMemories } from '../search/search';
-import { addGlossaryKeyword, manageTriggers, removeGlossaryKeyword } from '../search/glossary';
 import { listMemoryViewsByNode } from '../view/memoryViewQueries';
 import { getNodeWriteHistory } from '../memory/writeEvents';
 import { markSessionRead } from '../memory/session';
@@ -143,6 +142,9 @@ export async function dispatchDreamTool(
             content: args.content as string | undefined,
             priority: args.priority as number | undefined,
             disclosure: args.disclosure as string | undefined,
+            glossary: Array.isArray(args.glossary) ? args.glossary as string[] : undefined,
+            glossaryAdd: Array.isArray(args.glossary_add) ? args.glossary_add as string[] : [],
+            glossaryRemove: Array.isArray(args.glossary_remove) ? args.glossary_remove as string[] : [],
           },
           eventContext,
         ),
@@ -162,21 +164,6 @@ export async function dispatchDreamTool(
           old_uri: args.old_uri as string,
           new_uri: args.new_uri as string,
         },
-        eventContext,
-      );
-    case 'add_glossary':
-      return await addGlossaryKeyword(
-        { keyword: args.keyword as string, node_uuid: args.node_uuid as string },
-        eventContext,
-      );
-    case 'remove_glossary':
-      return await removeGlossaryKeyword(
-        { keyword: args.keyword as string, node_uuid: args.node_uuid as string },
-        eventContext,
-      );
-    case 'manage_triggers':
-      return await manageTriggers(
-        { uri: args.uri as string, add: (args.add as string[]) || [], remove: (args.remove as string[]) || [] },
         eventContext,
       );
     default:

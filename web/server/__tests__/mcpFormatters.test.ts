@@ -1,10 +1,4 @@
-import { describe, it, expect, vi } from 'vitest';
-
-// Mock external dependencies that mcpFormatters imports
-vi.mock('../lore/glossary', () => ({
-  addGlossaryKeyword: vi.fn(),
-  removeGlossaryKeyword: vi.fn(),
-}));
+import { describe, it, expect } from 'vitest';
 
 import {
   ok,

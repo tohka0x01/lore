@@ -16,26 +16,6 @@ const Type = {
   }),
 };
 
-async function applyGlossaryMutations(pluginCfg: any, nodeUuid: string, { add = [], remove = [] }: { add?: string[]; remove?: string[] } = {}) {
-  const added: string[] = [];
-  const removed: string[] = [];
-  for (const keyword of normalizeKeywordList(add)) {
-    await fetchJson(pluginCfg, '/browse/glossary', {
-      method: 'POST',
-      body: JSON.stringify({ keyword, node_uuid: nodeUuid }),
-    });
-    added.push(keyword);
-  }
-  for (const keyword of normalizeKeywordList(remove)) {
-    await fetchJson(pluginCfg, '/browse/glossary', {
-      method: 'DELETE',
-      body: JSON.stringify({ keyword, node_uuid: nodeUuid }),
-    });
-    removed.push(keyword);
-  }
-  return { added, removed };
-}
-
 export function registerTools(pi: any, pluginCfg: any) {
   pi.registerTool({
     name: 'lore_status',
@@ -214,7 +194,7 @@ export function registerTools(pi: any, pluginCfg: any) {
     parameters: Type.Object({
       content: Type.String({ description: 'Memory text body.' }),
       priority: Type.Number({ minimum: 0, description: 'Importance tier: 0=core identity (max 5), 1=key facts (max 15), 2+=general.' }),
-      glossary: Type.Array(Type.String({ description: 'Search keywords to associate with this memory for later retrieval.' })),
+      glossary: Type.Array(Type.String({ description: 'Search keyword.' }), { description: 'Initial glossary keywords written with this node create event for later retrieval.' }),
       uri: Type.Optional(Type.String({ description: 'Optional final memory URI when you know exactly where to place it. Intermediate paths in the URI must already exist.' })),
       domain: Type.Optional(Type.String({ description: 'Target memory domain when not using uri.' })),
       parent_path: Type.Optional(Type.String({ description: 'Parent location inside the chosen domain.' })),
@@ -228,6 +208,7 @@ export function registerTools(pi: any, pluginCfg: any) {
         parent_path: typeof params?.parent_path === 'string' ? trimSlashes(params.parent_path) : '',
         content: String(params?.content || ''),
         priority: Number(params?.priority),
+        glossary,
       };
       try {
         if (typeof params?.title === 'string') body.title = params.title.trim();
@@ -255,12 +236,8 @@ export function registerTools(pi: any, pluginCfg: any) {
         }
 
         const data = await fetchJson(pluginCfg, '/browse/node', { method: 'POST', body: JSON.stringify(body) });
-        const nodeUuid = String(data?.node_uuid || '').trim();
-        const glossaryResult = nodeUuid && glossary.length > 0
-          ? await applyGlossaryMutations(pluginCfg, nodeUuid, { add: glossary })
-          : { added: [], removed: [] };
-        const suffix = glossaryResult.added.length > 0 ? `\nGlossary: ${glossaryResult.added.join(', ')}` : '';
-        return textResult(`Created ${data?.uri || `${body.domain}://${body.parent_path}`}${suffix}`, { ok: true, result: data, glossary: glossaryResult });
+        const suffix = glossary.length > 0 ? `\nGlossary: ${glossary.join(', ')}` : '';
+        return textResult(`Created ${data?.uri || `${body.domain}://${body.parent_path}`}${suffix}`, { ok: true, result: data, glossary });
       } catch (error: any) {
         return textResult(`Lore create failed: ${error.message}`, { ok: false, error: error.message, body, glossary });
       }
@@ -270,41 +247,41 @@ export function registerTools(pi: any, pluginCfg: any) {
   pi.registerTool({
     name: 'lore_update_node',
     label: 'Lore update node',
-    description: 'Revise an existing long-term memory node when stored knowledge becomes clearer, newer, or more accurate.',
+    description: 'Revise an existing long-term memory node. Any provided content, metadata, and glossary fields are applied as one node update event; omitted fields are left unchanged.',
     parameters: Type.Object({
       uri: Type.String({ description: 'Full memory URI for the node you want to revise.' }),
-      content: Type.Optional(Type.String({ description: 'New content to replace the existing content.' })),
-      priority: Type.Optional(Type.Number({ minimum: 0, description: 'New priority level.' })),
-      disclosure: Type.Optional(Type.String({ description: 'New disclosure / trigger condition.' })),
+      content: Type.Optional(Type.String({ description: 'New content to replace the existing content; omit to leave content unchanged.' })),
+      priority: Type.Optional(Type.Number({ minimum: 0, description: 'New priority level; omit to leave priority unchanged.' })),
+      disclosure: Type.Optional(Type.String({ description: 'New disclosure / trigger condition; omit to leave disclosure unchanged.' })),
       session_id: Type.Optional(Type.String({ description: 'Session ID for read-before-update validation.' })),
-      glossary_add: Type.Optional(Type.Array(Type.String({ description: 'Keywords to add to the glossary.' }))),
-      glossary_remove: Type.Optional(Type.Array(Type.String({ description: 'Keywords to remove from the glossary.' }))),
+      glossary: Type.Optional(Type.Array(Type.String({ description: 'Search keyword.' }), { description: 'Full replacement list for this node glossary. Omit to leave glossary unchanged; pass [] to clear it.' })),
+      glossary_add: Type.Optional(Type.Array(Type.String({ description: 'Search keyword.' }), { description: 'Keywords to add as part of this same node update event.' })),
+      glossary_remove: Type.Optional(Type.Array(Type.String({ description: 'Search keyword.' }), { description: 'Keywords to remove as part of this same node update event.' })),
     }),
     async execute(_toolCallId: string, params: any = {}, _signal?: AbortSignal, _onUpdate?: unknown, _ctx?: any) {
       const body: any = {};
       const glossaryAdd = normalizeKeywordList(params?.glossary_add);
       const glossaryRemove = normalizeKeywordList(params?.glossary_remove);
+      const glossary = Array.isArray(params?.glossary) ? normalizeKeywordList(params.glossary) : undefined;
       if (typeof params?.content === 'string') body.content = params.content;
       if (Number.isFinite(params?.priority)) body.priority = params.priority;
       if (typeof params?.disclosure === 'string') body.disclosure = params.disclosure;
       if (typeof params?.session_id === 'string' && params.session_id.trim()) body.session_id = params.session_id.trim();
+      if (glossary) body.glossary = glossary;
+      if (glossaryAdd.length > 0) body.glossary_add = glossaryAdd;
+      if (glossaryRemove.length > 0) body.glossary_remove = glossaryRemove;
       let domain = pluginCfg.defaultDomain;
       let path = '';
       try {
         ({ domain, path } = resolveMemoryLocator(params, { defaultDomain: pluginCfg.defaultDomain, pathKey: '__unused_path', allowEmptyPath: false, label: 'uri' }));
         const qs = new URLSearchParams({ domain, path });
         const data = await fetchJson(pluginCfg, `/browse/node?${qs.toString()}`, { method: 'PUT', body: JSON.stringify(body) });
-        let glossaryResult: { added: string[]; removed: string[] } = { added: [], removed: [] };
-        if (glossaryAdd.length > 0 || glossaryRemove.length > 0) {
-          const nodeUuid = String(data?.node_uuid || '').trim();
-          if (!nodeUuid) throw new Error(`Node UUID not found for ${domain}://${path}`);
-          glossaryResult = await applyGlossaryMutations(pluginCfg, nodeUuid, { add: glossaryAdd, remove: glossaryRemove });
-        }
         const suffixParts: string[] = [];
-        if (glossaryResult.added.length > 0) suffixParts.push(`glossary+ ${glossaryResult.added.join(', ')}`);
-        if (glossaryResult.removed.length > 0) suffixParts.push(`glossary- ${glossaryResult.removed.join(', ')}`);
+        if (glossary) suffixParts.push(`glossary= ${glossary.join(', ')}`);
+        if (glossaryAdd.length > 0) suffixParts.push(`glossary+ ${glossaryAdd.join(', ')}`);
+        if (glossaryRemove.length > 0) suffixParts.push(`glossary- ${glossaryRemove.join(', ')}`);
         const suffix = suffixParts.length > 0 ? `\n${suffixParts.join('\n')}` : '';
-        return textResult(`Updated ${data?.uri || `${domain}://${path}`}${suffix}`, { ok: true, result: data, glossary: glossaryResult });
+        return textResult(`Updated ${data?.uri || `${domain}://${path}`}${suffix}`, { ok: true, result: data, glossary, glossary_add: glossaryAdd, glossary_remove: glossaryRemove });
       } catch (error: any) {
         return textResult(`Lore update failed: ${error.message}`, { ok: false, error: error.message, domain, path, glossary_add: glossaryAdd, glossary_remove: glossaryRemove });
       }

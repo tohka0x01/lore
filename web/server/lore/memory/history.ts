@@ -8,7 +8,7 @@ import { buildWriteEventBase } from './writeEventPayload';
 import { scheduleWriteArtifactsRefresh } from './writeArtifactScheduling';
 import { getNodeWriteHistory, logMemoryEvent, type FormattedEvent } from './writeEvents';
 
-export type HistoryDiffKind = 'text' | 'value' | 'keyword_add' | 'keyword_remove';
+export type HistoryDiffKind = 'text' | 'value' | 'keyword_add' | 'keyword_remove' | 'keyword_list';
 
 export interface HistoryDiff {
   field: string;
@@ -70,6 +70,123 @@ function addChangedSnapshotDiff(
   if (before !== after) {
     diffs.push({ field, kind, before, after });
   }
+}
+
+function snapshotKeywordArray(snapshot: Record<string, unknown> | null): string[] | undefined {
+  if (!snapshot || !Array.isArray(snapshot.glossary_keywords)) return undefined;
+  return normalizeGlossaryKeywords(snapshot.glossary_keywords, 64);
+}
+
+function keywordSetChanged(before: string[] | undefined, after: string[] | undefined): boolean {
+  if (!before && !after) return false;
+  const beforeSet = new Set(before || []);
+  const afterSet = new Set(after || []);
+  if (beforeSet.size !== afterSet.size) return true;
+  for (const keyword of beforeSet) {
+    if (!afterSet.has(keyword)) return true;
+  }
+  return false;
+}
+
+function addChangedGlossaryDiff(
+  diffs: HistoryDiff[],
+  beforeSnapshot: Record<string, unknown> | null,
+  afterSnapshot: Record<string, unknown> | null,
+) {
+  const before = snapshotKeywordArray(beforeSnapshot);
+  const after = snapshotKeywordArray(afterSnapshot);
+  if (keywordSetChanged(before, after)) {
+    diffs.push({
+      field: 'glossary_keywords',
+      kind: 'keyword_list',
+      before: before || [],
+      after: after || [],
+    });
+  }
+}
+
+function eventTimeMs(event: FormattedEvent): number | null {
+  if (!event.created_at) return null;
+  const ms = new Date(event.created_at).getTime();
+  return Number.isFinite(ms) ? ms : null;
+}
+
+function sameWriteContext(base: FormattedEvent, event: FormattedEvent): boolean {
+  return base.node_uuid === event.node_uuid
+    && base.node_uri === event.node_uri
+    && base.source === event.source
+    && (base.session_id || null) === (event.session_id || null)
+    && (base.client_type || null) === (event.client_type || null);
+}
+
+function isLegacyGlossaryEvent(event: FormattedEvent): boolean {
+  return event.event_type === 'glossary_add' || event.event_type === 'glossary_remove';
+}
+
+function glossaryKeywordFromEvent(event: FormattedEvent): string {
+  const snapshot = event.event_type === 'glossary_remove' ? event.before_snapshot : event.after_snapshot;
+  const keyword = snapshot?.keyword;
+  return typeof keyword === 'string' ? keyword.trim() : '';
+}
+
+function canGroupLegacyGlossary(base: FormattedEvent, event: FormattedEvent): boolean {
+  if (!['create', 'update'].includes(base.event_type) || !isLegacyGlossaryEvent(event)) return false;
+  if (!sameWriteContext(base, event)) return false;
+  const baseTime = eventTimeMs(base);
+  const eventTime = eventTimeMs(event);
+  if (baseTime === null || eventTime === null) return false;
+  return eventTime >= baseTime && eventTime - baseTime <= 2000;
+}
+
+function applyLegacyGlossaryEvent(keywords: string[], event: FormattedEvent): string[] {
+  const keyword = glossaryKeywordFromEvent(event);
+  if (!keyword) return keywords;
+  if (event.event_type === 'glossary_add') {
+    return keywords.includes(keyword) ? keywords : [...keywords, keyword];
+  }
+  return keywords.filter((item) => item !== keyword);
+}
+
+function groupLegacyGlossaryEvents(events: FormattedEvent[]): FormattedEvent[] {
+  const grouped: FormattedEvent[] = [];
+  for (const event of events) {
+    const previous = grouped[grouped.length - 1];
+    if (previous && canGroupLegacyGlossary(previous, event)) {
+      const beforeSnapshot = previous.before_snapshot ? { ...previous.before_snapshot } : null;
+      const afterSnapshot = previous.after_snapshot ? { ...previous.after_snapshot } : {};
+      const beforeKeywords = snapshotKeywordArray(beforeSnapshot) || [];
+      const currentAfterKeywords = snapshotKeywordArray(afterSnapshot) || beforeKeywords;
+      const keyword = glossaryKeywordFromEvent(event);
+      const nextAfterKeywords = applyLegacyGlossaryEvent(currentAfterKeywords, event);
+      if (
+        event.event_type === 'glossary_remove'
+        && keyword
+        && beforeSnapshot
+        && !beforeKeywords.includes(keyword)
+        && !currentAfterKeywords.includes(keyword)
+      ) {
+        beforeSnapshot.glossary_keywords = [...beforeKeywords, keyword];
+      }
+      afterSnapshot.glossary_keywords = nextAfterKeywords;
+      previous.before_snapshot = beforeSnapshot;
+      previous.after_snapshot = afterSnapshot;
+      previous.details = {
+        ...previous.details,
+        legacy_glossary_grouped: true,
+        merged_glossary_event_ids: [
+          ...(
+            Array.isArray(previous.details.merged_glossary_event_ids)
+              ? previous.details.merged_glossary_event_ids
+              : []
+          ),
+          event.id,
+        ],
+      };
+      continue;
+    }
+    grouped.push({ ...event, details: { ...event.details } });
+  }
+  return grouped;
 }
 
 function numericRollbackId(details: Record<string, unknown>): number | null {
@@ -192,6 +309,7 @@ export function normalizeHistoryEvent(event: FormattedEvent): NormalizedHistoryE
     addChangedSnapshotDiff(diffs, beforeSnapshot, afterSnapshot, 'content', 'text');
     addChangedSnapshotDiff(diffs, beforeSnapshot, afterSnapshot, 'disclosure', 'text');
     addChangedSnapshotDiff(diffs, beforeSnapshot, afterSnapshot, 'priority', 'value');
+    addChangedGlossaryDiff(diffs, beforeSnapshot, afterSnapshot);
   }
 
   const rollbackId = numericRollbackId(event.details);
@@ -225,7 +343,7 @@ export async function getNodeHistory({
     disclosure: node.disclosure,
     priority: node.priority,
     glossary_keywords: glossaryKeywords,
-    events: history.events.map((historyEvent) => normalizeHistoryEvent(historyEvent)),
+    events: groupLegacyGlossaryEvents(history.events).map((historyEvent) => normalizeHistoryEvent(historyEvent)),
   };
 }
 

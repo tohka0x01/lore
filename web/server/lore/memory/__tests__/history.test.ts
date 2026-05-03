@@ -138,6 +138,25 @@ describe('normalizeHistoryEvent', () => {
     ]);
   });
 
+  it('builds one glossary diff inside an update event when snapshots include keyword arrays', () => {
+    const normalized = normalizeHistoryEvent(event({
+      event_type: 'update',
+      before_snapshot: { glossary_keywords: ['alpha', 'old_keyword'] },
+      after_snapshot: { glossary_keywords: ['alpha', 'beta'] },
+    }));
+
+    expect(normalized.summary).toBe('update');
+    expect(normalized.rollback_supported).toBe(true);
+    expect(normalized.diffs).toEqual([
+      {
+        field: 'glossary_keywords',
+        kind: 'keyword_list',
+        before: ['alpha', 'old_keyword'],
+        after: ['alpha', 'beta'],
+      },
+    ]);
+  });
+
   it('builds uri diff for move events and does not support rollback', () => {
     const normalized = normalizeHistoryEvent(event({
       event_type: 'move',
@@ -190,6 +209,111 @@ describe('getNodeHistory', () => {
     });
     expect(result.events).toHaveLength(1);
     expect(result.events[0]).toMatchObject({ id: 5, summary: 'update', rollback_supported: true });
+  });
+
+  it('groups legacy create/update glossary events into the preceding history event', async () => {
+    mockGetMemoryByPath.mockResolvedValue(currentNode());
+    mockGetGlossaryKeywords.mockResolvedValue(['alpha', 'beta']);
+    mockGetNodeWriteHistory.mockResolvedValue({
+      node_uri: null,
+      node_uuid: 'uuid-1',
+      events: [
+        event({
+          id: 5,
+          event_type: 'create',
+          source: 'mcp:lore_create_node',
+          session_id: null,
+          before_snapshot: null,
+          after_snapshot: { content: 'created', priority: 2, disclosure: null, glossary_keywords: [] },
+          created_at: '2026-04-28T00:00:00.000Z',
+        }),
+        event({
+          id: 6,
+          event_type: 'glossary_add',
+          source: 'mcp:lore_create_node',
+          session_id: null,
+          before_snapshot: null,
+          after_snapshot: { keyword: 'alpha' },
+          created_at: '2026-04-28T00:00:00.010Z',
+        }),
+        event({
+          id: 7,
+          event_type: 'glossary_add',
+          source: 'mcp:lore_create_node',
+          session_id: null,
+          before_snapshot: null,
+          after_snapshot: { keyword: 'beta' },
+          created_at: '2026-04-28T00:00:00.020Z',
+        }),
+      ],
+    });
+
+    const result = await getNodeHistory({ domain: 'core', path: 'agent/prefs' });
+
+    expect(result.events).toHaveLength(1);
+    expect(result.events[0].id).toBe(5);
+    expect(result.events[0].diffs).toContainEqual({
+      field: 'glossary_keywords',
+      kind: 'keyword_list',
+      before: [],
+      after: ['alpha', 'beta'],
+    });
+    expect(result.events[0].details).toMatchObject({
+      merged_glossary_event_ids: [6, 7],
+      legacy_glossary_grouped: true,
+    });
+  });
+
+  it('groups legacy update glossary add and remove events without requiring migration', async () => {
+    mockGetMemoryByPath.mockResolvedValue(currentNode());
+    mockGetGlossaryKeywords.mockResolvedValue(['alpha', 'beta']);
+    mockGetNodeWriteHistory.mockResolvedValue({
+      node_uri: null,
+      node_uuid: 'uuid-1',
+      events: [
+        event({
+          id: 10,
+          event_type: 'update',
+          source: 'mcp:lore_update_node',
+          session_id: null,
+          before_snapshot: { content: 'old' },
+          after_snapshot: { content: 'new' },
+          created_at: '2026-04-28T00:00:00.000Z',
+        }),
+        event({
+          id: 11,
+          event_type: 'glossary_add',
+          source: 'mcp:lore_update_node',
+          session_id: null,
+          before_snapshot: null,
+          after_snapshot: { keyword: 'beta' },
+          created_at: '2026-04-28T00:00:00.010Z',
+        }),
+        event({
+          id: 12,
+          event_type: 'glossary_remove',
+          source: 'mcp:lore_update_node',
+          session_id: null,
+          before_snapshot: { keyword: 'old_keyword' },
+          after_snapshot: null,
+          created_at: '2026-04-28T00:00:00.020Z',
+        }),
+      ],
+    });
+
+    const result = await getNodeHistory({ domain: 'core', path: 'agent/prefs' });
+
+    expect(result.events).toHaveLength(1);
+    expect(result.events[0].diffs).toContainEqual({
+      field: 'glossary_keywords',
+      kind: 'keyword_list',
+      before: ['old_keyword'],
+      after: ['beta'],
+    });
+    expect(result.events[0].details).toMatchObject({
+      merged_glossary_event_ids: [11, 12],
+      legacy_glossary_grouped: true,
+    });
   });
 });
 

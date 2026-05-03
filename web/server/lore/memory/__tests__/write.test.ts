@@ -741,6 +741,168 @@ describe('updateNodeByPath', () => {
     expect(mockLogMemoryEvent.mock.calls[0][0]).toMatchObject({ client_type: 'claudecode' });
   });
 
+  it('writes content, metadata, and glossary changes as one update event', async () => {
+    let glossarySelectCount = 0;
+    const client = {
+      query: vi.fn((query: string, params?: unknown[]) => {
+        if (query === 'BEGIN' || query === 'COMMIT') return Promise.resolve({ rows: [], rowCount: 0 });
+        if (query.includes('FROM paths p') && query.includes('JOIN edges e')) {
+          return Promise.resolve({
+            rows: [{
+              domain: 'core',
+              path: 'agent/prefs',
+              edge_id: 20,
+              parent_uuid: 'parent-uuid',
+              child_uuid: 'node-uuid',
+              priority: 1,
+              disclosure: 'old disclosure',
+            }],
+            rowCount: 1,
+          });
+        }
+        if (query.includes('SELECT id, content')) {
+          return Promise.resolve({ rows: [{ id: 77, content: 'old content' }], rowCount: 1 });
+        }
+        if (query.includes('SELECT keyword') && query.includes('FROM glossary_keywords')) {
+          glossarySelectCount += 1;
+          return Promise.resolve({
+            rows: glossarySelectCount === 1
+              ? [{ keyword: 'alpha' }, { keyword: 'old_keyword' }]
+              : [{ keyword: 'alpha' }, { keyword: 'beta' }],
+            rowCount: 2,
+          });
+        }
+        if (query.includes('UPDATE memories SET deprecated = TRUE')) {
+          return Promise.resolve({ rows: [], rowCount: 1 });
+        }
+        if (query.includes('INSERT INTO memories')) {
+          return Promise.resolve({ rows: [{ id: 99 }], rowCount: 1 });
+        }
+        if (query.includes('UPDATE memories SET migrated_to')) {
+          return Promise.resolve({ rows: [], rowCount: 1 });
+        }
+        if (query.includes('UPDATE edges')) {
+          return Promise.resolve({ rows: [], rowCount: 1 });
+        }
+        if (query.includes('INSERT INTO glossary_keywords')) {
+          return Promise.resolve({ rows: [{ keyword: params?.[0] }], rowCount: 1 });
+        }
+        if (query.includes('DELETE FROM glossary_keywords')) {
+          return Promise.resolve({ rows: [{ keyword: params?.[0] }], rowCount: 1 });
+        }
+        return Promise.resolve({ rows: [], rowCount: 0 });
+      }),
+      release: vi.fn(),
+    };
+    mockGetPool.mockReturnValue(makePool(client as any) as any);
+
+    await updateNodeByPath(
+      {
+        domain: 'core',
+        path: 'agent/prefs',
+        content: 'new content',
+        priority: 2,
+        disclosure: 'new disclosure',
+        glossaryAdd: ['beta'],
+        glossaryRemove: ['old_keyword'],
+      } as any,
+      { source: 'mcp:lore_update_node', client_type: 'codex' },
+    );
+
+    expect(mockLogMemoryEvent).toHaveBeenCalledOnce();
+    expect(mockLogMemoryEvent.mock.calls[0][0]).toMatchObject({
+      event_type: 'update',
+      node_uri: 'core://agent/prefs',
+      node_uuid: 'node-uuid',
+      source: 'mcp:lore_update_node',
+      client_type: 'codex',
+      before_snapshot: {
+        content: 'old content',
+        priority: 1,
+        disclosure: 'old disclosure',
+        glossary_keywords: ['alpha', 'old_keyword'],
+      },
+      after_snapshot: {
+        content: 'new content',
+        priority: 2,
+        disclosure: 'new disclosure',
+        glossary_keywords: ['alpha', 'beta'],
+      },
+      details: expect.objectContaining({
+        content_changed: true,
+        priority_changed: true,
+        disclosure_changed: true,
+        glossary_added: ['beta'],
+        glossary_removed: ['old_keyword'],
+        glossary_skipped_add: [],
+        glossary_skipped_remove: [],
+      }),
+    });
+    expect(client.query).toHaveBeenCalledWith(
+      expect.stringContaining('INSERT INTO glossary_keywords'),
+      ['beta', 'node-uuid'],
+    );
+    expect(client.query).toHaveBeenCalledWith(
+      expect.stringContaining('DELETE FROM glossary_keywords'),
+      ['old_keyword', 'node-uuid'],
+    );
+  });
+
+  it('replaces glossary keywords as part of one update event', async () => {
+    let glossarySelectCount = 0;
+    const client = {
+      query: vi.fn((query: string) => {
+        if (query === 'BEGIN' || query === 'COMMIT') return Promise.resolve({ rows: [], rowCount: 0 });
+        if (query.includes('FROM paths p') && query.includes('JOIN edges e')) {
+          return Promise.resolve({
+            rows: [{
+              domain: 'core',
+              path: 'agent/prefs',
+              edge_id: 20,
+              parent_uuid: 'parent-uuid',
+              child_uuid: 'node-uuid',
+              priority: 1,
+              disclosure: null,
+            }],
+            rowCount: 1,
+          });
+        }
+        if (query.includes('SELECT id, content')) {
+          return Promise.resolve({ rows: [{ id: 77, content: 'old content' }], rowCount: 1 });
+        }
+        if (query.includes('SELECT keyword') && query.includes('FROM glossary_keywords')) {
+          glossarySelectCount += 1;
+          return Promise.resolve({
+            rows: glossarySelectCount === 1
+              ? [{ keyword: 'old_keyword' }]
+              : [{ keyword: 'new_keyword' }],
+            rowCount: 1,
+          });
+        }
+        return Promise.resolve({ rows: [], rowCount: 1 });
+      }),
+      release: vi.fn(),
+    };
+    mockGetPool.mockReturnValue(makePool(client as any) as any);
+
+    await updateNodeByPath({ domain: 'core', path: 'agent/prefs', glossary: ['new_keyword'] });
+
+    expect(mockLogMemoryEvent).toHaveBeenCalledOnce();
+    expect(mockLogMemoryEvent.mock.calls[0][0]).toMatchObject({
+      before_snapshot: expect.objectContaining({ glossary_keywords: ['old_keyword'] }),
+      after_snapshot: expect.objectContaining({ glossary_keywords: ['new_keyword'] }),
+      details: expect.objectContaining({
+        glossary_added: ['new_keyword'],
+        glossary_removed: ['old_keyword'],
+        glossary_replaced: true,
+      }),
+    });
+    expect(client.query).toHaveBeenCalledWith(
+      'DELETE FROM glossary_keywords WHERE node_uuid = $1',
+      ['node-uuid'],
+    );
+  });
+
   it('rolls back on failure and re-throws', async () => {
     const client = {
       query: vi.fn()
@@ -1163,4 +1325,3 @@ describe('moveNode', () => {
     expect(client.release).toHaveBeenCalledOnce();
   });
 });
-

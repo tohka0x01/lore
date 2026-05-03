@@ -11,11 +11,12 @@ import { AxiosError } from 'axios';
 
 interface KeywordManagerProps {
   keywords: string[];
-  nodeUuid: string;
+  domain: string;
+  path: string;
   onUpdate: () => void;
 }
 
-const KeywordManager = ({ keywords, nodeUuid, onUpdate }: KeywordManagerProps): React.JSX.Element => {
+const KeywordManager = ({ keywords, domain, path, onUpdate }: KeywordManagerProps): React.JSX.Element => {
   const { t } = useT();
   const { toast } = useConfirm();
   const [adding, setAdding] = useState(false);
@@ -29,9 +30,9 @@ const KeywordManager = ({ keywords, nodeUuid, onUpdate }: KeywordManagerProps): 
 
   const handleAdd = async () => {
     const kw = newKeyword.trim();
-    if (!kw || !nodeUuid) return;
+    if (!kw || !path) return;
     try {
-      await api.post('/browse/glossary', { keyword: kw, node_uuid: nodeUuid });
+      await api.put('/browse/node', { glossary_add: [kw] }, { params: { domain, path } });
       setNewKeyword(''); setAdding(false); onUpdate();
     } catch (err) {
       const axiosErr = err as AxiosError<{ detail?: string }>;
@@ -40,9 +41,9 @@ const KeywordManager = ({ keywords, nodeUuid, onUpdate }: KeywordManagerProps): 
   };
 
   const handleRemove = async (kw: string) => {
-    if (!nodeUuid) return;
+    if (!path) return;
     try {
-      await api.delete('/browse/glossary', { data: { keyword: kw, node_uuid: nodeUuid } });
+      await api.put('/browse/node', { glossary_remove: [kw] }, { params: { domain, path } });
       onUpdate();
     } catch (err) {
       const axiosErr = err as AxiosError<{ detail?: string }>;

@@ -81,4 +81,56 @@ describe('Pi extension tools', () => {
     expect(result.content[0].text).toContain('Domain root: project://');
     expect((fetch as any).mock.calls[0][0]).toBe('http://host/api/browse/node?domain=project&path=&nav_only=true&client_type=pi');
   });
+
+  it('create sends glossary in the node create request', async () => {
+    const pi = makeMockPi();
+    registerTools(pi as any, makePluginCfg());
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      statusText: 'OK',
+      text: async () => JSON.stringify({ uri: 'core://agent/profile', node_uuid: 'uuid-create' }),
+    }));
+
+    const result = await pi.tools.lore_create_node.execute('tool-1', {
+      domain: 'core',
+      parent_path: 'agent',
+      title: 'profile',
+      content: 'hello',
+      priority: 2,
+      glossary: ['memory'],
+    }, undefined, undefined, {});
+
+    expect(result.details.ok).toBe(true);
+    expect((fetch as any).mock.calls).toHaveLength(1);
+    expect(JSON.parse((fetch as any).mock.calls[0][1].body)).toMatchObject({ glossary: ['memory'] });
+  });
+
+  it('update sends glossary mutations in the node update request', async () => {
+    const pi = makeMockPi();
+    registerTools(pi as any, makePluginCfg());
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      statusText: 'OK',
+      text: async () => JSON.stringify({ uri: 'core://agent/profile', node_uuid: 'uuid-update' }),
+    }));
+
+    const result = await pi.tools.lore_update_node.execute('tool-1', {
+      uri: 'core://agent/profile',
+      content: 'updated',
+      glossary: ['fresh'],
+      glossary_add: ['memory'],
+      glossary_remove: ['archive'],
+    }, undefined, undefined, {});
+
+    expect(result.details.ok).toBe(true);
+    expect((fetch as any).mock.calls).toHaveLength(1);
+    expect(JSON.parse((fetch as any).mock.calls[0][1].body)).toMatchObject({
+      content: 'updated',
+      glossary: ['fresh'],
+      glossary_add: ['memory'],
+      glossary_remove: ['archive'],
+    });
+  });
 });

@@ -1,6 +1,6 @@
 {
   "name": "@local/lore-pi-extension",
-  "version": "1.0.5",
+  "version": "1.0.6",
   "description": "Lore memory extension for Pi agent with fixed boot baseline and recall injection",
   "type": "module",
   "private": true,

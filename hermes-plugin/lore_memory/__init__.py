@@ -400,7 +400,7 @@ class LoreMemoryProvider(MemoryProvider):
                     "properties": {
                         "content": {"type": "string", "description": "Memory text body"},
                         "priority": {"type": "integer", "minimum": 0, "description": "Importance tier (0=core identity, 1=key facts, 2+=general)"},
-                        "glossary": {"type": "array", "items": {"type": "string"}, "description": "Search keywords to associate with this memory"},
+                        "glossary": {"type": "array", "items": {"type": "string"}, "description": "Initial glossary keywords written with this node create event"},
                         "uri": {"type": "string", "description": "Optional final memory URI. Use when you know exactly where to place it. Intermediate paths in the URI must already exist."},
                         "domain": {"type": "string", "description": "Target memory domain when not using uri"},
                         "parent_path": {"type": "string", "description": "Parent location inside the chosen domain"},
@@ -412,17 +412,18 @@ class LoreMemoryProvider(MemoryProvider):
             },
             {
                 "name": "lore_update_node",
-                "description": "Revise an existing long-term memory node when stored knowledge becomes clearer, newer, or more accurate",
+                "description": "Revise an existing long-term memory node. Any provided content, metadata, and glossary fields are applied as one node update event; omitted fields are left unchanged",
                 "parameters": {
                     "type": "object",
                     "additionalProperties": False,
                     "properties": {
                         "uri": {"type": "string", "description": "Full memory URI for the node you want to revise"},
-                        "content": {"type": "string", "description": "New content to replace the existing content"},
-                        "priority": {"type": "integer", "minimum": 0, "description": "New priority level"},
-                        "disclosure": {"type": "string", "description": "New disclosure / trigger condition"},
-                        "glossary_add": {"type": "array", "items": {"type": "string"}, "description": "Keywords to add to the glossary"},
-                        "glossary_remove": {"type": "array", "items": {"type": "string"}, "description": "Keywords to remove from the glossary"},
+                        "content": {"type": "string", "description": "New content to replace the existing content; omit to leave content unchanged"},
+                        "priority": {"type": "integer", "minimum": 0, "description": "New priority level; omit to leave priority unchanged"},
+                        "disclosure": {"type": "string", "description": "New disclosure / trigger condition; omit to leave disclosure unchanged"},
+                        "glossary": {"type": "array", "items": {"type": "string"}, "description": "Full replacement list for this node glossary. Omit to leave glossary unchanged; pass [] to clear it"},
+                        "glossary_add": {"type": "array", "items": {"type": "string"}, "description": "Keywords to add as part of this same node update event"},
+                        "glossary_remove": {"type": "array", "items": {"type": "string"}, "description": "Keywords to remove as part of this same node update event"},
                         "session_id": {"type": "string", "description": "Session identifier from the <recall session_id=\"...\"> tag"},
                     },
                     "required": ["uri"],
@@ -596,6 +597,7 @@ class LoreMemoryProvider(MemoryProvider):
             domain=domain, path=path, content=args.get("content"),
             priority=args.get("priority"), disclosure=args.get("disclosure"),
             session_id=args.get("session_id") or self._session_id,
+            glossary=args.get("glossary"),
             glossary_add=args.get("glossary_add"),
             glossary_remove=args.get("glossary_remove")
         )

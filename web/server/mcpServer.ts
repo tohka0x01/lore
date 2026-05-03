@@ -27,7 +27,6 @@ import {
   resolveUri,
   formatNode,
   formatBootView,
-  applyGlossaryMutations,
   loadGuidance,
   loadGuidanceReference,
 } from './mcpFormatters';
@@ -43,7 +42,7 @@ export function createMcpServer(context: McpServerContext = {}): InstanceType<ty
   const server = new McpServer(
     {
       name: 'lore',
-      version: '1.0.5',
+      version: '1.0.6',
     },
     guidance ? { instructions: guidance } : undefined,
   );
@@ -209,7 +208,7 @@ export function createMcpServer(context: McpServerContext = {}): InstanceType<ty
     {
       content: z.string().describe('Memory text body.'),
       priority: z.number().int().min(0).describe('Importance tier (0=core identity, 1=key facts, 2+=general).'),
-      glossary: z.array(z.string()).describe('Search keywords to associate with this memory.'),
+      glossary: z.array(z.string()).describe('Initial glossary keywords written with this node create event.'),
       uri: z.string().optional().describe('Optional final memory URI. Use when you know exactly where to place it. Intermediate paths in the URI must already exist.'),
       domain: z.string().optional().describe('Target memory domain when not using uri.'),
       parent_path: z.string().optional().describe('Parent location inside the chosen domain.'),
@@ -250,14 +249,11 @@ export function createMcpServer(context: McpServerContext = {}): InstanceType<ty
           priority: Number(args?.priority),
           title,
           disclosure: args?.disclosure ?? null,
+          glossary,
         }, eventContext);
 
         const targetUri = String(data?.uri || `${domain}://${parentPath}`).trim();
-        const nodeUuid = String(data?.node_uuid || '').trim();
-        const glossaryResult = nodeUuid && glossary.length > 0
-          ? await applyGlossaryMutations(nodeUuid, { add: glossary }, eventContext)
-          : { added: [] };
-        const suffix = glossaryResult.added.length > 0 ? `\nGlossary: ${glossaryResult.added.join(', ')}` : '';
+        const suffix = glossary.length > 0 ? `\nGlossary: ${glossary.join(', ')}` : '';
         return ok(formatPolicyResult(`Created ${targetUri}${suffix}`, policyResult.warnings));
       } catch (error) {
         return fail('Lore create failed', error);
@@ -268,14 +264,15 @@ export function createMcpServer(context: McpServerContext = {}): InstanceType<ty
   // ── lore_update_node ─────────────────────────────────────────
   server.tool(
     'lore_update_node',
-    'Revise an existing long-term memory node when stored knowledge becomes clearer, newer, or more accurate.',
+    'Revise an existing long-term memory node. Any provided content, metadata, and glossary fields are applied as one node update event; omitted fields are left unchanged.',
     {
       uri: z.string().describe('Full memory URI for the node you want to revise.'),
-      content: z.string().optional().describe('New content to replace the existing content.'),
-      priority: z.number().int().min(0).optional().describe('New priority level.'),
-      disclosure: z.string().optional().describe('New disclosure / trigger condition.'),
-      glossary_add: z.array(z.string()).optional().describe('Keywords to add to the glossary.'),
-      glossary_remove: z.array(z.string()).optional().describe('Keywords to remove from the glossary.'),
+      content: z.string().optional().describe('New content to replace the existing content; omit to leave content unchanged.'),
+      priority: z.number().int().min(0).optional().describe('New priority level; omit to leave priority unchanged.'),
+      disclosure: z.string().optional().describe('New disclosure / trigger condition; omit to leave disclosure unchanged.'),
+      glossary: z.array(z.string()).optional().describe('Full replacement list for this node glossary. Omit to leave glossary unchanged; pass [] to clear it.'),
+      glossary_add: z.array(z.string()).optional().describe('Keywords to add as part of this same node update event.'),
+      glossary_remove: z.array(z.string()).optional().describe('Keywords to remove as part of this same node update event.'),
       session_id: z.string().optional().describe('Session identifier from the <recall session_id="..."> tag.'),
     },
     async (args) => {
@@ -299,21 +296,22 @@ export function createMcpServer(context: McpServerContext = {}): InstanceType<ty
         if (Number.isFinite(args?.priority)) body.priority = args!.priority;
         if (typeof args?.disclosure === 'string') body.disclosure = args.disclosure;
 
-        const result = await updateNodeByPath({ domain, path, ...body }, eventContext);
-
         const glossaryAdd = normalizeKeywordList(args?.glossary_add);
         const glossaryRemove = normalizeKeywordList(args?.glossary_remove);
-        let glossaryResult = { added: [] as string[], removed: [] as string[] };
-        if (glossaryAdd.length > 0 || glossaryRemove.length > 0) {
-          const nodeData = await getNodePayload({ domain, path, navOnly: true });
-          const nodeUuid = String(nodeData?.node?.node_uuid || '').trim();
-          if (!nodeUuid) throw new Error(`Node UUID not found for ${domain}://${path}`);
-          glossaryResult = await applyGlossaryMutations(nodeUuid, { add: glossaryAdd, remove: glossaryRemove }, eventContext);
-        }
+        const glossary = Array.isArray(args?.glossary) ? normalizeKeywordList(args.glossary) : undefined;
+        const result = await updateNodeByPath({
+          domain,
+          path,
+          ...body,
+          ...(glossary ? { glossary } : {}),
+          glossaryAdd,
+          glossaryRemove,
+        }, eventContext);
 
         const suffixParts: string[] = [];
-        if (glossaryResult.added.length > 0) suffixParts.push(`glossary+ ${glossaryResult.added.join(', ')}`);
-        if (glossaryResult.removed.length > 0) suffixParts.push(`glossary- ${glossaryResult.removed.join(', ')}`);
+        if (glossary) suffixParts.push(`glossary= ${glossary.join(', ')}`);
+        if (glossaryAdd.length > 0) suffixParts.push(`glossary+ ${glossaryAdd.join(', ')}`);
+        if (glossaryRemove.length > 0) suffixParts.push(`glossary- ${glossaryRemove.join(', ')}`);
         const suffix = suffixParts.length > 0 ? `\n${suffixParts.join('\n')}` : '';
         return ok(formatPolicyResult(`Updated ${result.uri}${suffix}`, policyResult.warnings));
       } catch (error) {

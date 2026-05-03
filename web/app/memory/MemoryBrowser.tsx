@@ -117,6 +117,8 @@ export default function MemoryBrowser(): React.JSX.Element {
                     />
                     <MemoryNodeMeta
                       node={node}
+                      domain={domain}
+                      path={path}
                       editing={editing}
                       refreshData={refreshData}
                       navigateTo={navigateTo}

@@ -141,14 +141,9 @@ class LoreClient:
             data["title"] = title
         if disclosure:
             data["disclosure"] = disclosure
+        if glossary is not None:
+            data["glossary"] = glossary
         result = self._request("POST", "/browse/node", data=data) or {}
-        node_uuid = result.get("node_uuid")
-        if node_uuid and glossary:
-            for keyword in glossary:
-                try:
-                    self.add_glossary(keyword, node_uuid)
-                except Exception:
-                    pass
         return result
     
     def update_node(
@@ -159,6 +154,7 @@ class LoreClient:
         priority: Optional[int] = None,
         disclosure: Optional[str] = None,
         session_id: Optional[str] = None,
+        glossary: Optional[List[str]] = None,
         glossary_add: Optional[List[str]] = None,
         glossary_remove: Optional[List[str]] = None
     ) -> Dict:
@@ -172,24 +168,15 @@ class LoreClient:
             data["disclosure"] = disclosure
         if session_id is not None:
             data["session_id"] = session_id
+        if glossary is not None:
+            data["glossary"] = glossary
+        if glossary_add:
+            data["glossary_add"] = glossary_add
+        if glossary_remove:
+            data["glossary_remove"] = glossary_remove
         
         params = {"domain": domain, "path": path}
-        result = self._request("PUT", "/browse/node", params=params, data=data) or {}
-        
-        if (glossary_add or glossary_remove):
-            node_uuid = result.get("node_uuid")
-            if node_uuid:
-                for keyword in glossary_add or []:
-                    try:
-                        self.add_glossary(keyword, node_uuid)
-                    except Exception:
-                        pass
-                for keyword in glossary_remove or []:
-                    try:
-                        self.remove_glossary(keyword, node_uuid)
-                    except Exception:
-                        pass
-        return result
+        return self._request("PUT", "/browse/node", params=params, data=data) or {}
     
     def delete_node(self, domain: str, path: str, session_id: Optional[str] = None) -> Dict:
         """Delete a memory node"""

@@ -31,6 +31,12 @@ function stringifyValue(value: unknown): string {
   return String(value);
 }
 
+function stringifyList(value: unknown): string[] {
+  return Array.isArray(value)
+    ? value.map((item) => String(item || '').trim()).filter(Boolean)
+    : [];
+}
+
 function diffLabel(field: string, t: Translate): string {
   if (field === 'glossary_keywords') return t('Glossary');
   if (field === 'uri') return t('Move');
@@ -66,6 +72,35 @@ function ValueDiff({ diff, t }: { diff: HistoryDiff; t: Translate }): React.JSX.
       <div className="rounded-xl border border-separator-thin bg-bg-raised px-3 py-2 font-mono text-[12px]">
         <span className={added ? 'text-sys-green' : 'text-sys-red'}>{added ? '+ ' : '- '}</span>
         <span className="text-txt-primary">{stringifyValue(added ? diff.after : diff.before)}</span>
+      </div>
+    );
+  }
+
+  if (diff.kind === 'keyword_list') {
+    const before = stringifyList(diff.before);
+    const after = stringifyList(diff.after);
+    const beforeSet = new Set(before);
+    const afterSet = new Set(after);
+    const added = after.filter((keyword) => !beforeSet.has(keyword));
+    const removed = before.filter((keyword) => !afterSet.has(keyword));
+
+    return (
+      <div className="space-y-2 rounded-xl border border-separator-thin bg-bg-raised px-3 py-2 font-mono text-[12px]">
+        {removed.map((keyword) => (
+          <div key={`removed-${keyword}`}>
+            <span className="text-sys-red">- </span>
+            <span className="text-txt-primary">{keyword}</span>
+          </div>
+        ))}
+        {added.map((keyword) => (
+          <div key={`added-${keyword}`}>
+            <span className="text-sys-green">+ </span>
+            <span className="text-txt-primary">{keyword}</span>
+          </div>
+        ))}
+        {added.length + removed.length === 0 ? (
+          <div className="text-txt-tertiary">{stringifyValue(after)}</div>
+        ) : null}
       </div>
     );
   }

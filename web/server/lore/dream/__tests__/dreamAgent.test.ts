@@ -30,11 +30,6 @@ vi.mock('../../memory/write', () => ({
   deleteNodeByPath: vi.fn(),
   moveNode: vi.fn(),
 }));
-vi.mock('../../search/glossary', () => ({
-  addGlossaryKeyword: vi.fn(),
-  removeGlossaryKeyword: vi.fn(),
-  manageTriggers: vi.fn(),
-}));
 vi.mock('../../recall/recallAnalytics', () => ({
   getRecallStats: vi.fn(),
   getDreamQueryRecallDetail: vi.fn(),
@@ -74,7 +69,6 @@ import { getNodePayload, listDomains } from '../../memory/browse';
 import { searchMemories } from '../../search/search';
 import { createNode, updateNodeByPath, deleteNodeByPath, moveNode } from '../../memory/write';
 import { getBootNodeSpec } from '../../memory/boot';
-import { addGlossaryKeyword, removeGlossaryKeyword, manageTriggers } from '../../search/glossary';
 import {
   getDreamQueryCandidates,
   getDreamQueryEventSamples,
@@ -115,9 +109,6 @@ const mockUpdateNodeByPath = vi.mocked(updateNodeByPath);
 const mockDeleteNodeByPath = vi.mocked(deleteNodeByPath);
 const mockMoveNode = vi.mocked(moveNode);
 const mockGetBootNodeSpec = vi.mocked(getBootNodeSpec);
-const mockAddGlossaryKeyword = vi.mocked(addGlossaryKeyword);
-const mockRemoveGlossaryKeyword = vi.mocked(removeGlossaryKeyword);
-const mockManageTriggers = vi.mocked(manageTriggers);
 const mockGetRecallStats = vi.mocked(getRecallStats);
 const mockGetDreamQueryRecallDetail = vi.mocked(getDreamQueryRecallDetail);
 const mockGetDreamQueryCandidates = vi.mocked(getDreamQueryCandidates);
@@ -259,9 +250,18 @@ describe('buildDreamTools', () => {
     expect(names).toContain('update_node');
     expect(names).toContain('delete_node');
     expect(names).toContain('move_node');
-    expect(names).toContain('add_glossary');
-    expect(names).toContain('remove_glossary');
-    expect(names).toContain('manage_triggers');
+    expect(names).not.toContain('add_glossary');
+    expect(names).not.toContain('remove_glossary');
+    expect(names).not.toContain('manage_triggers');
+  });
+
+  it('exposes glossary changes through update_node only', () => {
+    const updateTool = buildDreamTools().find((tool) => tool.name === 'update_node');
+    expect(updateTool?.parameters.properties).toMatchObject({
+      glossary: { type: 'array', items: { type: 'string' } },
+      glossary_add: { type: 'array', items: { type: 'string' } },
+      glossary_remove: { type: 'array', items: { type: 'string' } },
+    });
   });
 
   it('each tool has required parameters field', () => {
@@ -473,9 +473,15 @@ describe('executeDreamTool', () => {
     );
   });
 
-  it('dispatches update_node', async () => {
+  it('dispatches update_node with node-level glossary changes', async () => {
     mockUpdateNodeByPath.mockResolvedValue({ success: true } as any);
-    await executeDreamTool('update_node', { uri: 'core://test', content: 'updated' });
+    await executeDreamTool('update_node', {
+      uri: 'core://test',
+      content: 'updated',
+      glossary: ['alpha', 'beta'],
+      glossary_add: ['gamma'],
+      glossary_remove: ['old'],
+    });
     expect(mockValidateUpdatePolicy).toHaveBeenCalledWith({
       domain: 'core',
       path: 'test',
@@ -484,7 +490,14 @@ describe('executeDreamTool', () => {
       sessionId: null,
     });
     expect(mockUpdateNodeByPath).toHaveBeenCalledWith(
-      expect.objectContaining({ domain: 'core', path: 'test', content: 'updated' }),
+      expect.objectContaining({
+        domain: 'core',
+        path: 'test',
+        content: 'updated',
+        glossary: ['alpha', 'beta'],
+        glossaryAdd: ['gamma'],
+        glossaryRemove: ['old'],
+      }),
       DREAM_EVENT_CONTEXT,
     );
   });
@@ -600,24 +613,6 @@ describe('executeDreamTool', () => {
       requested_new_uri: 'preferences://user',
     });
     expect(mockMoveNode).not.toHaveBeenCalled();
-  });
-
-  it('dispatches add_glossary', async () => {
-    mockAddGlossaryKeyword.mockResolvedValue({ success: true } as any);
-    await executeDreamTool('add_glossary', { keyword: 'test', node_uuid: 'n1' });
-    expect(mockAddGlossaryKeyword).toHaveBeenCalledWith({ keyword: 'test', node_uuid: 'n1' }, DREAM_EVENT_CONTEXT);
-  });
-
-  it('dispatches remove_glossary', async () => {
-    mockRemoveGlossaryKeyword.mockResolvedValue({ success: true } as any);
-    await executeDreamTool('remove_glossary', { keyword: 'test', node_uuid: 'n1' });
-    expect(mockRemoveGlossaryKeyword).toHaveBeenCalledWith({ keyword: 'test', node_uuid: 'n1' }, DREAM_EVENT_CONTEXT);
-  });
-
-  it('dispatches manage_triggers', async () => {
-    mockManageTriggers.mockResolvedValue({ success: true } as any);
-    await executeDreamTool('manage_triggers', { uri: 'core://test', add: ['a'], remove: ['b'] });
-    expect(mockManageTriggers).toHaveBeenCalledWith({ uri: 'core://test', add: ['a'], remove: ['b'] }, DREAM_EVENT_CONTEXT);
   });
 
   it('returns error for unknown tool', async () => {

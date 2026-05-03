@@ -11,7 +11,6 @@ import * as path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 import type { ClientType } from './auth';
-import { addGlossaryKeyword, removeGlossaryKeyword } from './lore/search/glossary';
 
 // ── types ─────────────────────────────────────────────────────────
 
@@ -212,26 +211,6 @@ export function formatBootView(data: BootViewData | undefined): string {
   }
 
   return lines.join('\n').trim();
-}
-
-// ── glossary batch helper ─────────────────────────────────────────
-
-export async function applyGlossaryMutations(
-  nodeUuid: string,
-  mutations: { add?: string[]; remove?: string[] } = {},
-  eventContext: EventContext = { source: 'mcp' },
-): Promise<{ added: string[]; removed: string[] }> {
-  const added: string[] = [];
-  const removed: string[] = [];
-  for (const keyword of normalizeKeywordList(mutations.add)) {
-    await addGlossaryKeyword({ keyword, node_uuid: nodeUuid }, eventContext);
-    added.push(keyword);
-  }
-  for (const keyword of normalizeKeywordList(mutations.remove)) {
-    await removeGlossaryKeyword({ keyword, node_uuid: nodeUuid }, eventContext);
-    removed.push(keyword);
-  }
-  return { added, removed };
 }
 
 // ── guidance loader ───────────────────────────────────────────────

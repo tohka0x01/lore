@@ -243,9 +243,9 @@ export function registerHooks(api: any, pluginCfg: any, GUIDANCE: string) {
   api.registerGatewayMethod("lore.status", async ({ respond }: any) => {
     try {
       const data = await fetchJson(pluginCfg, "/health", { method: "GET" });
-      respond({ ok: true, baseUrl: pluginCfg.baseUrl, health: data });
+      respond(true, { ok: true, baseUrl: pluginCfg.baseUrl, health: data });
     } catch (error: any) {
-      respond({ ok: false, baseUrl: pluginCfg.baseUrl, error: error.message });
+      respond(false, { ok: false, baseUrl: pluginCfg.baseUrl }, { code: "LORE_STATUS_FAILED", message: error.message });
     }
   });
 

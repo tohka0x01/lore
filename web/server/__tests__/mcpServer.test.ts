@@ -19,10 +19,6 @@ vi.mock('../lore/memory/write', () => ({
 vi.mock('../lore/search/search', () => ({
   searchMemories: vi.fn(),
 }));
-vi.mock('../lore/search/glossary', () => ({
-  addGlossaryKeyword: vi.fn(),
-  removeGlossaryKeyword: vi.fn(),
-}));
 vi.mock('../lore/memory/session', () => ({
   markSessionRead: vi.fn(),
   listSessionReads: vi.fn(),
@@ -103,6 +99,68 @@ describe('embedded MCP contract projections', () => {
 
     expect(result).toEqual({
       content: [{ type: 'text', text: 'Updated core://agent/profile' }],
+    });
+  });
+
+  it('passes glossary mutations into the canonical update operation', async () => {
+    mockUpdateNodeByPath.mockResolvedValueOnce({
+      success: true,
+      operation: 'update',
+      uri: 'core://agent/profile',
+      path: 'agent/profile',
+      node_uuid: 'uuid-update',
+    } as any);
+
+    const handler = getToolHandler('lore_update_node');
+    const result = await handler({
+      uri: 'core://agent/profile',
+      content: 'updated',
+      glossary_add: ['alpha', ' alpha '],
+      glossary_remove: ['old_keyword'],
+    });
+
+    expect(mockUpdateNodeByPath).toHaveBeenCalledWith(
+      {
+        domain: 'core',
+        path: 'agent/profile',
+        content: 'updated',
+        glossaryAdd: ['alpha'],
+        glossaryRemove: ['old_keyword'],
+      },
+      { source: 'mcp:lore_update_node', client_type: null },
+    );
+    expect(result).toEqual({
+      content: [{ type: 'text', text: 'Updated core://agent/profile\nglossary+ alpha\nglossary- old_keyword' }],
+    });
+  });
+
+  it('passes glossary replacement into the canonical update operation', async () => {
+    mockUpdateNodeByPath.mockResolvedValueOnce({
+      success: true,
+      operation: 'update',
+      uri: 'core://agent/profile',
+      path: 'agent/profile',
+      node_uuid: 'uuid-update',
+    } as any);
+
+    const handler = getToolHandler('lore_update_node');
+    const result = await handler({
+      uri: 'core://agent/profile',
+      glossary: ['alpha', ' alpha ', 'beta'],
+    });
+
+    expect(mockUpdateNodeByPath).toHaveBeenCalledWith(
+      {
+        domain: 'core',
+        path: 'agent/profile',
+        glossary: ['alpha', 'beta'],
+        glossaryAdd: [],
+        glossaryRemove: [],
+      },
+      { source: 'mcp:lore_update_node', client_type: null },
+    );
+    expect(result).toEqual({
+      content: [{ type: 'text', text: 'Updated core://agent/profile\nglossary= alpha, beta' }],
     });
   });
 

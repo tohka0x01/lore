@@ -23,7 +23,7 @@ import {
   type MoveMutationReceipt,
   type UpdateMutationReceipt,
 } from '../contracts';
-import { insertGlossaryKeywordsTx } from '../search/glossary';
+import { insertGlossaryKeywordsTx, normalizeGlossaryKeywords } from '../search/glossary';
 
 // ---------------------------------------------------------------------------
 // Internal types
@@ -65,6 +65,78 @@ async function getPathContext(
     [domain, path],
   );
   return (result.rows[0] as PathContext) || null;
+}
+
+async function getGlossaryKeywordsTx(
+  client: TransactionClient,
+  nodeUuid: string,
+): Promise<string[]> {
+  const result = await client.query(
+    `
+      SELECT keyword
+      FROM glossary_keywords
+      WHERE node_uuid = $1
+      ORDER BY keyword ASC
+    `,
+    [nodeUuid],
+  );
+  return (result.rows as Array<{ keyword: string }>).map((row) => row.keyword);
+}
+
+async function applyGlossaryMutationsTx(
+  client: TransactionClient,
+  nodeUuid: string,
+  {
+    add = [],
+    remove = [],
+  }: {
+    add?: string[];
+    remove?: string[];
+  },
+): Promise<{
+  added: string[];
+  removed: string[];
+  skippedAdd: string[];
+  skippedRemove: string[];
+}> {
+  const added: string[] = [];
+  const removed: string[] = [];
+  const skippedAdd: string[] = [];
+  const skippedRemove: string[] = [];
+
+  for (const keyword of normalizeGlossaryKeywords(add, 64)) {
+    const result = await client.query(
+      `INSERT INTO glossary_keywords (keyword, node_uuid, created_at) VALUES ($1, $2, NOW()) ON CONFLICT DO NOTHING RETURNING keyword`,
+      [keyword, nodeUuid],
+    );
+    if ((result.rowCount ?? 0) > 0) added.push(keyword);
+    else skippedAdd.push(keyword);
+  }
+
+  for (const keyword of normalizeGlossaryKeywords(remove, 64)) {
+    const result = await client.query(
+      `DELETE FROM glossary_keywords WHERE keyword = $1 AND node_uuid = $2 RETURNING keyword`,
+      [keyword, nodeUuid],
+    );
+    if ((result.rowCount ?? 0) > 0) removed.push(keyword);
+    else skippedRemove.push(keyword);
+  }
+
+  return { added, removed, skippedAdd, skippedRemove };
+}
+
+async function replaceGlossaryKeywordsTx(
+  client: TransactionClient,
+  nodeUuid: string,
+  keywords: string[],
+): Promise<void> {
+  await client.query(`DELETE FROM glossary_keywords WHERE node_uuid = $1`, [nodeUuid]);
+  for (const keyword of normalizeGlossaryKeywords(keywords, 64)) {
+    await client.query(
+      `INSERT INTO glossary_keywords (keyword, node_uuid, created_at) VALUES ($1, $2, NOW()) ON CONFLICT DO NOTHING`,
+      [keyword, nodeUuid],
+    );
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -193,12 +265,24 @@ export interface UpdateNodeByPathOptions {
   content?: string;
   priority?: number;
   disclosure?: string | null;
+  glossary?: string[];
+  glossaryAdd?: string[];
+  glossaryRemove?: string[];
 }
 
 export type UpdateNodeResult = UpdateMutationReceipt;
 
 export async function updateNodeByPath(
-  { domain = 'core', path, content, priority, disclosure }: UpdateNodeByPathOptions,
+  {
+    domain = 'core',
+    path,
+    content,
+    priority,
+    disclosure,
+    glossary,
+    glossaryAdd = [],
+    glossaryRemove = [],
+  }: UpdateNodeByPathOptions,
   eventContext: EventContext = {},
 ): Promise<UpdateNodeResult> {
   const client = await getPool().connect();
@@ -211,47 +295,61 @@ export async function updateNodeByPath(
       throw error;
     }
 
-    let beforeContent: string | null = null;
-    let contentChanged = false;
+    const normalizedGlossaryAdd = normalizeGlossaryKeywords(glossaryAdd, 64);
+    const normalizedGlossaryRemove = normalizeGlossaryKeywords(glossaryRemove, 64);
+    const glossaryReplace = Array.isArray(glossary) ? normalizeGlossaryKeywords(glossary, 64) : null;
+    const glossaryChanged = glossaryReplace !== null || normalizedGlossaryAdd.length > 0 || normalizedGlossaryRemove.length > 0;
 
-    if (content !== undefined) {
-      const currentMemoryResult = await client.query(
-        `
-          SELECT id, content
-          FROM memories
-          WHERE node_uuid = $1 AND deprecated = FALSE
-          ORDER BY created_at DESC
-          LIMIT 1
-          FOR UPDATE
-        `,
-        [ctx.child_uuid],
+    const currentMemoryResult = await client.query(
+      `
+        SELECT id, content
+        FROM memories
+        WHERE node_uuid = $1 AND deprecated = FALSE
+        ORDER BY created_at DESC
+        LIMIT 1
+        FOR UPDATE
+      `,
+      [ctx.child_uuid],
+    );
+    const currentMemory = currentMemoryResult.rows[0] as
+      | { id: number; content: string }
+      | undefined;
+    const beforeContent = currentMemory?.content ?? null;
+    let contentChanged = false;
+    let beforeGlossary: string[] | undefined;
+    let afterGlossary: string[] | undefined;
+    let glossaryResult = {
+      added: [] as string[],
+      removed: [] as string[],
+      skippedAdd: [] as string[],
+      skippedRemove: [] as string[],
+    };
+
+    if (glossaryChanged) {
+      beforeGlossary = await getGlossaryKeywordsTx(client, ctx.child_uuid);
+    }
+
+    if (content !== undefined && currentMemory && currentMemory.content !== content) {
+      contentChanged = true;
+      // Mark old as deprecated first to satisfy any unique partial index
+      // on (node_uuid) WHERE deprecated = FALSE.
+      await client.query(
+        `UPDATE memories SET deprecated = TRUE WHERE id = $1`,
+        [currentMemory.id],
       );
-      const currentMemory = currentMemoryResult.rows[0] as
-        | { id: number; content: string }
-        | undefined;
-      beforeContent = currentMemory?.content ?? null;
-      if (currentMemory && currentMemory.content !== content) {
-        contentChanged = true;
-        // Mark old as deprecated first to satisfy any unique partial index
-        // on (node_uuid) WHERE deprecated = FALSE.
-        await client.query(
-          `UPDATE memories SET deprecated = TRUE WHERE id = $1`,
-          [currentMemory.id],
-        );
-        const newMemoryResult = await client.query(
-          `
-            INSERT INTO memories (node_uuid, content, deprecated, migrated_to, created_at)
-            VALUES ($1, $2, FALSE, NULL, NOW())
-            RETURNING id
-          `,
-          [ctx.child_uuid, content],
-        );
-        const newMemoryId = (newMemoryResult.rows[0] as { id: number }).id;
-        await client.query(
-          `UPDATE memories SET migrated_to = $2 WHERE id = $1`,
-          [currentMemory.id, newMemoryId],
-        );
-      }
+      const newMemoryResult = await client.query(
+        `
+          INSERT INTO memories (node_uuid, content, deprecated, migrated_to, created_at)
+          VALUES ($1, $2, FALSE, NULL, NOW())
+          RETURNING id
+        `,
+        [ctx.child_uuid, content],
+      );
+      const newMemoryId = (newMemoryResult.rows[0] as { id: number }).id;
+      await client.query(
+        `UPDATE memories SET migrated_to = $2 WHERE id = $1`,
+        [currentMemory.id, newMemoryId],
+      );
     }
 
     if (priority !== undefined || disclosure !== undefined) {
@@ -264,6 +362,28 @@ export async function updateNodeByPath(
         `,
         [ctx.edge_id, priority ?? null, disclosure ?? null],
       );
+    }
+
+    if (glossaryChanged) {
+      if (glossaryReplace !== null) {
+        await replaceGlossaryKeywordsTx(client, ctx.child_uuid, glossaryReplace);
+      } else {
+        glossaryResult = await applyGlossaryMutationsTx(client, ctx.child_uuid, {
+          add: normalizedGlossaryAdd,
+          remove: normalizedGlossaryRemove,
+        });
+      }
+      afterGlossary = await getGlossaryKeywordsTx(client, ctx.child_uuid);
+      if (glossaryReplace !== null) {
+        const beforeSet = new Set(beforeGlossary || []);
+        const afterSet = new Set(afterGlossary);
+        glossaryResult = {
+          added: afterGlossary.filter((keyword) => !beforeSet.has(keyword)),
+          removed: (beforeGlossary || []).filter((keyword) => !afterSet.has(keyword)),
+          skippedAdd: [],
+          skippedRemove: [],
+        };
+      }
     }
 
     await logMemoryEvent({
@@ -280,16 +400,27 @@ export async function updateNodeByPath(
         content: beforeContent,
         priority: ctx.priority,
         disclosure: ctx.disclosure,
+        ...(beforeGlossary ? { glossary_keywords: beforeGlossary } : {}),
       },
       after_snapshot: {
         content: content ?? beforeContent,
         priority: priority ?? ctx.priority,
         disclosure: disclosure ?? ctx.disclosure,
+        ...(afterGlossary ? { glossary_keywords: afterGlossary } : {}),
       },
       details: {
         content_changed: contentChanged,
         priority_changed: priority !== undefined,
         disclosure_changed: disclosure !== undefined,
+        ...(glossaryChanged
+          ? {
+              glossary_added: glossaryResult.added,
+              glossary_removed: glossaryResult.removed,
+              glossary_skipped_add: glossaryResult.skippedAdd,
+              glossary_skipped_remove: glossaryResult.skippedRemove,
+              glossary_replaced: glossaryReplace !== null,
+            }
+          : {}),
       },
     });
 

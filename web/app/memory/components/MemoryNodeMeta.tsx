@@ -9,11 +9,15 @@ import MemoryViewsSection from './MemoryViewsSection';
 
 function MemoryNodeProperties({
   node,
+  domain,
+  path,
   refreshData,
   navigateToHistory,
   t,
 }: {
   node: MemoryNode;
+  domain: string;
+  path: string;
   refreshData: () => Promise<void>;
   navigateToHistory: () => void;
   t: (key: string) => string;
@@ -51,7 +55,7 @@ function MemoryNodeProperties({
           </span>
         )}
         {!node.is_virtual && (
-          <KeywordManager keywords={node.glossary_keywords || []} nodeUuid={node.node_uuid || ''} onUpdate={() => void refreshData()} />
+          <KeywordManager keywords={node.glossary_keywords || []} domain={domain} path={path} onUpdate={() => void refreshData()} />
         )}
       </div>
     </div>
@@ -60,6 +64,8 @@ function MemoryNodeProperties({
 
 interface MemoryNodeMetaProps {
   node: MemoryNode;
+  domain: string;
+  path: string;
   editing: boolean;
   refreshData: () => Promise<void>;
   navigateTo: (newPath: string, newDomain?: string) => void;
@@ -69,6 +75,8 @@ interface MemoryNodeMetaProps {
 
 export default function MemoryNodeMeta({
   node,
+  domain,
+  path,
   editing,
   refreshData,
   navigateTo,
@@ -88,7 +96,7 @@ export default function MemoryNodeMeta({
     <div className="mb-6 space-y-4">
       {hasProperties && (
         <div className={clsx(surfaceCardClassName, 'px-4 py-4 md:px-6 md:py-5')}>
-          <MemoryNodeProperties node={node} refreshData={refreshData} navigateToHistory={navigateToHistory} t={t} />
+          <MemoryNodeProperties node={node} domain={domain} path={path} refreshData={refreshData} navigateToHistory={navigateToHistory} t={t} />
         </div>
       )}
       {Array.isArray(node.memory_views) && node.memory_views.length > 0 && (
