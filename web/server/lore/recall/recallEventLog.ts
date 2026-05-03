@@ -31,10 +31,11 @@ export function truncateText(value: unknown, maxChars = 280): string {
   return text.length > maxChars ? `${text.slice(0, maxChars - 1)}\u2026` : text;
 }
 
-function addValues(values: unknown[], row: unknown[]): string {
+function addValues(values: unknown[], row: unknown[], trailingSql: string[] = []): string {
   const start = values.length + 1;
   values.push(...row);
-  return `(${row.map((_, index) => `$${start + index}`).join(', ')})`;
+  const placeholders = row.map((_, index) => `$${start + index}`);
+  return `(${[...placeholders, ...trailingSql].join(', ')})`;
 }
 
 // ---------------------------------------------------------------------------
@@ -360,7 +361,7 @@ export async function logRecallEvents({
         false,
         row.ranked_position,
         row.displayed_position,
-      ]));
+      ], ['NOW()']));
 
       await client.query(
         `
@@ -403,7 +404,7 @@ export async function logRecallEvents({
         row.client_type,
         row.ranked_position,
         row.displayed_position,
-      ]));
+      ], ['NOW()']));
 
       await client.query(
       `

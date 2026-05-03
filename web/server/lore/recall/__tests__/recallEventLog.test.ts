@@ -31,6 +31,57 @@ function eventInsertCalls() {
   );
 }
 
+function splitTopLevelList(source: string): string[] {
+  const parts: string[] = [];
+  let depth = 0;
+  let start = 0;
+  for (let i = 0; i < source.length; i += 1) {
+    const char = source[i];
+    if (char === '(') depth += 1;
+    if (char === ')') depth -= 1;
+    if (char === ',' && depth === 0) {
+      parts.push(source.slice(start, i).trim());
+      start = i + 1;
+    }
+  }
+  parts.push(source.slice(start).trim());
+  return parts.filter(Boolean);
+}
+
+function insertShape(sqlText: string, tableName: string) {
+  const normalized = sqlText.replace(/\s+/g, ' ');
+  const insertIndex = normalized.indexOf(`INSERT INTO ${tableName}`);
+  expect(insertIndex).toBeGreaterThanOrEqual(0);
+
+  const columnsStart = normalized.indexOf('(', insertIndex);
+  const columnsEnd = normalized.indexOf(')', columnsStart);
+  const valuesIndex = normalized.indexOf('VALUES', columnsEnd);
+  const valuesStart = normalized.indexOf('(', valuesIndex);
+  let depth = 0;
+  let valuesEnd = -1;
+  for (let i = valuesStart; i < normalized.length; i += 1) {
+    const char = normalized[i];
+    if (char === '(') depth += 1;
+    if (char === ')') {
+      depth -= 1;
+      if (depth === 0) {
+        valuesEnd = i;
+        break;
+      }
+    }
+  }
+
+  expect(columnsStart).toBeGreaterThanOrEqual(0);
+  expect(columnsEnd).toBeGreaterThan(columnsStart);
+  expect(valuesStart).toBeGreaterThanOrEqual(0);
+  expect(valuesEnd).toBeGreaterThan(valuesStart);
+
+  return {
+    columns: splitTopLevelList(normalized.slice(columnsStart + 1, columnsEnd)).length,
+    values: splitTopLevelList(normalized.slice(valuesStart + 1, valuesEnd)).length,
+  };
+}
+
 // ---------------------------------------------------------------------------
 // Utility helpers
 // ---------------------------------------------------------------------------
@@ -260,6 +311,26 @@ describe('logRecallEvents', () => {
     expect(sqlTexts.some((query) => query.includes('INSERT INTO recall_queries'))).toBe(true);
     expect(sqlTexts.some((query) => query.includes('INSERT INTO recall_query_candidates'))).toBe(true);
     expect(sqlTexts.some((query) => query.includes('INSERT INTO recall_events'))).toBe(true);
+  });
+
+  it('keeps recall INSERT column and value expression counts aligned', async () => {
+    await logRecallEvents({
+      queryId: 'q-sql-shape',
+      queryText: 'shape query',
+      clientType: 'codex',
+      exactRows: [{ uri: 'core://a', exact_score: 0.9, weight: 1 }],
+      rankedCandidates: [{ uri: 'core://a', score: 0.91, matched_on: ['exact'] }],
+      displayedItems: [{ uri: 'core://a' }],
+    });
+
+    const sqlTexts = mockClientQuery.mock.calls.map(([query]) => String(query));
+    const queryInsert = sqlTexts.find((query) => query.includes('INSERT INTO recall_queries'));
+    const candidateInsert = sqlTexts.find((query) => query.includes('INSERT INTO recall_query_candidates'));
+    const eventInsert = sqlTexts.find((query) => query.includes('INSERT INTO recall_events'));
+
+    expect(insertShape(queryInsert || '', 'recall_queries')).toEqual({ columns: 8, values: 8 });
+    expect(insertShape(candidateInsert || '', 'recall_query_candidates')).toEqual({ columns: 9, values: 9 });
+    expect(insertShape(eventInsert || '', 'recall_events')).toEqual({ columns: 15, values: 15 });
   });
 
   it('rolls back the transaction when any recall write fails', async () => {
