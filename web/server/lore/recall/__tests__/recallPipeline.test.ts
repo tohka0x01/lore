@@ -69,9 +69,6 @@ describe('runRecallPipeline', () => {
   const resolvedEmbedding = { model: 'text-embedding-3-large', base_url: 'http://embed', dimensions: 3072 };
   const scoringConfig = {
     strategy: 'raw_plus_lex_damp',
-    rrf_k: 20,
-    dense_floor: 0.5,
-    gs_floor: 0.4,
     w_exact: 0.3,
     w_glossary_semantic: 0.25,
     w_dense: 0.3,
@@ -160,7 +157,7 @@ describe('runRecallPipeline', () => {
     const result = await runRecallPipeline(
       {
         query: 'Conversation info (untrusted metadata): ```json {"channel":"general"}```\nactual query',
-        strategy: 'rrf',
+        strategy: 'removed_strategy',
         session_id: 'session-1',
         domain: 'project',
         limit: 2,
@@ -169,7 +166,7 @@ describe('runRecallPipeline', () => {
         min_score: 0.2,
         score_precision: 3,
         read_node_display_mode: 'hard',
-      },
+      } as any,
       { aggregateCandidates },
     );
 
@@ -204,7 +201,7 @@ describe('runRecallPipeline', () => {
       denseRows,
       lexicalRows,
       scoringConfig: expect.objectContaining({
-        strategy: 'rrf',
+        strategy: 'raw_plus_lex_damp',
         query_tokens: 7,
         recency_enabled: true,
       }),
@@ -238,7 +235,7 @@ describe('runRecallPipeline', () => {
       dense_candidates: 1,
       lexical_candidates: 1,
       model: 'text-embedding-3-large',
-      strategy: 'rrf',
+      strategy: 'raw_plus_lex_damp',
       query_tokens: 7,
       recency_enabled: true,
       view_types: ['gist', 'question'],

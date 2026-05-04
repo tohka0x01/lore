@@ -18,7 +18,6 @@ function buildDebugBody(searchParams: URLSearchParams): Record<string, unknown> 
     exclude_boot_from_results: searchParams.get('exclude_boot_from_results') == null
       ? undefined
       : ['1', 'true', 'yes', 'on'].includes(String(searchParams.get('exclude_boot_from_results')).toLowerCase()),
-    strategy: String(searchParams.get('strategy') || '').trim() || undefined,
     log_events: true,
   };
 }

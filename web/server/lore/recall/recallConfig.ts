@@ -5,15 +5,10 @@ import { getEmbeddingRuntimeConfig, resolveEmbeddingConfig } from '../view/embed
 import { getMemoryViewRuntimeConfig } from '../view/memoryViewQueries';
 import {
   DEFAULT_STRATEGY,
-  STRATEGIES,
   type ScoringConfig,
 } from './recallScoring';
 
 export const SCORING_SETTING_KEYS = [
-  'recall.scoring.strategy',
-  'recall.scoring.rrf_k',
-  'recall.scoring.dense_floor',
-  'recall.scoring.gs_floor',
   'recall.weights.w_exact',
   'recall.weights.w_glossary_semantic',
   'recall.weights.w_dense',
@@ -32,9 +27,6 @@ export const SCORING_SETTING_KEYS = [
 
 export interface LoadedScoringConfig extends ScoringConfig {
   strategy: string;
-  rrf_k: number;
-  dense_floor: number;
-  gs_floor: number;
   recency_enabled: boolean;
   recency_half_life_days: number;
   recency_max_bonus: number;
@@ -51,13 +43,8 @@ export interface LoadedDisplayConfig {
 
 export async function loadRecallScoringConfig(): Promise<LoadedScoringConfig> {
   const s = await getSettingsBatch([...SCORING_SETTING_KEYS]);
-  const rawStrategy = String(s['recall.scoring.strategy'] || DEFAULT_STRATEGY);
-  const strategy = STRATEGIES.includes(rawStrategy as typeof STRATEGIES[number]) ? rawStrategy : DEFAULT_STRATEGY;
   return {
-    strategy,
-    rrf_k: Number(s['recall.scoring.rrf_k'] || 20),
-    dense_floor: Number(s['recall.scoring.dense_floor'] || 0.50),
-    gs_floor: Number(s['recall.scoring.gs_floor'] || 0.40),
+    strategy: DEFAULT_STRATEGY,
     w_exact: s['recall.weights.w_exact'] as number,
     w_glossary_semantic: s['recall.weights.w_glossary_semantic'] as number,
     w_dense: s['recall.weights.w_dense'] as number,
@@ -99,10 +86,6 @@ export async function getRecallRuntimeConfig(embedding: Partial<EmbeddingConfig>
     memory_views: await getMemoryViewRuntimeConfig(resolvedEmbedding),
     scoring: {
       strategy: scoring.strategy,
-      strategies_available: STRATEGIES,
-      rrf_k: scoring.rrf_k,
-      dense_floor: scoring.dense_floor,
-      gs_floor: scoring.gs_floor,
     },
     recency: {
       enabled: scoring.recency_enabled,
@@ -110,8 +93,7 @@ export async function getRecallRuntimeConfig(embedding: Partial<EmbeddingConfig>
       max_bonus: scoring.recency_max_bonus,
       priority_exempt: scoring.recency_priority_exempt,
     },
-    // kept under original key for UI backward compat
-    normalized_linear: {
+    weights: {
       w_exact: scoring.w_exact,
       w_glossary_semantic: scoring.w_glossary_semantic,
       w_dense: scoring.w_dense,

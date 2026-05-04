@@ -27,6 +27,7 @@ import type {
 import { resolveRecallQuery, sanitizeRecallQuery } from './recallQuery';
 import {
   collectCandidates,
+  DEFAULT_STRATEGY,
   runStrategy,
   type ScoredResult,
   type ScoringConfig,
@@ -107,9 +108,9 @@ function resolveRequestClientType(body: RecallRequestBody, context?: RecallReque
 }
 
 /**
- * Run scoring on a set of candidate rows using the requested strategy.
- * Accepts legacy `normalizedConfig` alias (maps to normalized_linear strategy
- * for backward compat with benchmark tests).
+ * Run fixed recall scoring on a set of candidate rows.
+ * Accepts legacy `normalizedConfig` alias as a scoring weight source for
+ * backward compat with benchmark tests; any strategy field is ignored.
  */
 export function aggregateCandidates({
   exactRows,
@@ -120,11 +121,11 @@ export function aggregateCandidates({
   normalizedConfig = null,
 }: AggregateCandidatesOptions): ScoredResult[] {
   const config: ScoringConfig = scoringConfig || normalizedConfig || {
-    strategy: 'normalized_linear',
+    strategy: DEFAULT_STRATEGY,
     w_exact: 0.30,
     w_glossary_semantic: 0.25,
     w_dense: 0.30,
-    w_lexical: 0.05,
+    w_lexical: 0.03,
     priority_base: 0.05,
     priority_step: 0.01,
     multi_view_step: 0.015,
@@ -132,12 +133,12 @@ export function aggregateCandidates({
     view_priors: null,
     query_tokens: 5,
   };
-  const strategy = config.strategy || 'normalized_linear';
+  config.strategy = DEFAULT_STRATEGY;
   const byUri = collectCandidates(
     { exactRows, glossarySemanticRows, denseRows, lexicalRows },
     { viewPriors: config.view_priors as Record<string, number> | null },
   );
-  return runStrategy(strategy, byUri, config);
+  return runStrategy(byUri, config);
 }
 
 export async function ensureRecallIndex(embedding: Partial<EmbeddingConfig> | null = null) {

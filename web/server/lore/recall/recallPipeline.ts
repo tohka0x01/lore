@@ -20,7 +20,6 @@ import {
 } from './recallDisplay';
 import { resolveRecallQuery } from './recallQuery';
 import {
-  STRATEGIES,
   type ScoredResult,
   type ScoringConfig,
 } from './recallScoring';
@@ -57,7 +56,6 @@ export interface RecallPipelineResult {
 export interface RecallRequestBody {
   query?: string;
   embedding?: Partial<EmbeddingConfig> | null;
-  strategy?: string;
   session_id?: string | null;
   domain?: string | null;
   limit?: number;
@@ -98,9 +96,6 @@ export async function runRecallPipeline(
   const scoringConfig = await loadRecallScoringConfig();
   const displayConfig = await loadRecallDisplayConfig();
 
-  if (body.strategy && STRATEGIES.includes(body.strategy as typeof STRATEGIES[number])) {
-    scoringConfig.strategy = body.strategy;
-  }
   scoringConfig.query_tokens = await countQueryTokens(body.query);
 
   const [queryVector] = await embedTexts(resolvedEmbedding, [body.query]);

@@ -26,14 +26,9 @@ vi.mock('../../recall/recallScoring', () => ({
   collectCandidates: vi.fn().mockReturnValue(new Map()),
   runStrategy: vi.fn().mockReturnValue([]),
   DEFAULT_STRATEGY: 'raw_plus_lex_damp',
-  STRATEGIES: ['raw_plus_lex_damp'],
 }));
 vi.mock('../../config/settings', () => ({
   getSettings: vi.fn().mockResolvedValue({
-    'recall.scoring.strategy': 'raw_plus_lex_damp',
-    'recall.scoring.rrf_k': 20,
-    'recall.scoring.dense_floor': 0.5,
-    'recall.scoring.gs_floor': 0.4,
     'recall.weights.w_exact': 0.3,
     'recall.weights.w_glossary_semantic': 0.25,
     'recall.weights.w_dense': 0.3,

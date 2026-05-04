@@ -29,7 +29,7 @@ describe('/api/browse/boot/draft route', () => {
 
   it('generates boot drafts from POST', async () => {
     mockGenerateBootDrafts.mockResolvedValueOnce({
-      model: 'glm-5.1',
+      model: 'deepseek-v4-flash',
       results: [
         { uri: 'core://agent', status: 'generated', content: '你会直接执行。', detail: null },
       ],
@@ -55,7 +55,7 @@ describe('/api/browse/boot/draft route', () => {
       node_context: { 'core://agent': '强调执行边界。' },
     });
     expect(response.status).toBe(200);
-    expect(body.model).toBe('glm-5.1');
+    expect(body.model).toBe('deepseek-v4-flash');
   });
 
   it('returns route errors with status codes', async () => {

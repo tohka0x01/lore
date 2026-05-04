@@ -121,11 +121,11 @@ Complete the setup flow:
 1. **Embedding setup** — configure an OpenAI-compatible embedding endpoint.
    - `Embedding Base URL`, for example `http://host.docker.internal:8090/v1`
    - `Embedding API Key`
-   - `Embedding Model`, for example `Qwen/Qwen3-Embedding-0.6B`
+   - `Embedding Model`, for example `text-embedding-3-small`
 2. **View LLM setup** — configure the model used by view refinement and Dream.
    - `View LLM Base URL`
    - `View LLM API Key`
-   - `View LLM Model`, for example `glm-5.1`
+   - `View LLM Model`, for example `deepseek-v4-flash`
 3. **Global boot memories** — review or save defaults for:
    - `core://agent`
    - `core://soul`
@@ -143,7 +143,7 @@ The `Skip` button saves the default value for an empty boot node and moves forwa
 
 Open `/settings` after setup for:
 
-- recall scoring strategy and thresholds
+- recall scoring weights and thresholds
 - View LLM for view refinement and Dream
 - Dream schedule
 - backup settings

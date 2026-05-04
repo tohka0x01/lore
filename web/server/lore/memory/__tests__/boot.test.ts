@@ -17,7 +17,7 @@ const DEFAULT_VIEW_LLM_CONFIG = {
   provider: 'openai_compatible' as const,
   base_url: 'http://llm:8080',
   api_key: 'test-key',
-  model: 'glm-5.1',
+  model: 'deepseek-v4-flash',
   timeout_ms: 5000,
   temperature: 0.2,
   api_version: '',
@@ -63,7 +63,7 @@ describe('bootView', () => {
     mockGetSettings.mockResolvedValue({
       'view_llm.base_url': 'http://llm:8080',
       'view_llm.api_key': 'test-key',
-      'view_llm.model': 'glm-5.1',
+      'view_llm.model': 'deepseek-v4-flash',
     });
   });
 
@@ -241,7 +241,7 @@ describe('bootView', () => {
     mockGetSettings.mockResolvedValueOnce({
       'view_llm.base_url': '',
       'view_llm.api_key': '',
-      'view_llm.model': 'glm-5.1',
+      'view_llm.model': 'deepseek-v4-flash',
     });
     mockSql
       .mockResolvedValueOnce({ rows: [], rowCount: 0 } as any)

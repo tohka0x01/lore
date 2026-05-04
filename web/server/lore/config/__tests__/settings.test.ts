@@ -38,6 +38,16 @@ describe('settingsSchema', () => {
     expect(SCHEMA_BY_KEY.get('view_llm.api_key')?.secret).toBe(true);
     expect(SCHEMA_BY_KEY.has('backup.local.path')).toBe(true);
     expect(SCHEMA_BY_KEY.has('review.local.path')).toBe(true);
+    expect(SCHEMA_BY_KEY.get('embedding.model')?.default).toBe('text-embedding-3-small');
+    expect(SCHEMA_BY_KEY.get('view_llm.model')?.default).toBe('deepseek-v4-flash');
+  });
+
+  it('does not expose selectable recall scoring algorithms', () => {
+    expect(SCHEMA_BY_KEY.has('recall.scoring.strategy')).toBe(false);
+    expect(SCHEMA_BY_KEY.has('recall.scoring.rrf_k')).toBe(false);
+    expect(SCHEMA_BY_KEY.has('recall.scoring.dense_floor')).toBe(false);
+    expect(SCHEMA_BY_KEY.has('recall.scoring.gs_floor')).toBe(false);
+    expect(SECTIONS.some((section) => section.id === 'recall_scoring')).toBe(false);
   });
 
   it('SCHEMA_BY_KEY has an entry for every schema item', () => {
@@ -107,20 +117,20 @@ describe('resolveFromDefault', () => {
 
 describe('resolveValue', () => {
   it('returns db value when present as wrapped JSON', () => {
-    const dbValues = new Map<string, unknown>([['recall.scoring.rrf_k', { value: 60 }]]);
-    expect(resolveValue('recall.scoring.rrf_k', dbValues)).toBe(60);
+    const dbValues = new Map<string, unknown>([['recall.weights.w_exact', { value: 0.6 }]]);
+    expect(resolveValue('recall.weights.w_exact', dbValues)).toBe(0.6);
   });
 
   it('returns db value when present as a raw primitive', () => {
-    const dbValues = new Map<string, unknown>([['recall.scoring.rrf_k', 45]]);
-    expect(resolveValue('recall.scoring.rrf_k', dbValues)).toBe(45);
+    const dbValues = new Map<string, unknown>([['recall.weights.w_exact', 0.45]]);
+    expect(resolveValue('recall.weights.w_exact', dbValues)).toBe(0.45);
   });
 
   it('falls back to schema default when db value is invalid or missing', () => {
-    const invalid = new Map<string, unknown>([['recall.scoring.rrf_k', { value: 'bad' }]]);
+    const invalid = new Map<string, unknown>([['recall.weights.w_exact', { value: 'bad' }]]);
     const missing = new Map<string, unknown>();
-    expect(resolveValue('recall.scoring.rrf_k', invalid)).toBe(20);
-    expect(resolveValue('recall.scoring.rrf_k', missing)).toBe(20);
+    expect(resolveValue('recall.weights.w_exact', invalid)).toBe(0.30);
+    expect(resolveValue('recall.weights.w_exact', missing)).toBe(0.30);
   });
 
   it('returns undefined for unknown keys', () => {
@@ -130,37 +140,37 @@ describe('resolveValue', () => {
 
 describe('getSetting / getSettings / getAllSettings / getSettingsSnapshot', () => {
   it('getSetting returns resolved db value', async () => {
-    mockSql.mockResolvedValueOnce(makeResult([{ key: 'recall.scoring.rrf_k', value: { value: 50 } }]));
+    mockSql.mockResolvedValueOnce(makeResult([{ key: 'recall.weights.w_exact', value: { value: 0.5 } }]));
 
-    await expect(getSetting('recall.scoring.rrf_k')).resolves.toBe(50);
+    await expect(getSetting('recall.weights.w_exact')).resolves.toBe(0.5);
   });
 
   it('getSettings returns multiple keys', async () => {
     mockSql.mockResolvedValueOnce(makeResult([
-      { key: 'recall.scoring.rrf_k', value: { value: 33 } },
-      { key: 'recall.weights.w_exact', value: { value: 0.5 } },
+      { key: 'recall.weights.w_exact', value: { value: 0.33 } },
+      { key: 'recall.weights.w_dense', value: { value: 0.5 } },
     ]));
 
-    const values = await getSettings(['recall.scoring.rrf_k', 'recall.weights.w_exact']);
-    expect(values['recall.scoring.rrf_k']).toBe(33);
-    expect(values['recall.weights.w_exact']).toBeCloseTo(0.5);
+    const values = await getSettings(['recall.weights.w_exact', 'recall.weights.w_dense']);
+    expect(values['recall.weights.w_exact']).toBeCloseTo(0.33);
+    expect(values['recall.weights.w_dense']).toBeCloseTo(0.5);
   });
 
   it('getAllSettings resolves defaults for missing keys', async () => {
-    mockSql.mockResolvedValueOnce(makeResult([{ key: 'recall.scoring.rrf_k', value: { value: 77 } }]));
+    mockSql.mockResolvedValueOnce(makeResult([{ key: 'recall.weights.w_exact', value: { value: 0.77 } }]));
 
     const values = await getAllSettings();
-    expect(values['recall.scoring.rrf_k']).toBe(77);
+    expect(values['recall.weights.w_exact']).toBeCloseTo(0.77);
     expect(values['embedding.provider']).toBe('openai_compatible');
   });
 
   it('uses cache on repeated reads within TTL', async () => {
-    mockSql.mockResolvedValueOnce(makeResult([{ key: 'recall.scoring.rrf_k', value: { value: 77 } }]));
+    mockSql.mockResolvedValueOnce(makeResult([{ key: 'recall.weights.w_exact', value: { value: 0.77 } }]));
 
-    await getSetting('recall.scoring.rrf_k');
-    const second = await getSetting('recall.scoring.rrf_k');
+    await getSetting('recall.weights.w_exact');
+    const second = await getSetting('recall.weights.w_exact');
 
-    expect(second).toBe(77);
+    expect(second).toBeCloseTo(0.77);
     expect(mockSql).toHaveBeenCalledTimes(1);
   });
 
@@ -186,11 +196,11 @@ describe('updateSettings', () => {
   it('writes a valid patch and returns a snapshot', async () => {
     mockSql.mockResolvedValue(makeResult());
 
-    await updateSettings({ 'recall.scoring.rrf_k': 40 });
+    await updateSettings({ 'recall.weights.w_exact': 0.4 });
 
     const upsertCall = mockSql.mock.calls.find(([text]) => (text as string).includes('INSERT INTO app_settings'));
     expect(upsertCall).toBeDefined();
-    expect(upsertCall?.[1]).toEqual(['recall.scoring.rrf_k', JSON.stringify({ value: 40 })]);
+    expect(upsertCall?.[1]).toEqual(['recall.weights.w_exact', JSON.stringify({ value: 0.4 })]);
   });
 
   it('throws for unknown keys', async () => {
@@ -210,17 +220,17 @@ describe('resetSettings', () => {
   it('deletes a single key from the db', async () => {
     mockSql.mockResolvedValue(makeResult());
 
-    await resetSettings('recall.scoring.rrf_k');
+    await resetSettings('recall.weights.w_exact');
 
     const deleteCall = mockSql.mock.calls.find(([text]) => (text as string).includes('DELETE FROM app_settings'));
     expect(deleteCall).toBeDefined();
-    expect(deleteCall?.[1]).toEqual(['recall.scoring.rrf_k']);
+    expect(deleteCall?.[1]).toEqual(['recall.weights.w_exact']);
   });
 
   it('accepts arrays of keys', async () => {
     mockSql.mockResolvedValue(makeResult());
 
-    await resetSettings(['recall.scoring.rrf_k', 'recall.weights.w_exact']);
+    await resetSettings(['recall.weights.w_exact', 'recall.weights.w_dense']);
 
     const deleteCalls = mockSql.mock.calls.filter(([text]) => (text as string).includes('DELETE FROM app_settings'));
     expect(deleteCalls).toHaveLength(2);
@@ -237,23 +247,22 @@ describe('validatePatchEntry', () => {
   });
 
   it('throws when numbers are below min', () => {
-    expect(() => validatePatchEntry('recall.scoring.rrf_k', 2)).toThrow('must be >= 5');
+    expect(() => validatePatchEntry('recall.weights.w_exact', -0.1)).toThrow('must be >= 0');
   });
 
   it('throws when numbers are above max', () => {
-    expect(() => validatePatchEntry('recall.scoring.rrf_k', 999)).toThrow('must be <= 200');
+    expect(() => validatePatchEntry('recall.weights.w_exact', 2)).toThrow('must be <= 1');
   });
 
-  it('throws for invalid enum values', () => {
-    expect(() => validatePatchEntry('recall.scoring.strategy', 'nonexistent')).toThrow('Invalid value');
-  });
-
-  it('accepts valid enum values', () => {
-    expect(validatePatchEntry('recall.scoring.strategy', 'rrf')).toBe('rrf');
+  it('rejects removed recall scoring algorithm settings', () => {
+    expect(() => validatePatchEntry('recall.scoring.strategy', 'raw_plus_lex_damp')).toThrow('Unknown setting key');
+    expect(() => validatePatchEntry('recall.scoring.rrf_k', 30)).toThrow('Unknown setting key');
+    expect(() => validatePatchEntry('recall.scoring.dense_floor', 0.5)).toThrow('Unknown setting key');
+    expect(() => validatePatchEntry('recall.scoring.gs_floor', 0.4)).toThrow('Unknown setting key');
   });
 
   it('coerces numeric strings', () => {
-    expect(validatePatchEntry('recall.scoring.rrf_k', '30')).toBe(30);
+    expect(validatePatchEntry('recall.weights.w_exact', '0.30')).toBe(0.30);
   });
 
   it('validates booleans', () => {
@@ -270,14 +279,14 @@ describe('validatePatchEntry', () => {
 describe('__clearSettingsCache', () => {
   it('forces the next getSetting call to reload from db', async () => {
     mockSql
-      .mockResolvedValueOnce(makeResult([{ key: 'recall.scoring.rrf_k', value: { value: 10 } }]))
-      .mockResolvedValueOnce(makeResult([{ key: 'recall.scoring.rrf_k', value: { value: 20 } }]));
+      .mockResolvedValueOnce(makeResult([{ key: 'recall.weights.w_exact', value: { value: 0.1 } }]))
+      .mockResolvedValueOnce(makeResult([{ key: 'recall.weights.w_exact', value: { value: 0.2 } }]));
 
-    expect(await getSetting('recall.scoring.rrf_k')).toBe(10);
+    expect(await getSetting('recall.weights.w_exact')).toBe(0.1);
 
     __clearSettingsCache();
 
-    expect(await getSetting('recall.scoring.rrf_k')).toBe(20);
+    expect(await getSetting('recall.weights.w_exact')).toBe(0.2);
     expect(mockSql).toHaveBeenCalledTimes(2);
   });
 });

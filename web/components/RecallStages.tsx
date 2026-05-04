@@ -185,7 +185,7 @@ interface RuntimeWeights {
 }
 
 interface RuntimeData {
-  normalized_linear?: RuntimeWeights;
+  weights?: RuntimeWeights;
   memory_views?: {
     weights?: {
       gist?: number;
@@ -352,7 +352,7 @@ export default function RecallStages({
           <div className="space-y-3 animate-in">
             <div className="flex items-center gap-3 text-[12.5px] text-txt-secondary">
               <span>{safeArray(data.exact_hits).length} {t('hits')}</span>
-              {runtime && <span className="text-txt-tertiary">· {t('Weight')} {fmt(runtime?.normalized_linear?.w_exact, 2)}</span>}
+              {runtime && <span className="text-txt-tertiary">· {t('Weight')} {fmt(runtime?.weights?.w_exact, 2)}</span>}
             </div>
             <Table columns={exactColumns} rows={safeArray<RecallRow>(data.exact_hits)} empty={t('No exact hits.')} />
           </div>
@@ -363,7 +363,7 @@ export default function RecallStages({
           <div className="space-y-3 animate-in">
             <div className="flex items-center gap-3 text-[12.5px] text-txt-secondary">
               <span>{safeArray(data.glossary_semantic_hits).length} {t('hits')}</span>
-              {runtime && <span className="text-txt-tertiary">· {t('Weight')} {fmt(runtime?.normalized_linear?.w_glossary_semantic, 2)}</span>}
+              {runtime && <span className="text-txt-tertiary">· {t('Weight')} {fmt(runtime?.weights?.w_glossary_semantic, 2)}</span>}
             </div>
             <Table columns={glossarySemanticColumns} rows={safeArray<RecallRow>(data.glossary_semantic_hits)} empty={t('No glossary hits.')} />
           </div>
@@ -374,7 +374,7 @@ export default function RecallStages({
           <div className="space-y-3 animate-in">
             <div className="flex flex-wrap items-center gap-3 text-[12.5px] text-txt-secondary">
               <span>{safeArray(data.dense_hits).length} {t('hits')}</span>
-              {runtime && <span className="text-txt-tertiary">· {t('Weight')} {fmt(runtime?.normalized_linear?.w_dense, 2)}</span>}
+              {runtime && <span className="text-txt-tertiary">· {t('Weight')} {fmt(runtime?.weights?.w_dense, 2)}</span>}
               {runtime && <span className="text-txt-tertiary">· {t('Gist')} {fmt(runtime?.memory_views?.weights?.gist, 2)}</span>}
               {runtime && <span className="text-txt-tertiary">· {t('Question')} {fmt(runtime?.memory_views?.weights?.question, 2)}</span>}
             </div>
@@ -387,7 +387,7 @@ export default function RecallStages({
           <div className="space-y-3 animate-in">
             <div className="flex items-center gap-3 text-[12.5px] text-txt-secondary">
               <span>{safeArray(data.lexical_hits).length} {t('hits')}</span>
-              {runtime && <span className="text-txt-tertiary">· {t('Weight')} {fmt(runtime?.normalized_linear?.w_lexical, 2)}</span>}
+              {runtime && <span className="text-txt-tertiary">· {t('Weight')} {fmt(runtime?.weights?.w_lexical, 2)}</span>}
             </div>
             <Table columns={lexicalColumns} rows={safeArray<RecallRow>(data.lexical_hits)} empty={t('No lexical hits.')} />
           </div>

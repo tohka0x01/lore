@@ -200,12 +200,12 @@ export async function searchMemories({
     fetchContentLexicalRows({ query: cleaned, domain, limit: candidateLimit }),
   ]);
 
-  // 3. Score via recall's strategy engine (4 view-based paths)
+  // 3. Score via recall's fixed scoring engine (4 view-based paths)
   const byUri = collectCandidates(
     { exactRows: exactRows as unknown as Record<string, unknown>[], glossarySemanticRows: gsRows as unknown as Record<string, unknown>[], denseRows: denseRows as unknown as Record<string, unknown>[], lexicalRows: viewLexicalRows as unknown as Record<string, unknown>[] },
     { viewPriors: scoringConfig.view_priors as Record<string, number> | null },
   );
-  const scored = runStrategy(scoringConfig.strategy, byUri, scoringConfig);
+  const scored = runStrategy(byUri, scoringConfig);
 
   // 4. Merge content lexical hits — boost score for URI matches, add new URIs
   const scoredMap = new Map<string, ScoredResult>();

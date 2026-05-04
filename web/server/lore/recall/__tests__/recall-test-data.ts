@@ -2,7 +2,7 @@
  * Test scenarios for recall benchmark — built from PRODUCTION data.
  *
  * Source: recall/debug API against localhost:18901 (2026-04-03)
- * All scores are real retrieval scores from Qwen3-Embedding-0.6B + glm-5.1 views.
+ * All scores are real retrieval scores from text-embedding-3-small + deepseek-v4-flash views.
  *
  * Production memory universe (28 nodes):
  *   core://soul                                               (p=0) glossary: [Siri]

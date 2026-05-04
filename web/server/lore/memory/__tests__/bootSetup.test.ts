@@ -28,7 +28,7 @@ const DEFAULT_VIEW_LLM_CONFIG = {
   provider: 'openai_compatible' as const,
   base_url: 'http://llm:8080',
   api_key: 'test-key',
-  model: 'glm-5.1',
+  model: 'deepseek-v4-flash',
   timeout_ms: 5000,
   temperature: 0.2,
   api_version: '',
@@ -238,7 +238,7 @@ describe('generateBootDrafts', () => {
     expect(mockGenerateText.mock.calls[0]?.[1]?.[1]?.content).toContain('这是一个偏工程执行的实例。');
     expect(mockGenerateText.mock.calls[0]?.[1]?.[1]?.content).toContain('强调执行边界。');
     expect(result).toEqual({
-      model: 'glm-5.1',
+      model: 'deepseek-v4-flash',
       results: [
         {
           uri: 'core://agent',
@@ -314,7 +314,7 @@ describe('generateBootDrafts', () => {
     });
 
     expect(result).toEqual({
-      model: 'glm-5.1',
+      model: 'deepseek-v4-flash',
       results: [
         {
           uri: 'core://agent',

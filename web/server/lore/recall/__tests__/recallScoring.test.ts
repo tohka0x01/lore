@@ -39,9 +39,7 @@ vi.mock('../../view/retrieval', () => ({
 import {
   collectCandidates,
   runStrategy,
-  STRATEGIES,
   DEFAULT_STRATEGY,
-  STRATEGY_LABELS,
 } from '../recallScoring';
 
 // ─── Test helpers ───────────────────────────────────────────────────
@@ -69,25 +67,13 @@ const baseConfig = {
   priority_step: 0.01,
   multi_view_step: 0.015,
   multi_view_cap: 0.05,
-  rrf_k: 20,
-  dense_floor: 0.40,
-  gs_floor: 0.30,
 };
 
 // ─── Re-export tests ────────────────────────────────────────────────
 
 describe('Re-exports from scoringStrategies', () => {
-  it('re-exports STRATEGIES', () => {
-    expect(STRATEGIES).toHaveLength(8);
-  });
-
   it('re-exports DEFAULT_STRATEGY', () => {
     expect(DEFAULT_STRATEGY).toBe('raw_plus_lex_damp');
-  });
-
-  it('re-exports STRATEGY_LABELS', () => {
-    expect(STRATEGY_LABELS).toBeDefined();
-    expect(typeof STRATEGY_LABELS.rrf).toBe('string');
   });
 });
 
@@ -261,48 +247,10 @@ describe('runStrategy', () => {
     lexical_views: new Set(), updated_at: null,
   });
 
-  it('dispatches to normalized_linear', () => {
-    const results = runStrategy('normalized_linear', simpleMap, baseConfig);
+  it('runs the fixed raw_plus_lex_damp strategy', () => {
+    const results = runStrategy(simpleMap, baseConfig);
     expect(results).toHaveLength(1);
     expect(results[0].uri).toBe('test://a');
-  });
-
-  it('dispatches to raw_score', () => {
-    const results = runStrategy('raw_score', simpleMap, baseConfig);
-    expect(results).toHaveLength(1);
-  });
-
-  it('dispatches to raw_plus_lex_damp', () => {
-    const results = runStrategy('raw_plus_lex_damp', simpleMap, baseConfig);
-    expect(results).toHaveLength(1);
-  });
-
-  it('dispatches to rrf', () => {
-    const results = runStrategy('rrf', simpleMap, baseConfig);
-    expect(results).toHaveLength(1);
-  });
-
-  it('dispatches to weighted_rrf', () => {
-    const results = runStrategy('weighted_rrf', simpleMap, baseConfig);
-    expect(results).toHaveLength(1);
-  });
-
-  it('dispatches to max_signal', () => {
-    const results = runStrategy('max_signal', simpleMap, baseConfig);
-    expect(results).toHaveLength(1);
-  });
-
-  it('dispatches to cascade', () => {
-    const results = runStrategy('cascade', simpleMap, baseConfig);
-    expect(results).toHaveLength(1);
-  });
-
-  it('dispatches to dense_floor', () => {
-    const results = runStrategy('dense_floor', simpleMap, baseConfig);
-    expect(results).toHaveLength(1);
-  });
-
-  it('throws for unknown strategy', () => {
-    expect(() => runStrategy('nonexistent', simpleMap, baseConfig)).toThrow('Unknown scoring strategy: nonexistent');
+    expect(results[0].score_breakdown).toHaveProperty('lexical_damp');
   });
 });

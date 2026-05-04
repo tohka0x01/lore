@@ -70,7 +70,7 @@ import {
   getEmbeddingRuntimeConfig as mockGetEmbeddingRuntimeConfig,
 } from '../../view/embeddings';
 import { getBootUris } from '../../memory/boot';
-import { DEFAULT_STRATEGY, STRATEGIES } from '../recallScoring';
+import { DEFAULT_STRATEGY } from '../recallScoring';
 
 const mockLogRecallEvents = vi.mocked(logRecallEvents);
 const mockSql = vi.mocked(sql);
@@ -80,10 +80,6 @@ const mockSql = vi.mocked(sql);
 function makeSettingsMock(overrides: Record<string, unknown> = {}) {
   return (keys: string[]) => {
     const defaults: Record<string, unknown> = {
-      'recall.scoring.strategy': 'raw_plus_lex_damp',
-      'recall.scoring.rrf_k': 20,
-      'recall.scoring.dense_floor': 0.5,
-      'recall.scoring.gs_floor': 0.4,
       'recall.weights.w_exact': 0.3,
       'recall.weights.w_glossary_semantic': 0.25,
       'recall.weights.w_dense': 0.3,
@@ -118,7 +114,7 @@ describe('sanitizeDenseRow', () => {
       view_type: 'gist',
       weight: 1.0,
       semantic_score: 0.876543210,
-      metadata: { llm_refined: true, llm_model: 'glm-5.1', cue_terms: ['hello'] },
+      metadata: { llm_refined: true, llm_model: 'deepseek-v4-flash', cue_terms: ['hello'] },
       disclosure: 'test disclosure',
     };
     const result = sanitizeDenseRow(row);
@@ -127,7 +123,7 @@ describe('sanitizeDenseRow', () => {
     expect(result.weight).toBe(1.0);
     expect(result.semantic_score).toBe(0.876543);
     expect(result.llm_refined).toBe(true);
-    expect(result.llm_model).toBe('glm-5.1');
+    expect(result.llm_model).toBe('deepseek-v4-flash');
     expect(result.disclosure).toBe('test disclosure');
     expect(Array.isArray(result.cue_terms)).toBe(true);
   });
@@ -453,10 +449,9 @@ describe('aggregateCandidates', () => {
     expect(uris.filter((u) => u === uri)).toHaveLength(1);
   });
 
-  it('accepts normalizedConfig alias for backward compat', () => {
+  it('accepts normalizedConfig alias as scoring weights for backward compat', () => {
     const uri = 'core://compat-test';
     const normalizedConfig = {
-      strategy: 'normalized_linear',
       w_exact: 0.30,
       w_glossary_semantic: 0.25,
       w_dense: 0.30,
@@ -477,12 +472,13 @@ describe('aggregateCandidates', () => {
     });
     expect(result.length).toBeGreaterThan(0);
     expect(result[0].uri).toBe(uri);
+    expect(result[0].score_breakdown).toHaveProperty('lexical_damp');
   });
 
-  it('scoringConfig takes priority over normalizedConfig', () => {
+  it('ignores legacy strategy fields and keeps the fixed scoring algorithm', () => {
     const uri = 'core://priority-test';
     const scoringConfig = {
-      strategy: 'raw_score',
+      strategy: 'removed_strategy',
       w_exact: 0.30,
       w_glossary_semantic: 0.25,
       w_dense: 0.30,
@@ -494,7 +490,7 @@ describe('aggregateCandidates', () => {
       view_priors: null,
     };
     const normalizedConfig = {
-      strategy: 'normalized_linear',
+      strategy: 'removed_strategy',
       w_exact: 0.30,
       w_glossary_semantic: 0.25,
       w_dense: 0.30,
@@ -505,16 +501,16 @@ describe('aggregateCandidates', () => {
       multi_view_cap: 0.05,
       view_priors: null,
     };
-    // Should not throw; raw_score strategy used
     const result = aggregateCandidates({
       exactRows: [{ uri, exact_score: 0.5, weight: 1.0 }],
       glossarySemanticRows: [],
       denseRows: [],
-      lexicalRows: [],
+      lexicalRows: [{ uri, lexical_score: 1, weight: 1.0, view_type: 'gist' }],
       scoringConfig,
       normalizedConfig,
     });
     expect(result.length).toBeGreaterThan(0);
+    expect(result[0].score_breakdown).toHaveProperty('lexical_damp');
   });
 
   it('returns sorted results by score descending', () => {
@@ -534,7 +530,7 @@ describe('aggregateCandidates', () => {
     }
   });
 
-  it('uses default normalized_linear config when neither config provided', () => {
+  it('uses the fixed raw_plus_lex_damp config when neither config provided', () => {
     const result = aggregateCandidates({
       exactRows: [{ uri: 'core://x', exact_score: 0.5, weight: 1.0 }],
       glossarySemanticRows: [],
@@ -585,35 +581,14 @@ describe('loadScoringConfig (via getRecallRuntimeConfig)', () => {
     vi.mocked(getMemoryViewRuntimeConfig).mockResolvedValue({ fts_config: 'simple', view_types: ['gist', 'question'] });
   });
 
-  it('runtime config scoring includes strategy and available strategies', async () => {
+  it('runtime config scoring exposes only the fixed strategy', async () => {
     const config = await getRecallRuntimeConfig(null);
-    expect(config.scoring).toBeDefined();
-    expect(typeof config.scoring.strategy).toBe('string');
-    expect(Array.isArray(config.scoring.strategies_available)).toBe(true);
-    expect(config.scoring.strategies_available.length).toBeGreaterThan(0);
-  });
-
-  it('falls back to DEFAULT_STRATEGY for unknown strategy value', async () => {
-    vi.mocked(mockGetSettings).mockImplementation(
-      makeSettingsMock({ 'recall.scoring.strategy': 'TOTALLY_INVALID_STRATEGY' }) as ReturnType<typeof vi.fn>,
-    );
-    const config = await getRecallRuntimeConfig(null);
-    expect(config.scoring.strategy).toBe(DEFAULT_STRATEGY);
-  });
-
-  it('accepts valid strategies from STRATEGIES list', async () => {
-    for (const strategy of STRATEGIES) {
-      vi.mocked(mockGetSettings).mockImplementation(
-        makeSettingsMock({ 'recall.scoring.strategy': strategy }) as ReturnType<typeof vi.fn>,
-      );
-      const config = await getRecallRuntimeConfig(null);
-      expect(config.scoring.strategy).toBe(strategy);
-    }
+    expect(config.scoring).toEqual({ strategy: DEFAULT_STRATEGY });
   });
 
   it('runtime config exposes lexical weight default at 0.03', async () => {
     const config = await getRecallRuntimeConfig(null);
-    expect(config.normalized_linear.w_lexical).toBe(0.03);
+    expect(config.weights.w_lexical).toBe(0.03);
   });
 
   it('runtime config has all required top-level keys', async () => {
@@ -622,7 +597,7 @@ describe('loadScoringConfig (via getRecallRuntimeConfig)', () => {
     expect(config).toHaveProperty('memory_views');
     expect(config).toHaveProperty('scoring');
     expect(config).toHaveProperty('recency');
-    expect(config).toHaveProperty('normalized_linear');
+    expect(config).toHaveProperty('weights');
     expect(config).toHaveProperty('display');
     expect(config).toHaveProperty('core_memory_uris');
   });

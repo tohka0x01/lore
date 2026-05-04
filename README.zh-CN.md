@@ -121,11 +121,11 @@ http://127.0.0.1:18901/setup
 1. **Embedding setup** — 配置 OpenAI-compatible embedding endpoint。
    - `Embedding Base URL`，例如 `http://host.docker.internal:8090/v1`
    - `Embedding API Key`
-   - `Embedding Model`，例如 `Qwen/Qwen3-Embedding-0.6B`
+   - `Embedding Model`，例如 `text-embedding-3-small`
 2. **View LLM setup** — 配置 view refinement 和 Dream 使用的模型。
    - `View LLM Base URL`
    - `View LLM API Key`
-   - `View LLM Model`，例如 `glm-5.1`
+   - `View LLM Model`，例如 `deepseek-v4-flash`
 3. **全局 boot 记忆** — 检查或保存默认值：
    - `core://agent`
    - `core://soul`
@@ -143,7 +143,7 @@ http://127.0.0.1:18901/setup
 
 初始化完成后打开 `/settings` 配置：
 
-- recall scoring strategy 和阈值
+- recall scoring 权重和阈值
 - View LLM，用于 view refinement 和 Dream
 - Dream 定时计划
 - 备份设置

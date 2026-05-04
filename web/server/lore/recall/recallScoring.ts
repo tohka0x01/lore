@@ -1,29 +1,15 @@
 /**
- * Recall scoring — candidate collection, formatting, and strategy routing.
+ * Recall scoring — candidate collection and fixed scoring.
  *
- * This module collects candidates from the four retrieval paths (exact,
- * glossary-semantic, dense, lexical), merges them by URI, and dispatches
- * to the appropriate scoring strategy from ./scoringStrategies.
+ * This module collects candidates from the four retrieval paths, merges them
+ * by URI, and applies the single supported raw_plus_lex_damp scoring algorithm.
  */
 
 import { buildCandidateKey, extractCueTerms, getViewPrior } from '../view/memoryViewQueries';
-import {
-  scoreNormalizedLinear,
-  scoreRawScore,
-  scoreRawPlusLexDamp,
-  scoreRrf,
-  scoreDenseFloor,
-  scoreWeightedRrf,
-  scoreMaxSignal,
-  scoreCascade,
-} from './scoringStrategies';
+import { scoreRawPlusLexDamp } from './scoringStrategies';
 
-// Re-export constants and types from scoringStrategies so that existing
-// import sites (e.g. recall.js) keep working with a single import source.
 export {
-  STRATEGIES,
   DEFAULT_STRATEGY,
-  STRATEGY_LABELS,
   type StrategyName,
 } from './scoringStrategies';
 
@@ -44,11 +30,6 @@ export interface ScoringCandidate {
   semantic_views: Set<string>;
   lexical_views: Set<string>;
   updated_at: Date | null;
-  // Ranks assigned by assignRanks (used by RRF strategies)
-  exact_rank?: number;
-  glossary_semantic_rank?: number;
-  dense_rank?: number;
-  lexical_rank?: number;
 }
 
 export interface ScoredResult {
@@ -76,9 +57,6 @@ export interface ScoringConfig {
   priority_step: number;
   multi_view_step: number;
   multi_view_cap: number;
-  rrf_k?: number;
-  dense_floor?: number;
-  gs_floor?: number;
   query_tokens?: number;
   recency_enabled?: boolean;
   recency_half_life_days?: number;
@@ -195,20 +173,8 @@ export function collectCandidates(
 // ─── Router ──────────────────────────────────────────────────────────
 
 export function runStrategy(
-  strategyName: string,
   byUri: Map<string, ScoringCandidate>,
   config: ScoringConfig,
 ): ScoredResult[] {
-  switch (strategyName) {
-    case 'normalized_linear': return scoreNormalizedLinear(byUri, config);
-    case 'raw_score': return scoreRawScore(byUri, config);
-    case 'raw_plus_lex_damp': return scoreRawPlusLexDamp(byUri, config);
-    case 'rrf': return scoreRrf(byUri, config);
-    case 'weighted_rrf': return scoreWeightedRrf(byUri, config);
-    case 'max_signal': return scoreMaxSignal(byUri, config);
-    case 'cascade': return scoreCascade(byUri, config);
-    case 'dense_floor': return scoreDenseFloor(byUri, config);
-    default:
-      throw new Error(`Unknown scoring strategy: ${strategyName}`);
-  }
+  return scoreRawPlusLexDamp(byUri, config);
 }

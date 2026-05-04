@@ -23,7 +23,6 @@ interface DebugForm {
   scorePrecision: number | string;
   readNodeDisplayMode: string;
   excludeBootFromResults: boolean;
-  strategy: string;
 }
 
 const DEFAULT_DEBUG: DebugForm = {
@@ -36,25 +35,7 @@ const DEFAULT_DEBUG: DebugForm = {
   scorePrecision: 2,
   readNodeDisplayMode: 'soft',
   excludeBootFromResults: true,
-  strategy: '',  // empty = use server default
 };
-
-interface StrategyOption {
-  value: string;
-  label: string;
-}
-
-const STRATEGY_OPTIONS: StrategyOption[] = [
-  { value: '', label: 'Default (follow /settings)' },
-  { value: 'raw_plus_lex_damp', label: 'raw_plus_lex_damp — raw score + lex damping · recommended · long-query safe' },
-  { value: 'raw_score', label: 'raw_score — raw score sum · most faithful · quality=score' },
-  { value: 'normalized_linear', label: 'normalized_linear — normalized ranks · old default · long-query inflation' },
-  { value: 'weighted_rrf', label: 'weighted_rrf — weighted rank fusion · uses path weights · 0-0.3 score' },
-  { value: 'rrf', label: 'rrf — rank fusion · 0-0.2 score · ranking only' },
-  { value: 'max_signal', label: 'max_signal — strongest signal wins · multi-path boost · tolerant' },
-  { value: 'cascade', label: 'cascade — signal tiers · exact>gs>dense · can exceed 1.0' },
-  { value: 'dense_floor', label: 'dense_floor — semantic threshold · low cosine gets cut · aggressive' },
-];
 
 export default function RecallWorkbench(): React.JSX.Element {
   const { t } = useT();
@@ -70,7 +51,6 @@ export default function RecallWorkbench(): React.JSX.Element {
     scorePrecision: readNumberParam(searchParams, 'score_precision', Number(DEFAULT_DEBUG.scorePrecision), { min: 0 }),
     readNodeDisplayMode: readStringParam(searchParams, 'read_node_display_mode', DEFAULT_DEBUG.readNodeDisplayMode),
     excludeBootFromResults: readBooleanParam(searchParams, 'exclude_boot_from_results', DEFAULT_DEBUG.excludeBootFromResults),
-    strategy: readStringParam(searchParams, 'strategy'),
   }), [searchParams]);
   const [debugForm, setDebugForm] = useState<DebugForm>(initialForm);
   const [debugData, setDebugData] = useState<Record<string, unknown> | null>(null);
@@ -94,7 +74,7 @@ export default function RecallWorkbench(): React.JSX.Element {
       score_precision: form.scorePrecision,
       read_node_display_mode: form.readNodeDisplayMode,
       exclude_boot_from_results: form.excludeBootFromResults,
-      strategy: form.strategy,
+      strategy: null,
     }, {
       query: DEFAULT_DEBUG.query,
       session_id: DEFAULT_DEBUG.sessionId,
@@ -105,7 +85,7 @@ export default function RecallWorkbench(): React.JSX.Element {
       score_precision: DEFAULT_DEBUG.scorePrecision,
       read_node_display_mode: DEFAULT_DEBUG.readNodeDisplayMode,
       exclude_boot_from_results: DEFAULT_DEBUG.excludeBootFromResults,
-      strategy: DEFAULT_DEBUG.strategy,
+      strategy: null,
     });
   }, [searchParams]);
 
@@ -127,7 +107,6 @@ export default function RecallWorkbench(): React.JSX.Element {
         exclude_boot_from_results: form.excludeBootFromResults,
         log_events: true,
       };
-      if (form.strategy) body.strategy = form.strategy;
       const { data } = await api.post('/browse/recall/debug', body);
       setDebugData(data);
     } catch (error) {
@@ -153,7 +132,6 @@ export default function RecallWorkbench(): React.JSX.Element {
       query: debugForm.query.trim(),
       sessionId: debugForm.sessionId.trim() || DEFAULT_DEBUG.sessionId,
       readNodeDisplayMode: debugForm.readNodeDisplayMode || DEFAULT_DEBUG.readNodeDisplayMode,
-      strategy: debugForm.strategy,
     };
     setDebugForm(nextForm);
     router.push(buildDebugUrl(nextForm));
@@ -212,16 +190,6 @@ export default function RecallWorkbench(): React.JSX.Element {
 
             {showAdvanced && (
               <div className="pt-2 border-t border-separator-hairline space-y-3">
-                {/* Strategy selector — full width since label is long */}
-                <label className="block">
-                  <span className="block mb-1 text-[11px] font-medium text-txt-tertiary">{t('Scoring strategy')}</span>
-                  <AppSelect
-                    value={debugForm.strategy}
-                    onValueChange={(value) => patchForm({ strategy: value })}
-                    options={STRATEGY_OPTIONS.map((opt) => ({ value: opt.value, label: t(opt.label) }))}
-                    className="font-sans"
-                  />
-                </label>
                 <div className="grid gap-x-6 gap-y-3 grid-cols-2 md:grid-cols-3 lg:grid-cols-6">
                   <label className="block">
                     <span className="block mb-1 text-[11px] font-medium text-txt-tertiary">{t('Session')}</span>
@@ -294,11 +262,10 @@ export default function RecallWorkbench(): React.JSX.Element {
           <Section title={t('Runtime')} subtitle={t('Configuration at time of query')}>
             <div className="grid gap-8 md:grid-cols-2">
               <div>
-                <div className="mb-3 text-[11px] font-medium uppercase tracking-[0.06em] text-txt-tertiary">{t('Services & strategy')}</div>
+                <div className="mb-3 text-[11px] font-medium uppercase tracking-[0.06em] text-txt-tertiary">{t('Services')}</div>
                 <dl className="space-y-2.5 text-[13px]">
                   {(
                     [
-                      [t('Strategy'), (runtime.scoring as Record<string, unknown>)?.strategy],
                       [t('Query tokens'), (debugData?.retrieval_meta as Record<string, unknown>)?.query_tokens],
                       [t('Embedding'), (runtime.embedding as Record<string, unknown>)?.model],
                       [t('View LLM'), ((runtime.memory_views as Record<string, unknown>)?.llm as Record<string, unknown>)?.model],
@@ -317,10 +284,10 @@ export default function RecallWorkbench(): React.JSX.Element {
                 <dl className="space-y-2.5 text-[13px]">
                   {(
                     [
-                      ['w_exact', (runtime.normalized_linear as Record<string, unknown>)?.w_exact],
-                      ['w_glossary_semantic', (runtime.normalized_linear as Record<string, unknown>)?.w_glossary_semantic],
-                      ['w_dense', (runtime.normalized_linear as Record<string, unknown>)?.w_dense],
-                      ['w_lexical', (runtime.normalized_linear as Record<string, unknown>)?.w_lexical],
+                      ['w_exact', (runtime.weights as Record<string, unknown>)?.w_exact],
+                      ['w_glossary_semantic', (runtime.weights as Record<string, unknown>)?.w_glossary_semantic],
+                      ['w_dense', (runtime.weights as Record<string, unknown>)?.w_dense],
+                      ['w_lexical', (runtime.weights as Record<string, unknown>)?.w_lexical],
                     ] as [string, unknown][]
                   ).map(([k, v]) => (
                     <div key={k} className="flex items-center justify-between gap-4 border-b border-separator-hairline pb-2.5 last:border-b-0">

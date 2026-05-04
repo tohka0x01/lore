@@ -27,11 +27,11 @@ vi.mock('@/lib/i18n', () => ({
 import { FieldRow, type FieldSchema } from '../SettingsSectionEditor';
 
 const enumSchema: FieldSchema = {
-  key: 'recall.strategy',
-  label: 'Strategy',
+  key: 'recall.display.read_node_display_mode',
+  label: 'Read mode',
   type: 'enum',
-  options: ['raw_score', 'weighted_rrf'],
-  option_labels: { raw_score: 'Raw score', weighted_rrf: 'Weighted RRF' },
+  options: ['soft', 'hard'],
+  option_labels: { soft: 'Soft', hard: 'Hard' },
   section: 'recall',
 };
 
@@ -76,7 +76,7 @@ describe('SettingsSectionEditor fields', () => {
     const html = renderToStaticMarkup(
       <FieldRow
         schema={enumSchema}
-        value="raw_score"
+        value="soft"
         source="default"
         dirty={false}
         secretConfigured={false}
@@ -87,7 +87,7 @@ describe('SettingsSectionEditor fields', () => {
     );
 
     expect(html).toContain('data-app-select="true"');
-    expect(html).toContain('raw_score — Raw score');
+    expect(html).toContain('soft — Soft');
     expect(html).not.toContain('<select');
   });
 

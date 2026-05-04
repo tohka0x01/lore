@@ -49,49 +49,7 @@ export interface SettingSection {
 // ---------------------------------------------------------------------------
 
 export const SETTINGS_SCHEMA: SettingDef[] = [
-  // -- Scoring strategy -----------------------------------------------------
-  {
-    key: 'recall.scoring.strategy',
-    section: 'recall_scoring',
-    label: '评分策略',
-    type: 'enum',
-    default: 'raw_plus_lex_damp',
-    options: ['raw_plus_lex_damp', 'raw_score', 'normalized_linear', 'weighted_rrf', 'rrf', 'max_signal', 'cascade', 'dense_floor'],
-    option_labels: {
-      raw_plus_lex_damp: '原始分+lex长压 · 推荐 · 抗长query',
-      raw_score: '原始分相加 · 最诚实 · 质量=分数',
-      normalized_linear: '排名归一化 · 旧默认 · 长query虚高',
-      weighted_rrf: '加权rank融合 · 用路径权重 · 0-0.3分',
-      rrf: 'rank融合 · 0-0.2分 · 只看排名',
-      max_signal: '取最强信号 · 多路径加分 · 宽容',
-      cascade: '信号分级 · exact>gs>dense · 可超1.0',
-      dense_floor: '语义阈值 · 余弦低砍掉 · 激进',
-    },
-    description: '决定 4 路分数如何合成 final score。不同策略得分绝对值范围不同，切换后可能要调 min_display_score。',
-  },
-  {
-    key: 'recall.scoring.rrf_k',
-    section: 'recall_scoring',
-    label: 'RRF k 常数',
-    type: 'integer', default: 20, min: 5, max: 200, step: 1,
-    description: '仅用于 rrf 策略：越小越倾向 top-rank，典型 20-60',
-  },
-  {
-    key: 'recall.scoring.dense_floor',
-    section: 'recall_scoring',
-    label: 'Dense 余弦下限',
-    type: 'number', default: 0.50, min: 0, max: 0.9, step: 0.01,
-    description: '仅用于 dense_floor 策略：低于此的 dense 余弦相似度视为 0',
-  },
-  {
-    key: 'recall.scoring.gs_floor',
-    section: 'recall_scoring',
-    label: 'Glossary Semantic 下限',
-    type: 'number', default: 0.40, min: 0, max: 0.9, step: 0.01,
-    description: '仅用于 dense_floor 策略：低于此的 glossary 语义分视为 0',
-  },
-
-  // -- Recall weights (applied across all strategies except rrf) ------------
+  // -- Recall weights -------------------------------------------------------
   {
     key: 'recall.weights.w_exact',
     section: 'recall_weights',
@@ -187,7 +145,7 @@ export const SETTINGS_SCHEMA: SettingDef[] = [
     section: 'recall_display',
     label: '最低展示分数',
     type: 'number', default: 0.60, min: 0, max: 1, step: 0.01,
-    description: '低于此分数的候选不会注入到 prompt（raw_plus_lex_damp 建议 0.60；normalized_linear 旧默认 0.45；rrf 建议 0.10）',
+    description: '低于此分数的候选不会注入到 prompt（默认评分建议 0.60）',
   },
   {
     key: 'recall.display.max_display_items',
@@ -264,8 +222,8 @@ export const SETTINGS_SCHEMA: SettingDef[] = [
     key: 'embedding.model',
     section: 'embedding',
     label: 'Embedding Model',
-    type: 'string', default: '',
-    description: '如 Qwen/Qwen3-Embedding-0.6B',
+    type: 'string', default: 'text-embedding-3-small',
+    description: '如 text-embedding-3-small',
   },
 
   // -- View LLM -------------------------------------------------------------
@@ -300,7 +258,7 @@ export const SETTINGS_SCHEMA: SettingDef[] = [
     key: 'view_llm.model',
     section: 'view_llm',
     label: 'View LLM Model',
-    type: 'string', default: 'glm-5.1',
+    type: 'string', default: 'deepseek-v4-flash',
     description: '用于生成 gist/question 的 LLM 模型名',
   },
   {
@@ -483,7 +441,6 @@ export const SCHEMA_BY_KEY = new Map<string, SettingDef>(
 // ---------------------------------------------------------------------------
 
 export const SECTIONS: SettingSection[] = [
-  { id: 'recall_scoring', label: '评分策略', description: '选择评分算法（影响 score 的绝对值与长 query 行为）' },
   { id: 'recall_weights', label: '召回权重', description: '四路评分的线性权重（建议和为 1）' },
   { id: 'recall_bonus', label: '加分参数', description: '优先级和多视图命中的加分' },
   { id: 'recall_recency', label: '时间衰减', description: '让近期更新的记忆排名更高（默认关闭）' },
