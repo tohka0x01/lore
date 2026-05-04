@@ -31,7 +31,6 @@ services:
       DATABASE_URL: ${DATABASE_URL:-postgresql://lore:change-me@postgres:5432/lore}
       API_TOKEN: ${API_TOKEN:-}
       # Boot is fixed server-side to core://agent, core://soul, preferences://user
-      SNAPSHOT_DIR: /app/snapshots
       LORE_EMBEDDING_PROVIDER: ${LORE_EMBEDDING_PROVIDER:-openai_compatible}
       LORE_EMBEDDING_BASE_URL: ${LORE_EMBEDDING_BASE_URL:-http://127.0.0.1:8090/v1}
       LORE_EMBEDDING_API_KEY: ${LORE_EMBEDDING_API_KEY:-change-me}

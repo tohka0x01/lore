@@ -13,12 +13,10 @@ vi.mock('fs/promises', () => ({
     unlink: vi.fn(),
   },
 }));
-vi.mock('../../config/settings', () => ({ getSetting: vi.fn() }));
 vi.mock('../../../../server/auth', () => ({ requireBearerAuth: vi.fn() }));
 
 import { sql, getPool } from '../../../db';
 import fs from 'fs/promises';
-import { getSetting } from '../../config/settings';
 import { requireBearerAuth } from '../../../../server/auth';
 import { extractContentAndMeta, listActivePaths } from '../reviewDiffState';
 import {
@@ -70,7 +68,6 @@ import * as reviewGroupDiffRoute from '../../../../app/api/review/groups/[nodeUu
 const mockSql = vi.mocked(sql);
 const mockGetPool = vi.mocked(getPool);
 const mockFs = vi.mocked(fs);
-const mockGetSetting = vi.mocked(getSetting);
 const mockRequireBearerAuth = vi.mocked(requireBearerAuth);
 
 function makeResult(rows: Record<string, unknown>[] = [], rowCount = rows.length) {
@@ -166,16 +163,10 @@ describe('review route contracts', () => {
 describe('changeset store helpers', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    mockGetSetting.mockResolvedValue('/tmp/review');
   });
 
-  it('resolves changeset.json under configured review path', async () => {
-    await expect(_getChangesetPath()).resolves.toBe('/tmp/review/changeset.json');
-  });
-
-  it('throws when review local path is not configured', async () => {
-    mockGetSetting.mockResolvedValue('');
-    await expect(_getChangesetPath()).rejects.toThrow('Review local path is not configured.');
+  it('resolves changeset.json under the fixed internal snapshot path', async () => {
+    await expect(_getChangesetPath()).resolves.toBe('/app/snapshots/changeset.json');
   });
 
   it('loads empty changeset when file does not exist', async () => {
@@ -183,18 +174,18 @@ describe('changeset store helpers', () => {
     await expect(_loadChangeset()).resolves.toEqual({ rows: {} });
   });
 
-  it('saves changeset under configured directory', async () => {
+  it('saves changeset under the fixed internal snapshot directory', async () => {
     mockFs.mkdir.mockResolvedValue(undefined as any);
     mockFs.writeFile.mockResolvedValue(undefined);
     await _saveChangeset({ rows: { a: { table: 'nodes', before: null, after: { uuid: 'x' } } } } as any);
-    expect(mockFs.mkdir).toHaveBeenCalledWith('/tmp/review', { recursive: true });
-    expect(mockFs.writeFile).toHaveBeenCalledWith('/tmp/review/changeset.json', expect.any(String), 'utf8');
+    expect(mockFs.mkdir).toHaveBeenCalledWith('/app/snapshots', { recursive: true });
+    expect(mockFs.writeFile).toHaveBeenCalledWith('/app/snapshots/changeset.json', expect.any(String), 'utf8');
   });
 
   it('removes changeset file when present', async () => {
     mockFs.unlink.mockResolvedValue(undefined);
     await _removeChangesetFile();
-    expect(mockFs.unlink).toHaveBeenCalledWith('/tmp/review/changeset.json');
+    expect(mockFs.unlink).toHaveBeenCalledWith('/app/snapshots/changeset.json');
   });
 });
 
@@ -500,7 +491,6 @@ describe('review group helpers', () => {
 describe('listReviewGroups', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    mockGetSetting.mockResolvedValue('/tmp/review');
     mockSql.mockResolvedValue(makeResult([]));
   });
 
@@ -532,7 +522,6 @@ describe('listReviewGroups', () => {
 describe('getReviewGroupDiff', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    mockGetSetting.mockResolvedValue('/tmp/review');
     mockSql.mockResolvedValue(makeResult([]));
   });
 
@@ -574,7 +563,6 @@ describe('getReviewGroupDiff', () => {
 describe('approveReviewGroup', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    mockGetSetting.mockResolvedValue('/tmp/review');
     mockSql.mockResolvedValue(makeResult([]));
   });
 
@@ -596,7 +584,7 @@ describe('approveReviewGroup', () => {
     expect(mockFs.unlink).toHaveBeenCalled();
   });
 
-  it('reads and writes changeset.json under the configured review path', async () => {
+  it('reads and writes changeset.json under the fixed internal snapshot path', async () => {
     const changeset = buildChangeset({
       'nodes:uuid1': { table: 'nodes', before: null, after: { uuid: 'uuid1' } },
       'nodes:uuid2': { table: 'nodes', before: null, after: { uuid: 'uuid2' } },
@@ -607,9 +595,9 @@ describe('approveReviewGroup', () => {
 
     await approveReviewGroup('uuid1');
 
-    expect(mockFs.readFile).toHaveBeenCalledWith('/tmp/review/changeset.json', 'utf8');
-    expect(mockFs.mkdir).toHaveBeenCalledWith('/tmp/review', { recursive: true });
-    expect(mockFs.writeFile).toHaveBeenCalledWith('/tmp/review/changeset.json', expect.any(String), 'utf8');
+    expect(mockFs.readFile).toHaveBeenCalledWith('/app/snapshots/changeset.json', 'utf8');
+    expect(mockFs.mkdir).toHaveBeenCalledWith('/app/snapshots', { recursive: true });
+    expect(mockFs.writeFile).toHaveBeenCalledWith('/app/snapshots/changeset.json', expect.any(String), 'utf8');
   });
 
 });
@@ -621,7 +609,6 @@ describe('approveReviewGroup', () => {
 describe('rollbackReviewGroup', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    mockGetSetting.mockResolvedValue('/tmp/review');
     mockSql.mockResolvedValue(makeResult([]));
   });
 
@@ -659,7 +646,6 @@ describe('rollbackReviewGroup', () => {
 describe('clearAllReviewGroups', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    mockGetSetting.mockResolvedValue('/tmp/review');
   });
 
   it('throws 404 when no pending changes', async () => {

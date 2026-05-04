@@ -78,9 +78,7 @@ function makeValidBackup(overrides: Record<string, unknown> = {}) {
 
 beforeEach(() => {
   vi.clearAllMocks();
-  mockGetSettings.mockResolvedValue({
-    'backup.local.path': '/tmp/lore-backups',
-  } as any);
+  mockGetSettings.mockResolvedValue({} as any);
 });
 
 describe('exportDatabase', () => {
@@ -258,9 +256,10 @@ describe('exportToLocal', () => {
     mockFs.stat.mockResolvedValue({ size: 2048, mtime: new Date() } as any);
   });
 
-  it('creates the configured backup directory', async () => {
+  it('creates the fixed internal backup directory', async () => {
     await exportToLocal();
-    expect(mockFs.mkdir).toHaveBeenCalledWith('/tmp/lore-backups', { recursive: true });
+    expect(mockFs.mkdir).toHaveBeenCalledWith('/app/snapshots/backups', { recursive: true });
+    expect(mockGetSettings).not.toHaveBeenCalledWith(['backup.local.path']);
   });
 
   it('writes JSON file and returns metadata', async () => {
@@ -318,11 +317,11 @@ describe('listLocalBackups', () => {
 });
 
 describe('readLocalBackup', () => {
-  it('reads from the configured backup directory with sanitized filename', async () => {
+  it('reads from the fixed internal backup directory with sanitized filename', async () => {
     mockFs.readFile.mockResolvedValue('{"format":"lore-backup-v1"}' as any);
     const result = await readLocalBackup('lore-backup-2025-01-01-00-00-00.json');
     expect(mockFs.readFile).toHaveBeenCalledWith(
-      '/tmp/lore-backups/lore-backup-2025-01-01-00-00-00.json',
+      '/app/snapshots/backups/lore-backup-2025-01-01-00-00-00.json',
       'utf-8',
     );
     expect(result).toContain('lore-backup-v1');
@@ -340,9 +339,9 @@ describe('readLocalBackup', () => {
 });
 
 describe('deleteLocalBackup', () => {
-  it('deletes from the configured backup directory with sanitized filename', async () => {
+  it('deletes from the fixed internal backup directory with sanitized filename', async () => {
     await deleteLocalBackup('lore-backup-2025-01-01-00-00-00.json');
-    expect(mockFs.unlink).toHaveBeenCalledWith('/tmp/lore-backups/lore-backup-2025-01-01-00-00-00.json');
+    expect(mockFs.unlink).toHaveBeenCalledWith('/app/snapshots/backups/lore-backup-2025-01-01-00-00-00.json');
   });
 });
 

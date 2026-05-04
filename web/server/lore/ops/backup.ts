@@ -2,6 +2,7 @@ import fs from 'node:fs/promises';
 import path from 'node:path';
 import { getPool, sql } from '../../db';
 import { getSettings } from '../config/settings';
+import { BACKUP_DIR } from '../core/storagePaths';
 
 const FORMAT_VERSION = 'lore-backup-v1';
 
@@ -216,12 +217,7 @@ export async function restoreDatabase(data: unknown): Promise<RestoreResult> {
 // ---------------------------------------------------------------------------
 
 async function getBackupDir(): Promise<string> {
-  const configured = String(await getSettings(['backup.local.path']).then((settings) => settings['backup.local.path'] ?? '')).trim();
-  if (!configured) {
-    const error = Object.assign(new Error('Local backup path is not configured.'), { status: 500 });
-    throw error;
-  }
-  return path.resolve(configured);
+  return BACKUP_DIR;
 }
 
 async function ensureBackupDir(): Promise<string> {

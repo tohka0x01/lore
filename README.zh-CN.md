@@ -79,7 +79,6 @@ services:
     environment:
       DATABASE_URL: postgresql://lore:replace-this@postgres:5432/lore
       API_TOKEN: replace-this-if-exposed
-      SNAPSHOT_DIR: /app/snapshots
     ports:
       - "18901:18901"
     volumes:
@@ -89,6 +88,8 @@ volumes:
   lore_postgres_data:
   lore_snapshots:
 ```
+
+Lore 在容器内固定把 snapshots 和本地备份写到 `/app/snapshots`；把宿主机持久化目录映射到这个路径即可。
 
 启动 Lore：
 

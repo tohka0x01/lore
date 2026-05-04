@@ -5,15 +5,6 @@
  * metadata (e.g. UI rendering) don't pull in DB or cache dependencies.
  */
 
-import path from 'node:path';
-import { fileURLToPath } from 'node:url';
-
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
-const REPO_ROOT = path.resolve(__dirname, '../../../../');
-const DEFAULT_REVIEW_LOCAL_PATH = path.join(REPO_ROOT, 'snapshots');
-const DEFAULT_BACKUP_LOCAL_PATH = path.join(DEFAULT_REVIEW_LOCAL_PATH, 'backups');
-
 // ---------------------------------------------------------------------------
 // Types
 // ---------------------------------------------------------------------------
@@ -380,13 +371,6 @@ export const SETTINGS_SCHEMA: SettingDef[] = [
     description: '将备份保存到本地文件系统',
   },
   {
-    key: 'backup.local.path',
-    section: 'backup',
-    label: '本地备份目录',
-    type: 'string', default: DEFAULT_BACKUP_LOCAL_PATH,
-    description: '本地备份文件保存目录',
-  },
-  {
     key: 'backup.webdav.enabled',
     section: 'backup',
     label: 'WebDAV 备份',
@@ -418,13 +402,6 @@ export const SETTINGS_SCHEMA: SettingDef[] = [
     label: '包含召回事件',
     type: 'boolean', default: false,
     description: '备份中包含 recall_events 表（数据量可能很大）',
-  },
-  {
-    key: 'review.local.path',
-    section: 'review',
-    label: 'Review 本地目录',
-    type: 'string', default: DEFAULT_REVIEW_LOCAL_PATH,
-    description: 'Review changeset.json 保存目录',
   },
 ];
 

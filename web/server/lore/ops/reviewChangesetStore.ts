@@ -1,15 +1,10 @@
 import fs from 'fs/promises';
 import path from 'path';
-import { getSetting } from '../config/settings';
+import { REVIEW_CHANGESET_PATH } from '../core/storagePaths';
 import type { ChangesetData } from './reviewRowHelpers';
 
 export async function getChangesetPath(): Promise<string> {
-  const configured = String((await getSetting('review.local.path')) ?? '').trim();
-  if (!configured) {
-    const error = Object.assign(new Error('Review local path is not configured.'), { status: 500 });
-    throw error;
-  }
-  return path.join(path.resolve(configured), 'changeset.json');
+  return REVIEW_CHANGESET_PATH;
 }
 
 export async function loadChangeset(): Promise<ChangesetData> {
