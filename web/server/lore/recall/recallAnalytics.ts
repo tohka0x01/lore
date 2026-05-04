@@ -1157,7 +1157,7 @@ export async function getRecallStats({
   let recentEventRows: Record<string, unknown>[] = [];
 
   if (filters.query_id) {
-    const [qQuery, qCandidates, qEventsForMerge, qPaths] = await Promise.all([
+    const [qQuery, qCandidates, qEventsForDetail, qRecentEvents, qPaths] = await Promise.all([
       sql(
         `
           SELECT query_id, query_text, session_id, client_type, merged_count, shown_count, used_count, created_at
@@ -1185,6 +1185,17 @@ export async function getRecallStats({
             client_type, ranked_position, displayed_position, created_at
           FROM recall_events
           WHERE ${filterWhere}
+          ORDER BY node_uri ASC, retrieval_path ASC, view_type ASC, id ASC
+        `,
+        filterParams,
+      ),
+      sql(
+        `
+          SELECT id, query_text, node_uri, retrieval_path, view_type,
+            pre_rank_score, final_rank_score, selected, used_in_answer, metadata,
+            client_type, ranked_position, displayed_position, created_at
+          FROM recall_events
+          WHERE ${filterWhere}
           ORDER BY created_at DESC, id DESC
           LIMIT $${filterParams.length + 1}
         `,
@@ -1198,11 +1209,12 @@ export async function getRecallStats({
         filterParams,
       ),
     ]);
-    recentEventRows = qEventsForMerge.rows as Record<string, unknown>[];
+    recentEventRows = qRecentEvents.rows as Record<string, unknown>[];
 
     const queryRow = qQuery.rows[0] || {};
     const candidateByUri = new Map((qCandidates.rows as Record<string, unknown>[]).map((row) => [String(row.node_uri || ''), row]));
-    const mergedByUri = new Map(mergeEventsByNode(qEventsForMerge.rows).map((candidate) => [candidate.uri, candidate]));
+    const queryEventRows = qEventsForDetail.rows as Record<string, unknown>[];
+    const mergedByUri = new Map(mergeEventsByNode(queryEventRows).map((candidate) => [candidate.uri, candidate]));
     const mergedCandidates = [...candidateByUri.entries()].map(([uri, row]) => {
       const eventCandidate = mergedByUri.get(uri);
       return {
@@ -1228,7 +1240,7 @@ export async function getRecallStats({
       const br = b.ranked_position ?? 999999;
       return ar - br || b.score - a.score || a.uri.localeCompare(b.uri);
     });
-    const debugShape = reshapeEventsForDebugView(qEventsForMerge.rows, mergedCandidates);
+    const debugShape = reshapeEventsForDebugView(queryEventRows, mergedCandidates);
     const shownCount = qCandidates.rows.filter((row: Record<string, unknown>) => row.selected === true).length;
     const usedCount = qCandidates.rows.filter((row: Record<string, unknown>) => row.used_in_answer === true).length;
 

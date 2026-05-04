@@ -584,6 +584,61 @@ describe('getRecallStats', () => {
     expect(stats.query_detail).toBeDefined();
   });
 
+  it('rebuilds query detail from complete path events while keeping recent events limited', async () => {
+    mockSql.mockImplementation(async (query: string) => {
+      const sqlText = String(query);
+      if (sqlText.includes('SELECT key, value FROM app_settings')) {
+        return makeResult([{ key: 'recall.display.min_display_score', value: 0.6 }]);
+      }
+      if (sqlText.includes('FROM recall_queries') && sqlText.includes('SUM(merged_count)')) {
+        return makeResult([{ total_merged: '1', total_shown: '1', total_used: '0', query_count: '1', last_event_at: '2026-05-04T10:35:42Z' }]);
+      }
+      if (sqlText.includes('FROM recall_queries') && sqlText.includes('COUNT(*)::int AS total')) {
+        return makeResult([{ total: '1' }]);
+      }
+      if (sqlText.includes('FROM recall_queries') && sqlText.includes('ORDER BY created_at DESC')) {
+        return makeResult([{ query_id: 'q1', query_text: 'sync plugin readme', merged_count: 1, shown_count: 1, used_count: 0, client_type: 'openclaw', created_at: '2026-05-04T10:35:42Z' }]);
+      }
+      if (sqlText.includes('FROM recall_query_candidates') && sqlText.includes('GROUP BY')) {
+        return makeResult([]);
+      }
+      if (sqlText.includes('FROM recall_query_candidates') && sqlText.includes('COUNT(*) FILTER')) {
+        return makeResult([{ shown_candidates: '1', used_candidates: '0' }]);
+      }
+      if (sqlText.includes('FROM recall_query_candidates') && sqlText.includes('SELECT c.node_uri')) {
+        return makeResult([{ node_uri: 'core://a', final_rank_score: 0.9, selected: true, used_in_answer: false, ranked_position: 1, displayed_position: 1, client_type: 'openclaw', created_at: '2026-05-04T10:35:42Z' }]);
+      }
+      if (sqlText.includes('FROM recall_events') && sqlText.includes('GROUP BY retrieval_path')) {
+        return makeResult([]);
+      }
+      if (sqlText.includes('FROM recall_events') && sqlText.includes('SELECT id, query_text') && sqlText.includes('LIMIT')) {
+        return makeResult([
+          { id: 3, query_text: 'sync plugin readme', node_uri: 'core://a', retrieval_path: 'dense', view_type: 'gist', pre_rank_score: 0.6, final_rank_score: 0.9, selected: true, used_in_answer: false, metadata: { raw_score: 0.6, matched_on: ['dense'] }, client_type: 'openclaw', ranked_position: 1, displayed_position: 1, created_at: '2026-05-04T10:35:44Z' },
+        ]);
+      }
+      if (sqlText.includes('FROM recall_events') && sqlText.includes('SELECT id, query_text')) {
+        return makeResult([
+          { id: 1, query_text: 'sync plugin readme', node_uri: 'core://a', retrieval_path: 'exact', view_type: 'exact', pre_rank_score: 0.8, final_rank_score: 0.9, selected: true, used_in_answer: false, metadata: { raw_score: 0.8, matched_on: ['exact'], cue_terms: ['plugin'] }, client_type: 'openclaw', ranked_position: 1, displayed_position: 1, created_at: '2026-05-04T10:35:42Z' },
+          { id: 2, query_text: 'sync plugin readme', node_uri: 'core://a', retrieval_path: 'glossary_semantic', view_type: null, pre_rank_score: 0.7, final_rank_score: 0.9, selected: true, used_in_answer: false, metadata: { raw_score: 0.7, matched_on: ['glossary_semantic'], cue_terms: ['readme'] }, client_type: 'openclaw', ranked_position: 1, displayed_position: 1, created_at: '2026-05-04T10:35:43Z' },
+          { id: 3, query_text: 'sync plugin readme', node_uri: 'core://a', retrieval_path: 'dense', view_type: 'gist', pre_rank_score: 0.6, final_rank_score: 0.9, selected: true, used_in_answer: false, metadata: { raw_score: 0.6, matched_on: ['dense'] }, client_type: 'openclaw', ranked_position: 1, displayed_position: 1, created_at: '2026-05-04T10:35:44Z' },
+        ]);
+      }
+      return makeResult();
+    });
+
+    const stats = await getRecallStats({ queryId: 'q1', limit: 3 });
+
+    expect(stats.recent_events).toHaveLength(1);
+    expect(stats.query_detail.exact_hits).toHaveLength(1);
+    expect(stats.query_detail.glossary_semantic_hits).toHaveLength(1);
+    expect(stats.query_detail.merged_candidates[0]).toMatchObject({
+      uri: 'core://a',
+      exact_score: 0.8,
+      glossary_semantic_score: 0.7,
+      dense_score: 0.6,
+    });
+  });
+
   it('ignores dormant nodeUri filters and does not return node_detail', async () => {
     const summaryRow = { total_merged: '3', total_shown: '1', total_used: '0', query_count: '2', last_event_at: '2025-01-01T00:00:00Z' };
     mockSql.mockResolvedValue(makeResult([summaryRow]));
