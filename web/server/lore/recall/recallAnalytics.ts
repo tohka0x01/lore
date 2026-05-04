@@ -54,8 +54,34 @@ interface DisplayThresholdAnalysis {
   separation_gap: number | null;
 }
 
+interface MemoryEventCounts {
+  memory_created_count: number;
+  memory_updated_count: number;
+  memory_deleted_count: number;
+}
+
 function roundMetric(value: number | null, digits = 3): number | null {
   return value === null ? null : Number(value.toFixed(digits));
+}
+
+function clientTypeKey(value: unknown): string {
+  return typeof value === 'string' && value.trim() ? value.trim().toLowerCase() : '';
+}
+
+function emptyMemoryEventCounts(): MemoryEventCounts {
+  return {
+    memory_created_count: 0,
+    memory_updated_count: 0,
+    memory_deleted_count: 0,
+  };
+}
+
+function memoryEventCountsFromRow(row: Record<string, unknown>): MemoryEventCounts {
+  return {
+    memory_created_count: Number(row.memory_created_count || 0),
+    memory_updated_count: Number(row.memory_updated_count || 0),
+    memory_deleted_count: Number(row.memory_deleted_count || 0),
+  };
 }
 
 function buildDisplayThresholdAnalysis(row: Record<string, unknown>): DisplayThresholdAnalysis {
@@ -1037,7 +1063,7 @@ export async function getRecallStats({
   const recentQueriesListParams = [...filterParams, safeRecentQueriesLimit, safeRecentQueriesOffset];
   let queryDetail: Record<string, unknown> | null = null;
 
-  const [summary, recentQueriesCount, recentQueries, displayThreshold, clientTypeBreakdown] = await Promise.all([
+  const [summary, recentQueriesCount, recentQueries, displayThreshold, clientTypeBreakdown, memoryEventBreakdown] = await Promise.all([
     sql(
       `
         SELECT
@@ -1120,6 +1146,27 @@ export async function getRecallStats({
       `,
       breakdownParams,
     ),
+    sql(
+      `
+        SELECT
+          LOWER(COALESCE(details->>'client_type', '')) AS client_type,
+          (COUNT(*) FILTER (WHERE event_type = 'create'))::int AS memory_created_count,
+          (COUNT(*) FILTER (WHERE event_type = 'update'))::int AS memory_updated_count,
+          (COUNT(*) FILTER (WHERE event_type IN ('delete', 'hard_delete')))::int AS memory_deleted_count
+        FROM memory_events
+        WHERE created_at >= NOW() - ($1::int * INTERVAL '1 day')
+        GROUP BY LOWER(COALESCE(details->>'client_type', ''))
+        HAVING COUNT(*) FILTER (WHERE event_type IN ('create', 'update', 'delete', 'hard_delete')) > 0
+        ORDER BY
+          (
+            COUNT(*) FILTER (WHERE event_type = 'create')
+            + COUNT(*) FILTER (WHERE event_type = 'update')
+            + COUNT(*) FILTER (WHERE event_type IN ('delete', 'hard_delete'))
+          ) DESC,
+          client_type ASC
+      `,
+      [safeDays],
+    ),
   ]);
 
   const summaryRow = summary.rows[0] || {};
@@ -1132,17 +1179,41 @@ export async function getRecallStats({
     current_min_display_score: roundMetric(runtimeMinDisplayScore),
   };
   const clientTypeBreakdownResult = clientTypeBreakdown as Awaited<ReturnType<typeof sql>>;
+  const memoryEventBreakdownResult = memoryEventBreakdown as Awaited<ReturnType<typeof sql>>;
+  const memoryEventsByClientType = new Map<string, MemoryEventCounts>(
+    memoryEventBreakdownResult.rows.map((row: Record<string, unknown>) => [
+      clientTypeKey(row.client_type),
+      memoryEventCountsFromRow(row),
+    ]),
+  );
+  const seenClientTypeKeys = new Set<string>();
   const clientTypeRows = clientTypeBreakdownResult.rows.map((row: Record<string, unknown>) => {
+    const key = clientTypeKey(row.client_type);
+    seenClientTypeKeys.add(key);
     const analysisBase = buildDisplayThresholdAnalysis(row);
     return {
-      client_type: typeof row.client_type === 'string' && row.client_type.trim() ? row.client_type.trim() : null,
+      client_type: key || null,
       current_min_display_score: roundMetric(runtimeMinDisplayScore),
+      ...(memoryEventsByClientType.get(key) || emptyMemoryEventCounts()),
       analysis: {
         ...analysisBase,
         current_min_display_score: roundMetric(runtimeMinDisplayScore),
       },
     };
   });
+  for (const [key, counts] of memoryEventsByClientType.entries()) {
+    if (seenClientTypeKeys.has(key)) continue;
+    const analysisBase = buildDisplayThresholdAnalysis({});
+    clientTypeRows.push({
+      client_type: key || null,
+      current_min_display_score: roundMetric(runtimeMinDisplayScore),
+      ...counts,
+      analysis: {
+        ...analysisBase,
+        current_min_display_score: roundMetric(runtimeMinDisplayScore),
+      },
+    });
+  }
   const recentQueriesTotal = Number(recentQueriesCount.rows[0]?.total || 0);
   const recentQueryRows = recentQueries.rows.map((row: Record<string, unknown>) => ({
     query_id: row.query_id,

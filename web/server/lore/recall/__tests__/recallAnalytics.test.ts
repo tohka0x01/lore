@@ -846,6 +846,22 @@ describe('getRecallStats', () => {
           },
         ]);
       }
+      if (sqlText.includes('FROM memory_events')) {
+        return makeResult([
+          {
+            client_type: 'hermes',
+            memory_created_count: '2',
+            memory_updated_count: '1',
+            memory_deleted_count: '1',
+          },
+          {
+            client_type: 'codex',
+            memory_created_count: '1',
+            memory_updated_count: '3',
+            memory_deleted_count: '2',
+          },
+        ]);
+      }
       return makeResult([{ total_merged: '3', total_shown: '2', total_used: '1', query_count: '1', last_event_at: null }]);
     });
 
@@ -855,6 +871,9 @@ describe('getRecallStats', () => {
       {
         client_type: null,
         current_min_display_score: 0.55,
+        memory_created_count: 0,
+        memory_updated_count: 0,
+        memory_deleted_count: 0,
         analysis: {
           status: 'ready',
           basis: 'sample_metrics',
@@ -874,6 +893,9 @@ describe('getRecallStats', () => {
       {
         client_type: 'hermes',
         current_min_display_score: 0.55,
+        memory_created_count: 2,
+        memory_updated_count: 1,
+        memory_deleted_count: 1,
         analysis: {
           status: 'ready',
           basis: 'sample_metrics',
@@ -890,7 +912,35 @@ describe('getRecallStats', () => {
           separation_gap: 0.08,
         },
       },
+      {
+        client_type: 'codex',
+        current_min_display_score: 0.55,
+        memory_created_count: 1,
+        memory_updated_count: 3,
+        memory_deleted_count: 2,
+        analysis: {
+          status: 'insufficient_data',
+          basis: 'insufficient_data',
+          current_min_display_score: 0.55,
+          shown_candidate_count: 0,
+          used_candidate_count: 0,
+          unused_shown_candidate_count: 0,
+          avg_shown_score: null,
+          avg_used_score: null,
+          avg_unused_shown_score: null,
+          used_p25_score: null,
+          used_p50_score: null,
+          unused_shown_p75_score: null,
+          separation_gap: null,
+        },
+      },
     ]);
+    const sqlText = mockSql.mock.calls.map(([query]) => String(query)).join('\n');
+    expect(sqlText).toContain('FROM memory_events');
+    expect(sqlText).toContain("details->>'client_type'");
+    expect(sqlText).toContain("event_type = 'create'");
+    expect(sqlText).toContain("event_type = 'update'");
+    expect(sqlText).toContain("event_type IN ('delete', 'hard_delete')");
   });
 
   it('marks display threshold analysis as insufficient_data when shown/used counts are too small', async () => {

@@ -37,6 +37,10 @@ const DEFAULT_FILTERS: Filters = {
 
 type RowData = Record<string, unknown>;
 
+export function resolveFilterNumberDisplayValue(routeValue: number, pendingValue: number | null): number {
+  return pendingValue ?? routeValue;
+}
+
 interface RecentQueriesBlock {
   items: RowData[];
   total: number;
@@ -78,6 +82,7 @@ export default function RecallDrilldown(): React.JSX.Element {
   }), [searchParams]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+  const [pendingDays, setPendingDays] = useState<number | null>(null);
 
   const applyFilters = useCallback((patch: Partial<Filters>, mode: 'push' | 'replace' = 'replace') => {
     const next: Filters = { ...filters, ...patch };
@@ -137,6 +142,10 @@ export default function RecallDrilldown(): React.JSX.Element {
     loadStats(filters);
   }, [filters.days, filters.limit, filters.recentQueriesLimit, filters.recentQueriesOffset, filters.queryId, filters.queryText, filters.clientType]);
 
+  useEffect(() => {
+    setPendingDays(null);
+  }, [filters.days]);
+
   const queryDetail = (stats?.query_detail as Record<string, unknown>) || null;
   const isDetailRoute = Boolean(filters.queryId);
   const clientTypeThresholdAnalysis = (stats?.client_type_threshold_analysis as RowData[]) || [];
@@ -156,6 +165,7 @@ export default function RecallDrilldown(): React.JSX.Element {
   const recentQueriesBlock = (stats?.recent_queries as RecentQueriesBlock) || { items: [], total: 0, limit: asNumber(filters.recentQueriesLimit, 20), offset: filters.recentQueriesOffset, has_more: false };
   const recentQueries = recentQueriesBlock.items || [];
   const recentQueriesRange = formatRangeLabel(recentQueriesBlock.offset, recentQueries.length, recentQueriesBlock.total);
+  const displayedDays = resolveFilterNumberDisplayValue(asNumber(filters.days, 14), pendingDays);
   const sourceOptions = useMemo(() => [
     { value: '__legacy__', label: t(clientTypeLabel('__legacy__')) },
     ...KNOWN_CLIENT_TYPES.map((value) => ({ value, label: t(clientTypeLabel(value)) })),
@@ -176,6 +186,9 @@ export default function RecallDrilldown(): React.JSX.Element {
         used_p25_score: analysis.used_p25_score,
         unused_shown_p75_score: analysis.unused_shown_p75_score,
         separation_gap: analysis.separation_gap,
+        memory_created_count: asNumber(row.memory_created_count, 0),
+        memory_updated_count: asNumber(row.memory_updated_count, 0),
+        memory_deleted_count: asNumber(row.memory_deleted_count, 0),
       };
     }), [clientTypeThresholdAnalysis, t]);
   const thresholdClientCols = useMemo(() => [
@@ -191,6 +204,9 @@ export default function RecallDrilldown(): React.JSX.Element {
     },
     { key: 'shown_candidate_count', label: t('Shown'), className: 'text-right', render: (v: unknown) => <span className="block font-mono tabular-nums text-right">{String(v ?? '—')}</span> },
     { key: 'used_candidate_count', label: t('Used'), className: 'text-right', render: (v: unknown) => <span className="block font-mono tabular-nums text-right">{String(v ?? '—')}</span> },
+    { key: 'memory_created_count', label: t('Memory created'), className: 'text-right', render: (v: unknown) => <span className="block font-mono tabular-nums text-right">{String(v ?? 0)}</span> },
+    { key: 'memory_updated_count', label: t('Memory updated'), className: 'text-right', render: (v: unknown) => <span className="block font-mono tabular-nums text-right">{String(v ?? 0)}</span> },
+    { key: 'memory_deleted_count', label: t('Memory deleted'), className: 'text-right', render: (v: unknown) => <span className="block font-mono tabular-nums text-right">{String(v ?? 0)}</span> },
     { key: 'used_p25_score', label: t('Used p25'), className: 'text-right', render: (v: unknown) => <span className="block font-mono tabular-nums text-right">{fmt(v)}</span> },
     { key: 'unused_shown_p75_score', label: t('Unused p75'), className: 'text-right', render: (v: unknown) => <span className="block font-mono tabular-nums text-right">{fmt(v)}</span> },
     { key: 'separation_gap', label: t('Separation'), className: 'text-right', render: (v: unknown) => <span className="block font-mono tabular-nums text-right">{fmt(v)}</span> },
@@ -208,8 +224,12 @@ export default function RecallDrilldown(): React.JSX.Element {
         <FilterNumberField
           id="recall-days-filter"
           min={1}
-          value={Number(filters.days) || 1}
-          onChange={(v) => applyFilters({ days: v ?? DEFAULT_FILTERS.days }, 'replace')}
+          value={displayedDays}
+          onChange={(v) => {
+            const nextDays = Math.max(1, Math.trunc(Number(v ?? DEFAULT_FILTERS.days) || Number(DEFAULT_FILTERS.days)));
+            setPendingDays(nextDays);
+            applyFilters({ days: nextDays }, 'replace');
+          }}
         />
       </FilterPill>
       <FilterPill
@@ -238,13 +258,13 @@ export default function RecallDrilldown(): React.JSX.Element {
         title={t('Analytics')}
         titleText={t('Analytics')}
         truncateTitle
-        description={`${t('Recent queries')} · ${filters.days} ${t('days')}`}
+        description={`${t('Recent queries')} · ${displayedDays} ${t('days')}`}
         right={
           <>
             {titleFilters}
             <Button variant="ghost" onClick={() => loadStats(filters)} disabled={loading}>
               <RefreshCw size={14} className={loading ? 'animate-spin' : undefined} aria-hidden="true" />
-              {loading ? t('Loading…') : t('Refresh')}
+              {t('Refresh')}
             </Button>
           </>
         }
@@ -266,8 +286,8 @@ export default function RecallDrilldown(): React.JSX.Element {
           </div>
 
           <div className="animate-in stagger-2 mb-5">
-            <Section title={t('Display threshold analysis')}>
-              <Table columns={thresholdClientCols} rows={thresholdClientRows} empty={t('No source-specific threshold samples yet.')} activeRowKey={filters.clientType || undefined} />
+            <Section title={t('Overview')}>
+              <Table columns={thresholdClientCols} rows={thresholdClientRows} empty={t('No source overview data yet.')} activeRowKey={filters.clientType || undefined} />
             </Section>
           </div>
         </>

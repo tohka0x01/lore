@@ -339,6 +339,10 @@ const DICT: Record<'zh' | 'en', Record<string, string>> = {
     'Separation gap': '分离差',
     'Used p25 minus unused shown p75': '采用样本 p25 减去未采用展示样本 p75',
     'Display threshold analysis': '展示阈值分析',
+    'Overview': '概览',
+    'Memory created': '新增记忆',
+    'Memory updated': '更新记忆',
+    'Memory deleted': '删除记忆',
     'Insufficient data': '数据不足',
     'Used candidates': '采用候选',
     'Unused shown': '未采用的展示候选',
@@ -347,6 +351,7 @@ const DICT: Record<'zh' | 'en', Record<string, string>> = {
     'Used median': '采用样本中位数',
     'By source': '按来源',
     'No source-specific threshold samples yet.': '暂无按来源划分的阈值样本。',
+    'No source overview data yet.': '暂无按来源划分的概览数据。',
 
     // ── memory
     'Archive': '档案',

@@ -75,24 +75,28 @@ vi.mock('../../../components/ui', () => ({
   asNumber: (value: unknown, fallback = 0) => Number(value) || fallback,
 }));
 
-import RecallDrilldown from '../RecallDrilldown';
+import RecallDrilldown, { resolveFilterNumberDisplayValue } from '../RecallDrilldown';
 
-describe('RecallDrilldown threshold analysis', () => {
+describe('RecallDrilldown overview', () => {
   beforeEach(() => {
     navigationState.searchParams = new URLSearchParams();
   });
 
-  it('renders threshold analysis as the source table without summary cards or detail panels', () => {
+  it('renders overview as the source table with memory event columns but without detail cards', () => {
     const html = renderToStaticMarkup(<RecallDrilldown />);
 
-    const thresholdSection = html.slice(html.indexOf('Display threshold analysis'));
-    expect(thresholdSection).toContain('<table');
-    expect(thresholdSection).not.toContain('Current threshold');
-    expect(thresholdSection).not.toContain('Current</div>');
-    expect(thresholdSection).not.toContain('Average shown');
-    expect(thresholdSection).not.toContain('Average used');
-    expect(thresholdSection).not.toContain('Basis');
-    expect(thresholdSection).not.toContain('Shown candidates');
+    const overviewSection = html.slice(html.indexOf('Overview'));
+    expect(overviewSection).toContain('<table');
+    expect(overviewSection).toContain('Memory created');
+    expect(overviewSection).toContain('Memory updated');
+    expect(overviewSection).toContain('Memory deleted');
+    expect(overviewSection).not.toContain('Current threshold');
+    expect(overviewSection).not.toContain('Current</div>');
+    expect(overviewSection).not.toContain('Average shown');
+    expect(overviewSection).not.toContain('Average used');
+    expect(overviewSection).not.toContain('Basis');
+    expect(overviewSection).not.toContain('Shown candidates');
+    expect(html).not.toContain('Display threshold analysis');
   });
 
   it('renders only the day and source filters in the page header', () => {
@@ -126,9 +130,24 @@ describe('RecallDrilldown threshold analysis', () => {
     const html = renderToStaticMarkup(<RecallDrilldown />);
 
     expect(html).not.toContain('data-stat-card="true"');
+    expect(html).not.toContain('Overview');
     expect(html).not.toContain('Display threshold analysis');
     expect(html).toContain('Days');
     expect(html).toContain('All sources');
-    expect(html).toContain('Loading…');
+    expect(html).toContain('Refresh');
+    expect(html).not.toContain('Loading…');
+  });
+
+  it('keeps the refresh button label stable while the icon spins during loading', () => {
+    const html = renderToStaticMarkup(<RecallDrilldown />);
+
+    expect(html).toContain('Refresh');
+    expect(html).toContain('animate-spin');
+    expect(html).not.toContain('Loading…');
+  });
+
+  it('keeps a changed number visible while URL params catch up', () => {
+    expect(resolveFilterNumberDisplayValue(14, 15)).toBe(15);
+    expect(resolveFilterNumberDisplayValue(15, null)).toBe(15);
   });
 });
