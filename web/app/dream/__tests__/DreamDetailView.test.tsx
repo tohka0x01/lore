@@ -22,7 +22,7 @@ function entry(overrides: Partial<DreamEntry> = {}): DreamEntry {
 }
 
 describe('DreamDetailView', () => {
-  it('shows the poetic diary by default with an action to view the original diary', () => {
+  it('shows the diary by default with an action to view the original diary', () => {
     const html = renderToStaticMarkup(
       <DreamDetailView
         entry={entry()}
@@ -35,7 +35,8 @@ describe('DreamDetailView', () => {
       />,
     );
 
-    expect(html).toContain('Poetic Diary');
+    expect(html).toContain('Diary');
+    expect(html).not.toContain('Poetic Diary');
     expect(html).toContain('Poetic diary');
     expect(html).toContain('View original diary');
     expect(html).not.toContain('Raw audit diary');

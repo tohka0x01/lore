@@ -324,10 +324,10 @@ export function DreamDetailView({ entry, loading, canRollback, rollingBack, onBa
 
       {displayedNarrative && (
         <Section
-          title={showOriginalDiary ? t('Original Diary') : t('Poetic Diary')}
+          title={showOriginalDiary ? t('Original Diary') : t('Diary')}
           right={canToggleDiary ? (
             <Button variant="ghost" onClick={() => setShowOriginalDiary(!showOriginalDiary)}>
-              {showOriginalDiary ? t('View poetic diary') : t('View original diary')}
+              {showOriginalDiary ? t('View diary') : t('View original diary')}
             </Button>
           ) : null}
           className="mb-5"
