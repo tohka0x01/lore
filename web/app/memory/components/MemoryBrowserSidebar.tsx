@@ -57,7 +57,7 @@ export default function MemoryBrowserSidebar({
           sidebarOpen ? 'translate-x-0' : '-translate-x-full',
         )}
       >
-        <div className="hover-x-scrollbar min-h-0 flex-1 overflow-y-auto px-4 py-5">
+        <div className="hover-scrollbar min-h-0 flex-1 overflow-y-auto px-4 py-5">
           <OutlineNavShell
             ariaLabel={t('Domains')}
             title={t('Domains')}

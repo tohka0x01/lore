@@ -79,7 +79,7 @@ export function OutlineNavFloatingPanel({
           panelClassName,
         )}
       >
-        <div className={clsx('hover-x-scrollbar min-h-0 flex-1 overflow-y-auto pr-1', scrollerClassName)}>
+        <div className={clsx('hover-scrollbar min-h-0 flex-1 overflow-y-auto pr-1', scrollerClassName)}>
           <OutlineNavShell ariaLabel={ariaLabel} title={title}>
             {children}
           </OutlineNavShell>

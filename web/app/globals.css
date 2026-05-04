@@ -169,13 +169,20 @@
 ::-webkit-scrollbar-thumb:hover { background: var(--scrollbar-thumb-hover); }
 .no-scrollbar::-webkit-scrollbar { display: none; }
 .no-scrollbar { scrollbar-width: none; }
-.hover-x-scrollbar { overflow-x: hidden; }
-.hover-x-scrollbar:hover { overflow-x: auto; }
-.hover-x-scrollbar::-webkit-scrollbar { height: 0; }
-.hover-x-scrollbar:hover::-webkit-scrollbar { height: 8px; }
-.hover-x-scrollbar::-webkit-scrollbar-thumb:horizontal { background: transparent; }
-.hover-x-scrollbar:hover::-webkit-scrollbar-thumb:horizontal { background: var(--scrollbar-thumb); }
-.hover-x-scrollbar:hover::-webkit-scrollbar-thumb:horizontal:hover { background: var(--scrollbar-thumb-hover); }
+.hover-scrollbar {
+  overflow-x: hidden;
+  scrollbar-width: none;
+}
+.hover-scrollbar:hover {
+  overflow-x: auto;
+  scrollbar-color: var(--scrollbar-thumb) transparent;
+  scrollbar-width: thin;
+}
+.hover-scrollbar::-webkit-scrollbar { width: 0; height: 0; }
+.hover-scrollbar:hover::-webkit-scrollbar { width: 8px; height: 8px; }
+.hover-scrollbar::-webkit-scrollbar-thumb { background: transparent; }
+.hover-scrollbar:hover::-webkit-scrollbar-thumb { background: var(--scrollbar-thumb); }
+.hover-scrollbar:hover::-webkit-scrollbar-thumb:hover { background: var(--scrollbar-thumb-hover); }
 
 /* ── focus ring ─────────────────────────────────────────── */
 

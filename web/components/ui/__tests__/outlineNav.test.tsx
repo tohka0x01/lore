@@ -44,7 +44,7 @@ describe('OutlineNav', () => {
     expect(html).toContain('style="left:max(1.5rem, calc((100vw - 1400px) / 2 + 1.5rem))"');
     expect(html).toContain('fixed left-6 top-1/2');
     expect(html).toContain('hidden md:flex');
-    expect(html).toContain('hover-x-scrollbar');
+    expect(html).toContain('hover-scrollbar');
     expect(html).toContain('core://root');
   });
 });
