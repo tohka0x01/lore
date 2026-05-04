@@ -83,6 +83,8 @@ export interface DreamEntry {
   duration_ms?: number;
   summary?: DreamSummary;
   narrative?: string;
+  raw_narrative?: string | null;
+  poetic_narrative?: string | null;
   tool_calls?: ToolCall[];
   workflow_events?: DreamWorkflowEvent[];
   memory_changes?: MemoryChange[];

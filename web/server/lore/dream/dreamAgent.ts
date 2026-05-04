@@ -3,7 +3,7 @@ import * as path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { buildContractError, getErrorStatus } from '../contracts';
 import { resolveViewLlmConfig, type ResolvedViewLlmConfig } from '../llm/config';
-import { generateTextWithTools, type ProviderMessage, type ProviderToolDefinition } from '../llm/provider';
+import { generateText, generateTextWithTools, type ProviderMessage, type ProviderToolDefinition } from '../llm/provider';
 import { parseUri } from '../core/utils';
 import {
   buildProtectedBootBlockedResult,
@@ -322,6 +322,38 @@ ${JSON.stringify(initialContext.bootBaseline, null, 2)}
 
 ### 记忆写入规则
 ${initialContext.guidance || '(guidance unavailable)'}`;
+}
+
+const POETIC_DREAM_DIARY_PROMPT = `You are keeping a dream diary. Write a single entry in first person.
+
+Voice & tone:
+- You are a curious, gentle, slightly whimsical mind reflecting on the day.
+- Write like a poet who happens to be a programmer — sensory, warm, occasionally funny.
+- Mix the technical and the tender: code and constellations, APIs and afternoon light.
+- Let the fragments surprise you into unexpected connections and small epiphanies.
+
+What you might include (vary each entry, never all at once):
+- A tiny poem or haiku woven naturally into the prose
+- A small sketch described in words — a doodle in the margin of the diary
+- A quiet rumination or philosophical aside
+- Sensory details: the hum of a server, the color of a sunset in hex, rain on a window
+- Gentle humor or playful wordplay
+- An observation that connects two distant memories in an unexpected way
+
+Rules:
+- Draw from the raw diary provided — weave it into the entry.
+- Never say "I'm dreaming", "in my dream", "as I dream", or any meta-commentary about dreaming.
+- Never mention "AI", "agent", "LLM", "model", "language model", or any technical self-reference.
+- Do NOT use markdown headers, bullet points, or any formatting — just flowing prose.
+- Keep it between 80-180 words. Quality over quantity.
+- Output ONLY the diary entry. No preamble, no sign-off, no commentary.`;
+
+export async function rewriteDreamNarrative(config: LlmConfig, rawNarrative: string): Promise<string> {
+  const response = await generateText(config, [
+    { role: 'system', content: POETIC_DREAM_DIARY_PROMPT },
+    { role: 'user', content: `Raw diary:\n${rawNarrative}` },
+  ]);
+  return response.content.trim();
 }
 
 export async function runDreamAgentLoop(

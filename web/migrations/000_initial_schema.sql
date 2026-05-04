@@ -124,6 +124,8 @@ CREATE TABLE IF NOT EXISTS dream_diary (
   status       TEXT NOT NULL DEFAULT 'running',
   summary      JSONB NOT NULL DEFAULT '{}'::jsonb,
   narrative    TEXT,
+  raw_narrative TEXT,
+  poetic_narrative TEXT,
   tool_calls   JSONB NOT NULL DEFAULT '[]'::jsonb,
   details      JSONB NOT NULL DEFAULT '{}'::jsonb,
   error        TEXT

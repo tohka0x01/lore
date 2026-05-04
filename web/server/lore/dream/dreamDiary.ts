@@ -10,6 +10,7 @@ import {
   loadLlmConfig,
   loadGuidanceFile,
   runDreamAgentLoop,
+  rewriteDreamNarrative,
   parseUri,
   DREAM_EVENT_CONTEXT,
   type DreamInitialContext,
@@ -29,6 +30,8 @@ interface DiaryEntry {
   status: string;
   summary: Record<string, unknown>;
   narrative: string | null;
+  raw_narrative: string | null;
+  poetic_narrative: string | null;
   error: string | null;
   tool_calls?: Array<Record<string, unknown>>;
   details?: Record<string, unknown>;
@@ -55,6 +58,8 @@ interface DreamResult {
   duration_ms: number;
   summary: Record<string, unknown>;
   narrative: string;
+  raw_narrative: string;
+  poetic_narrative: string;
 }
 
 // ---------------------------------------------------------------------------
@@ -105,7 +110,7 @@ export async function runDream(): Promise<DreamResult> {
 
     // Fetch recent diaries so the agent knows what was already done
     const recentDiariesResult = await sql(
-      `SELECT started_at, status, narrative, tool_calls FROM dream_diary
+      `SELECT started_at, status, COALESCE(raw_narrative, narrative) AS narrative, tool_calls FROM dream_diary
        WHERE status = 'completed' AND id != $1
        ORDER BY started_at DESC LIMIT 2`,
       [diaryId],
@@ -162,6 +167,29 @@ export async function runDream(): Promise<DreamResult> {
       summary: { turns: agentResult.turns, tool_calls: agentResult.toolCalls.length },
     });
 
+    let rawNarrative = agentResult.narrative.trim();
+    if (!rawNarrative) rawNarrative = '(empty raw diary)';
+    let poeticNarrative = rawNarrative;
+    if (llmConfig) {
+      console.log('[dream] step 3: poetic diary rewrite');
+      await appendDreamWorkflowEvent(diaryId, 'phase_started', { phase: 'poetic_rewrite', label: 'Poetic diary rewrite' });
+      try {
+        poeticNarrative = await rewriteDreamNarrative(llmConfig, rawNarrative);
+        await appendDreamWorkflowEvent(diaryId, 'phase_completed', {
+          phase: 'poetic_rewrite',
+          label: 'Poetic diary rewrite',
+          summary: { fallback: false },
+        });
+      } catch (rewriteError: unknown) {
+        poeticNarrative = rawNarrative;
+        await appendDreamWorkflowEvent(diaryId, 'phase_completed', {
+          phase: 'poetic_rewrite',
+          label: 'Poetic diary rewrite',
+          summary: { fallback: true, error: (rewriteError as Error).message },
+        });
+      }
+    }
+
     const workflowEvents = await listDreamWorkflowEvents(diaryId);
     const memoryChangeStatsResult = await sql(
       `SELECT event_type, COUNT(*)::int AS total
@@ -192,7 +220,7 @@ export async function runDream(): Promise<DreamResult> {
     const durableEnrichments = Number(memoryChangeCounts.update || 0) + Number(memoryChangeCounts.glossary_add || 0);
     const maintenanceEvents = memoryEventsTotal - durableCreates - durableEnrichments;
 
-    // Step 3: Save diary
+    // Step 4: Save diary
     const summary: Record<string, unknown> = {
       recall_review: {
         reviewed_queries: recallReviewSummary?.reviewed_queries || 0,
@@ -225,9 +253,9 @@ export async function runDream(): Promise<DreamResult> {
     const durationMs = Date.now() - startedAt;
     await sql(
       `UPDATE dream_diary SET status = 'completed', completed_at = NOW(), duration_ms = $2,
-       summary = $3::jsonb, narrative = $4, tool_calls = $5::jsonb, details = $6::jsonb
+       summary = $3::jsonb, narrative = $4, raw_narrative = $5, poetic_narrative = $6, tool_calls = $7::jsonb, details = $8::jsonb
        WHERE id = $1`,
-      [diaryId, durationMs, JSON.stringify(summary), agentResult.narrative, JSON.stringify(agentResult.toolCalls), JSON.stringify({
+      [diaryId, durationMs, JSON.stringify(summary), poeticNarrative, rawNarrative, poeticNarrative, JSON.stringify(agentResult.toolCalls), JSON.stringify({
         initial_context: initialContext,
         recallReview,
         reviewed_queries: reviewedQueryItems.slice(0, 12),
@@ -252,7 +280,15 @@ export async function runDream(): Promise<DreamResult> {
     });
 
     console.log(`[dream] completed in ${(durationMs / 1000).toFixed(1)}s, ${agentResult.toolCalls.length} tool calls`);
-    return { id: diaryId, status: 'completed', duration_ms: durationMs, summary, narrative: agentResult.narrative };
+    return {
+      id: diaryId,
+      status: 'completed',
+      duration_ms: durationMs,
+      summary,
+      narrative: poeticNarrative,
+      raw_narrative: rawNarrative,
+      poetic_narrative: poeticNarrative,
+    };
   } catch (err: unknown) {
     const durationMs = Date.now() - startedAt;
     await sql(
@@ -283,7 +319,7 @@ export async function getDreamDiary({ limit = 20, offset = 0 } = {}): Promise<{
   const safeLimit = clampLimit(limit, 1, 100, 20);
   const safeOffset = Math.max(0, Number(offset) || 0);
   const [entries, count] = await Promise.all([
-    sql(`SELECT id, started_at, completed_at, duration_ms, status, summary, narrative, error FROM dream_diary ORDER BY started_at DESC LIMIT $1 OFFSET $2`, [safeLimit, safeOffset]),
+    sql(`SELECT id, started_at, completed_at, duration_ms, status, summary, narrative, raw_narrative, poetic_narrative, error FROM dream_diary ORDER BY started_at DESC LIMIT $1 OFFSET $2`, [safeLimit, safeOffset]),
     sql(`SELECT COUNT(*)::int AS total FROM dream_diary`),
   ]);
   return {
@@ -324,6 +360,9 @@ export async function getDreamEntry(id: number | string): Promise<DiaryEntry | n
 }
 
 function formatDiaryRow(row: Record<string, unknown>, includeDetails = false): DiaryEntry {
+  const legacyNarrative = (row.narrative as string) || null;
+  const rawNarrative = (row.raw_narrative as string) || legacyNarrative;
+  const poeticNarrative = (row.poetic_narrative as string) || legacyNarrative || rawNarrative;
   const entry: DiaryEntry = {
     id: Number(row.id),
     started_at: row.started_at ? new Date(row.started_at as string).toISOString() : null,
@@ -331,7 +370,9 @@ function formatDiaryRow(row: Record<string, unknown>, includeDetails = false): D
     duration_ms: (row.duration_ms as number) || null,
     status: row.status as string,
     summary: (row.summary as Record<string, unknown>) || {},
-    narrative: (row.narrative as string) || null,
+    narrative: poeticNarrative || legacyNarrative || rawNarrative,
+    raw_narrative: rawNarrative,
+    poetic_narrative: poeticNarrative,
     error: (row.error as string) || null,
   };
   if (includeDetails) {

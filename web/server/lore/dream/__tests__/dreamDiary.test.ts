@@ -27,6 +27,7 @@ vi.mock('../dreamAgent', () => ({
   loadLlmConfig: vi.fn(),
   loadGuidanceFile: vi.fn(() => '# guidance body'),
   runDreamAgentLoop: vi.fn(),
+  rewriteDreamNarrative: vi.fn(),
   parseUri: vi.fn((uri: string) => {
     const value = String(uri || '').trim();
     if (value.includes('://')) {
@@ -49,7 +50,7 @@ import { bootView } from '../../memory/boot';
 import { deleteNodeByPath, updateNodeByPath, createNode, moveNode } from '../../memory/write';
 import { addGlossaryKeyword, removeGlossaryKeyword } from '../../search/glossary';
 import { listDreamWorkflowEvents } from '../dreamWorkflow';
-import { loadLlmConfig, runDreamAgentLoop } from '../dreamAgent';
+import { loadLlmConfig, rewriteDreamNarrative, runDreamAgentLoop } from '../dreamAgent';
 import { ensureRecallIndex } from '../../recall/recall';
 import {
   getDreamDiary,
@@ -73,6 +74,7 @@ const mockRemoveGlossaryKeyword = vi.mocked(removeGlossaryKeyword);
 const mockListDreamWorkflowEvents = vi.mocked(listDreamWorkflowEvents);
 const mockLoadLlmConfig = vi.mocked(loadLlmConfig);
 const mockRunDreamAgentLoop = vi.mocked(runDreamAgentLoop);
+const mockRewriteDreamNarrative = vi.mocked(rewriteDreamNarrative);
 
 function makeResult(rows: Record<string, unknown>[] = [], rowCount = rows.length) {
   return { rows, rowCount } as any;
@@ -151,6 +153,27 @@ describe('getDreamEntry', () => {
     expect(result!.workflow_events).toHaveLength(1);
     expect(result!.memory_changes).toHaveLength(1);
     expect(result!.memory_changes![0].type).toBe('update');
+  });
+
+  it('exposes raw and poetic narratives while keeping narrative on the display version', async () => {
+    mockSql.mockReset();
+    const diaryRow = {
+      id: 1, started_at: '2024-01-01T00:00:00Z', completed_at: '2024-01-01T00:01:00Z',
+      duration_ms: 60000, status: 'completed', summary: {}, narrative: 'Poetic diary',
+      raw_narrative: 'Raw audit diary', poetic_narrative: 'Poetic diary',
+      error: null, tool_calls: [], details: {},
+    };
+    mockSql
+      .mockResolvedValueOnce(makeResult([diaryRow]))
+      .mockResolvedValueOnce(makeResult([]));
+
+    const result = await getDreamEntry(1);
+
+    expect(result).toMatchObject({
+      narrative: 'Poetic diary',
+      raw_narrative: 'Raw audit diary',
+      poetic_narrative: 'Poetic diary',
+    });
   });
 });
 
@@ -289,6 +312,7 @@ describe('runDream', () => {
       temperature: 0.3,
       api_version: '',
     } as any);
+    mockRewriteDreamNarrative.mockResolvedValue('poetic done');
     mockRunDreamAgentLoop.mockResolvedValue({ narrative: 'done', toolCalls: [], turns: 1 } as any);
     mockBootView.mockResolvedValue({
       core_memories: [
@@ -339,6 +363,8 @@ describe('runDream', () => {
 
     expect(ensureRecallIndex).not.toHaveBeenCalled();
     expect(result.status).toBe('completed');
+    expect(result.narrative).toBe('poetic done');
+    expect(mockRewriteDreamNarrative).toHaveBeenCalledWith(expect.anything(), 'done');
     expect(mockRunDreamAgentLoop).toHaveBeenCalledWith(
       expect.anything(),
       expect.objectContaining({
@@ -361,7 +387,10 @@ describe('runDream', () => {
     const updateCall = mockSql.mock.calls.find((call) => String(call[0]).includes('UPDATE dream_diary SET status = \'completed\''));
     expect(updateCall).toBeTruthy();
     const summary = JSON.parse(String(updateCall?.[1]?.[2]));
-    const details = JSON.parse(String(updateCall?.[1]?.[5]));
+    expect(updateCall?.[1]?.[3]).toBe('poetic done');
+    expect(updateCall?.[1]?.[4]).toBe('done');
+    expect(updateCall?.[1]?.[5]).toBe('poetic done');
+    const details = JSON.parse(String(updateCall?.[1]?.[7]));
     expect(summary).toEqual({
       recall_review: {
         reviewed_queries: 2,

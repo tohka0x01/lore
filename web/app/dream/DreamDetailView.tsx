@@ -258,6 +258,7 @@ interface DreamDetailViewProps {
 }
 
 export function DreamDetailView({ entry, loading, canRollback, rollingBack, onBack, onRollback, t }: DreamDetailViewProps): React.JSX.Element {
+  const [showOriginalDiary, setShowOriginalDiary] = useState(false);
   const stats = useMemo(() => {
     const toolCalls = entry?.tool_calls || [];
     const changes = entry?.memory_changes || [];
@@ -275,6 +276,10 @@ export function DreamDetailView({ entry, loading, canRollback, rollingBack, onBa
     };
   }, [entry]);
 
+  useEffect(() => {
+    setShowOriginalDiary(false);
+  }, [entry?.id]);
+
   if (loading || !entry) {
     return (
       <>
@@ -285,6 +290,11 @@ export function DreamDetailView({ entry, loading, canRollback, rollingBack, onBa
       </>
     );
   }
+
+  const rawNarrative = entry.raw_narrative || entry.narrative || '';
+  const poeticNarrative = entry.poetic_narrative || entry.narrative || rawNarrative;
+  const displayedNarrative = showOriginalDiary ? rawNarrative : poeticNarrative;
+  const canToggleDiary = Boolean(rawNarrative && poeticNarrative && rawNarrative !== poeticNarrative);
 
   return (
     <>
@@ -312,10 +322,18 @@ export function DreamDetailView({ entry, loading, canRollback, rollingBack, onBa
         <StatCard label={t('Policy warnings')} value={stats.policyWarnings} tone="orange" compact />
       </div>
 
-      {entry.narrative && (
-        <Section title={t('Narrative')} className="mb-5">
+      {displayedNarrative && (
+        <Section
+          title={showOriginalDiary ? t('Original Diary') : t('Poetic Diary')}
+          right={canToggleDiary ? (
+            <Button variant="ghost" onClick={() => setShowOriginalDiary(!showOriginalDiary)}>
+              {showOriginalDiary ? t('View poetic diary') : t('View original diary')}
+            </Button>
+          ) : null}
+          className="mb-5"
+        >
           <div className="prose max-w-none">
-            <ReactMarkdown remarkPlugins={[remarkGfm]}>{entry.narrative}</ReactMarkdown>
+            <ReactMarkdown remarkPlugins={[remarkGfm]}>{displayedNarrative}</ReactMarkdown>
           </div>
         </Section>
       )}

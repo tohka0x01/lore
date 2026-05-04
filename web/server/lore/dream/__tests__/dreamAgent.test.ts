@@ -61,11 +61,12 @@ vi.mock('node:fs', () => ({
 }));
 
 vi.mock('../../llm/provider', () => ({
+  generateText: vi.fn(),
   generateTextWithTools: vi.fn(),
 }));
 
 import { getSettings } from '../../config/settings';
-import { generateTextWithTools } from '../../llm/provider';
+import { generateText, generateTextWithTools } from '../../llm/provider';
 import { getNodePayload, listDomains } from '../../memory/browse';
 import { searchMemories } from '../../search/search';
 import { createNode, updateNodeByPath, deleteNodeByPath, moveNode } from '../../memory/write';
@@ -91,6 +92,7 @@ import {
   executeDreamTool,
   loadGuidanceFile,
   buildDreamSystemPrompt,
+  rewriteDreamNarrative,
   runDreamAgentLoop,
   DREAM_EVENT_CONTEXT,
   type LlmConfig,
@@ -101,6 +103,7 @@ import { processDreamToolCalls } from '../dreamLoopToolCalls';
 const originalFetch = global.fetch;
 
 const mockGetSettings = vi.mocked(getSettings);
+const mockGenerateText = vi.mocked(generateText);
 const mockGenerateTextWithTools = vi.mocked(generateTextWithTools);
 const mockGetNodePayload = vi.mocked(getNodePayload);
 const mockListDomains = vi.mocked(listDomains);
@@ -1029,6 +1032,40 @@ describe('buildDreamSystemPrompt', () => {
     expect(prompt).toContain('只读参考，不可修改');
     expect(prompt).toContain('结构 / 边界');
     expect(prompt).toContain('最后才改内容');
+  });
+});
+
+describe('rewriteDreamNarrative', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it('uses a clean context with only the style prompt and raw diary content', async () => {
+    mockGenerateText.mockResolvedValueOnce({ content: 'Poetic diary', raw: {} });
+    const config: LlmConfig = {
+      provider: 'anthropic',
+      base_url: 'http://localhost:1234',
+      api_key: 'test-key',
+      model: 'claude-sonnet-4-6',
+      timeout_ms: 5000,
+      temperature: 0.3,
+      api_version: '2023-06-01',
+    };
+
+    const result = await rewriteDreamNarrative(config, 'Raw audit diary');
+
+    expect(result).toBe('Poetic diary');
+    expect(mockGenerateText).toHaveBeenCalledTimes(1);
+    const [, messages] = mockGenerateText.mock.calls[0];
+    expect(messages).toHaveLength(2);
+    expect(messages[0]).toMatchObject({
+      role: 'system',
+      content: expect.stringContaining('You are keeping a dream diary'),
+    });
+    expect(messages[1]).toEqual({
+      role: 'user',
+      content: 'Raw diary:\nRaw audit diary',
+    });
   });
 });
 

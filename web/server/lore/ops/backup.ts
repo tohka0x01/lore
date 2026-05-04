@@ -15,7 +15,7 @@ const CORE_TABLES: Array<{ name: string; query: string }> = [
   { name: 'glossary_keywords', query: 'SELECT id, keyword, node_uuid, created_at FROM glossary_keywords' },
   { name: 'app_settings',     query: 'SELECT key, value, updated_at FROM app_settings' },
   { name: 'memory_events',    query: 'SELECT id, event_type, node_uri, node_uuid, domain, path, source, session_id, before_snapshot, after_snapshot, details, created_at FROM memory_events' },
-  { name: 'dream_diary',      query: 'SELECT id, started_at, completed_at, duration_ms, status, summary, narrative, tool_calls, details, error FROM dream_diary' },
+  { name: 'dream_diary',      query: 'SELECT id, started_at, completed_at, duration_ms, status, summary, narrative, raw_narrative, poetic_narrative, tool_calls, details, error FROM dream_diary' },
   { name: 'dream_workflow_events', query: 'SELECT id, diary_id, event_type, payload, created_at FROM dream_workflow_events' },
   { name: 'glossary_term_embeddings', query: 'SELECT id, domain, path, uri, node_uuid, memory_id, priority, disclosure, keyword, match_text, source, status, embedding_model, embedding_dim, metadata, source_signature, created_at, updated_at FROM glossary_term_embeddings' },
 ];
