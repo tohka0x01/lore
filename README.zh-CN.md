@@ -2,7 +2,7 @@
 
 [English README](./README.md)
 
-## 截图
+## 1. 截图
 
 | Memory Browser | Recall Workbench |
 |:-:|:-:|
@@ -18,7 +18,7 @@
 
 ---
 
-## 设计理念
+## 2. 设计理念
 
 Lore 是给 AI agent 用的长期记忆系统。它提供持久记忆图谱、固定启动基线、每轮 prompt 前召回、显式读取追踪和谨慎写入工具。
 
@@ -47,7 +47,7 @@ Lore 面向需要跨会话、跨工具、跨运行时连续性的 agent。
 
 ---
 
-## Quick Start
+## 3. Quick Start
 
 ### 1. 启动服务器
 
@@ -169,7 +169,7 @@ docker compose up -d --build
 
 ---
 
-## 接入 agent
+## 4. 接入 agent
 
 插件统一使用 Lore 服务器地址：
 
@@ -178,7 +178,8 @@ export LORE_BASE_URL=http://127.0.0.1:18901
 export LORE_API_TOKEN=replace-this-if-you-set-API_TOKEN
 ```
 
-### Claude Code
+<details>
+<summary><b>Claude Code</b></summary>
 
 Lore 提供 Claude Code plugin，发布在 `plugin` branch。
 
@@ -203,7 +204,10 @@ claude plugins install lore@lore
 - 每轮 prompt 前 recall 注入
 - Lore 使用规则
 
-### Codex
+</details>
+
+<details>
+<summary><b>Codex</b></summary>
 
 ```bash
 export LORE_BASE_URL=http://127.0.0.1:18901
@@ -226,7 +230,10 @@ export LORE_API_TOKEN=replace-this
 - MCP server：`${LORE_BASE_URL}/api/mcp?client_type=codex`
 - boot / recall injection hooks
 
-### Pi
+</details>
+
+<details>
+<summary><b>Pi</b></summary>
 
 ```bash
 export LORE_BASE_URL=http://127.0.0.1:18901
@@ -241,7 +248,10 @@ export LORE_BASE_URL=http://127.0.0.1:18901
 - 通过 Pi startup hooks 注入 boot 和 recall context
 - API 活动带 `client_type=pi` 归因
 
-### OpenClaw
+</details>
+
+<details>
+<summary><b>OpenClaw</b></summary>
 
 安装：
 
@@ -306,7 +316,10 @@ openclaw plugins enable lore
 openclaw gateway restart
 ```
 
-### Hermes
+</details>
+
+<details>
+<summary><b>Hermes</b></summary>
 
 安装 Hermes memory provider plugin，并设置环境变量：
 
@@ -317,7 +330,10 @@ export LORE_API_TOKEN=replace-this-if-needed
 
 把 `hermes-plugin/lore_memory` symlink 或复制到你的 Hermes plugin path。Hermes 会把 Lore 作为 MemoryProvider 加载，并向 agent 暴露 Lore 记忆工具。
 
-### 通用 MCP client
+</details>
+
+<details>
+<summary><b>通用 MCP client</b></summary>
 
 Lore 暴露 Streamable HTTP MCP endpoint：
 
@@ -333,9 +349,11 @@ http://127.0.0.1:18901/api/mcp?client_type=mcp
 
 启用 `API_TOKEN` 时，以 bearer token 传入。
 
+</details>
+
 ---
 
-## 日常使用
+## 5. 日常使用
 
 agent 接入后，工作流是：
 
@@ -354,7 +372,7 @@ agent 接入后，工作流是：
 
 ---
 
-## 开发
+## 6. 开发
 
 ```bash
 cd web

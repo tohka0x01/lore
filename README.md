@@ -2,7 +2,7 @@
 
 [中文 README](./README.zh-CN.md)
 
-## Screenshots
+## 1. Screenshots
 
 | Memory Browser | Recall Workbench |
 |:-:|:-:|
@@ -18,7 +18,7 @@
 
 ---
 
-## Design philosophy
+## 2. Design philosophy
 
 Lore is a long-term memory system for AI agents. It gives an agent a durable memory graph, a fixed startup baseline, per-prompt recall, explicit read tracking, and cautious write tools.
 
@@ -47,7 +47,7 @@ Lore is built for agents that need continuity across sessions, tools, and runtim
 
 ---
 
-## Quick start
+## 3. Quick start
 
 ### 1. Start the server
 
@@ -169,7 +169,7 @@ docker compose up -d --build
 
 ---
 
-## Connect agents
+## 4. Connect agents
 
 Set the Lore server URL for plugins:
 
@@ -178,7 +178,8 @@ export LORE_BASE_URL=http://127.0.0.1:18901
 export LORE_API_TOKEN=replace-this-if-you-set-API_TOKEN
 ```
 
-### Claude Code
+<details>
+<summary><b>Claude Code</b></summary>
 
 Lore ships as a Claude Code plugin on the `plugin` branch.
 
@@ -203,7 +204,10 @@ What it adds:
 - per-prompt recall injection
 - Lore guidance rules
 
-### Codex
+</details>
+
+<details>
+<summary><b>Codex</b></summary>
 
 ```bash
 export LORE_BASE_URL=http://127.0.0.1:18901
@@ -226,7 +230,10 @@ What it adds:
 - MCP server at `${LORE_BASE_URL}/api/mcp?client_type=codex`
 - optional hooks for boot and recall injection
 
-### Pi
+</details>
+
+<details>
+<summary><b>Pi</b></summary>
 
 ```bash
 export LORE_BASE_URL=http://127.0.0.1:18901
@@ -241,7 +248,10 @@ What it adds:
 - boot and recall context through Pi startup hooks
 - API attribution with `client_type=pi`
 
-### OpenClaw
+</details>
+
+<details>
+<summary><b>OpenClaw</b></summary>
 
 Install:
 
@@ -306,7 +316,10 @@ Restart OpenClaw:
 openclaw gateway restart
 ```
 
-### Hermes
+</details>
+
+<details>
+<summary><b>Hermes</b></summary>
 
 Install the Hermes memory provider plugin and set environment variables:
 
@@ -317,7 +330,10 @@ export LORE_API_TOKEN=replace-this-if-needed
 
 Symlink or copy `hermes-plugin/lore_memory` into the Hermes plugin path configured on your machine. Hermes loads Lore as a MemoryProvider and exposes Lore memory tools to the agent.
 
-### Generic MCP client
+</details>
+
+<details>
+<summary><b>Generic MCP client</b></summary>
 
 Lore exposes a Streamable HTTP MCP endpoint:
 
@@ -333,9 +349,11 @@ http://127.0.0.1:18901/api/mcp?client_type=mcp
 
 If `API_TOKEN` is configured, pass it as a bearer token.
 
+</details>
+
 ---
 
-## Daily use
+## 5. Daily use
 
 Once connected, the agent workflow is:
 
@@ -354,7 +372,7 @@ Useful UI pages:
 
 ---
 
-## Development
+## 6. Development
 
 ```bash
 cd web
