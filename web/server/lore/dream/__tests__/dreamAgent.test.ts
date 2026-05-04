@@ -40,6 +40,7 @@ vi.mock('../../recall/recallAnalytics', () => ({
 }));
 vi.mock('../../memory/writeEvents', () => ({
   getNodeWriteHistory: vi.fn(),
+  getDreamMemoryEventSummary: vi.fn(),
 }));
 vi.mock('../../recall/feedbackAnalytics', () => ({
   getPathEffectiveness: vi.fn(),
@@ -77,7 +78,7 @@ import {
   getDreamQueryRecallDetail,
   getRecallStats,
 } from '../../recall/recallAnalytics';
-import { getNodeWriteHistory } from '../../memory/writeEvents';
+import { getNodeWriteHistory, getDreamMemoryEventSummary } from '../../memory/writeEvents';
 import { getPathEffectiveness } from '../../recall/feedbackAnalytics';
 import { validateCreatePolicy, validateDeletePolicy, validateUpdatePolicy } from '../../ops/policy';
 import { markSessionRead } from '../../memory/session';
@@ -116,6 +117,7 @@ const mockGetDreamQueryPathBreakdown = vi.mocked(getDreamQueryPathBreakdown);
 const mockGetDreamQueryNodePaths = vi.mocked(getDreamQueryNodePaths);
 const mockGetDreamQueryEventSamples = vi.mocked(getDreamQueryEventSamples);
 const mockGetNodeWriteHistory = vi.mocked(getNodeWriteHistory);
+const mockGetDreamMemoryEventSummary = vi.mocked(getDreamMemoryEventSummary);
 const mockGetPathEffectiveness = vi.mocked(getPathEffectiveness);
 const mockValidateCreatePolicy = vi.mocked(validateCreatePolicy);
 const mockValidateUpdatePolicy = vi.mocked(validateUpdatePolicy);
@@ -243,6 +245,7 @@ describe('buildDreamTools', () => {
     expect(names).toContain('get_query_node_paths');
     expect(names).toContain('get_query_event_samples');
     expect(names).toContain('get_node_write_history');
+    expect(names).toContain('get_memory_event_summary');
     expect(names).toContain('get_path_effectiveness_detail');
     expect(names).toContain('inspect_neighbors');
     expect(names).toContain('inspect_views');
@@ -354,6 +357,24 @@ describe('executeDreamTool', () => {
     mockGetNodeWriteHistory.mockResolvedValue({ events: [] } as any);
     await executeDreamTool('get_node_write_history', { uri: 'core://test', limit: 8 });
     expect(mockGetNodeWriteHistory).toHaveBeenCalledWith({ nodeUri: 'core://test', limit: 8 });
+  });
+
+  it('dispatches get_memory_event_summary', async () => {
+    mockGetDreamMemoryEventSummary.mockResolvedValue({ events: [] } as any);
+    await executeDreamTool('get_memory_event_summary', {
+      date: '2026-05-04',
+      timezone: 'Asia/Shanghai',
+      event_type: 'update',
+      node_uri: 'core://test',
+      limit: 12,
+    });
+    expect(mockGetDreamMemoryEventSummary).toHaveBeenCalledWith({
+      date: '2026-05-04',
+      timezone: 'Asia/Shanghai',
+      eventType: 'update',
+      nodeUri: 'core://test',
+      limit: 12,
+    });
   });
 
   it('dispatches get_path_effectiveness_detail', async () => {

@@ -59,6 +59,14 @@ export interface NodeWriteHistoryOptions {
   limit?: number;
 }
 
+export interface DreamMemoryEventSummaryOptions {
+  date?: string;
+  timezone?: string;
+  limit?: number;
+  eventType?: string;
+  nodeUri?: string;
+}
+
 export interface FormattedEvent {
   id: number;
   event_type: string;
@@ -100,12 +108,100 @@ export interface NodeWriteHistory {
   events: FormattedEvent[];
 }
 
+export interface DreamMemoryEventSummaryItem {
+  id: number;
+  at: string | null;
+  event_type: string;
+  node_uri: string;
+  source: string;
+  session_id: string | null;
+  client_type: ClientType | null;
+  summary: string;
+  changes: Record<string, unknown>;
+}
+
+export interface DreamMemoryEventSummary {
+  date: string;
+  timezone: string;
+  filters: { event_type: string | null; node_uri: string | null } | null;
+  summary: {
+    total_events: number;
+    creates: number;
+    updates: number;
+    deletes: number;
+    moves: number;
+    glossary_changes: number;
+    distinct_nodes: number;
+    truncated: boolean;
+  };
+  events: DreamMemoryEventSummaryItem[];
+}
+
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
 
 function intervalDaysSql(days: number): number {
   return clampLimit(days, 1, 90, 7);
+}
+
+function asSnapshot(value: unknown): Record<string, unknown> {
+  return value && typeof value === 'object' ? value as Record<string, unknown> : {};
+}
+
+function truncatePreview(value: unknown, maxChars = 180): string | null {
+  const text = String(value ?? '').replace(/\s+/g, ' ').trim();
+  if (!text) return null;
+  return text.length > maxChars ? `${text.slice(0, maxChars - 3)}...` : text;
+}
+
+function snapshotNumber(snapshot: Record<string, unknown>, key: string): number | null {
+  const value = Number(snapshot[key]);
+  return Number.isFinite(value) ? value : null;
+}
+
+function snapshotKeywords(snapshot: Record<string, unknown>): string[] {
+  const values = Array.isArray(snapshot.glossary_keywords) ? snapshot.glossary_keywords : [];
+  return [...new Set(values.map((value) => String(value || '').trim()).filter(Boolean))].slice(0, 12);
+}
+
+function keywordDiff(before: string[], after: string[]): { added: string[]; removed: string[] } {
+  const beforeSet = new Set(before);
+  const afterSet = new Set(after);
+  return {
+    added: after.filter((keyword) => !beforeSet.has(keyword)),
+    removed: before.filter((keyword) => !afterSet.has(keyword)),
+  };
+}
+
+function dateInTimezone(date: Date, timezone: string): string {
+  const parts = new Intl.DateTimeFormat('en-CA', {
+    timeZone: timezone,
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  }).formatToParts(date);
+  const get = (type: string) => parts.find((part) => part.type === type)?.value || '';
+  return `${get('year')}-${get('month')}-${get('day')}`;
+}
+
+function sanitizeDate(value: unknown, timezone: string): string {
+  const text = sanitizeFilter(value, 20);
+  if (/^\d{4}-\d{2}-\d{2}$/.test(text)) return text;
+  return dateInTimezone(new Date(), timezone);
+}
+
+function sanitizeTimezone(value: unknown): string {
+  const text = sanitizeFilter(value, 80);
+  if (/^[A-Za-z0-9_+\-]+(?:\/[A-Za-z0-9_+\-]+)*$/.test(text)) {
+    try {
+      new Intl.DateTimeFormat('en-US', { timeZone: text }).format(new Date());
+      return text;
+    } catch {
+      return 'Asia/Shanghai';
+    }
+  }
+  return 'Asia/Shanghai';
 }
 
 // ---------------------------------------------------------------------------
@@ -276,6 +372,173 @@ export async function getWriteEventStats({
       };
     }),
     recent_events: recentEvents.rows.map((r) => formatEventRow(r as Record<string, unknown>)),
+  };
+}
+
+function eventFieldChanges(before: Record<string, unknown>, after: Record<string, unknown>): string[] {
+  const fields: string[] = [];
+  if (String(before.content ?? '') !== String(after.content ?? '')) fields.push('content');
+  if (snapshotNumber(before, 'priority') !== snapshotNumber(after, 'priority')) fields.push('priority');
+  if (String(before.disclosure ?? '') !== String(after.disclosure ?? '')) fields.push('disclosure');
+  const keywordChanges = keywordDiff(snapshotKeywords(before), snapshotKeywords(after));
+  if (keywordChanges.added.length || keywordChanges.removed.length) fields.push('glossary_keywords');
+  return fields;
+}
+
+function legacyKeywordFromEvent(eventType: string, before: Record<string, unknown>, after: Record<string, unknown>): string {
+  const snapshot = eventType === 'glossary_remove' ? before : after;
+  return String(snapshot.keyword || '').trim();
+}
+
+function compactEventChanges(row: Record<string, unknown>): { summary: string; changes: Record<string, unknown> } {
+  const eventType = String(row.event_type || '');
+  const before = asSnapshot(row.before_snapshot);
+  const after = asSnapshot(row.after_snapshot);
+  const details = asSnapshot(row.details);
+  const changes: Record<string, unknown> = {};
+
+  if (eventType === 'create') {
+    const contentAfter = truncatePreview(after.content);
+    const priorityAfter = snapshotNumber(after, 'priority');
+    const disclosureAfter = truncatePreview(after.disclosure);
+    const glossaryAdded = snapshotKeywords(after);
+    if (contentAfter) changes.content_after_preview = contentAfter;
+    if (priorityAfter !== null) changes.priority_after = priorityAfter;
+    if (disclosureAfter) changes.disclosure_after = disclosureAfter;
+    if (glossaryAdded.length) changes.glossary_added = glossaryAdded;
+    return { summary: 'created node', changes };
+  }
+
+  if (eventType === 'update') {
+    const changedFields = eventFieldChanges(before, after);
+    const contentBefore = truncatePreview(before.content);
+    const contentAfter = truncatePreview(after.content);
+    const priorityBefore = snapshotNumber(before, 'priority');
+    const priorityAfter = snapshotNumber(after, 'priority');
+    const disclosureBefore = truncatePreview(before.disclosure);
+    const disclosureAfter = truncatePreview(after.disclosure);
+    const glossaryChanges = keywordDiff(snapshotKeywords(before), snapshotKeywords(after));
+    changes.changed_fields = changedFields;
+    if (changedFields.includes('content')) {
+      if (contentBefore) changes.content_before_preview = contentBefore;
+      if (contentAfter) changes.content_after_preview = contentAfter;
+    }
+    if (changedFields.includes('priority')) {
+      if (priorityBefore !== null) changes.priority_before = priorityBefore;
+      if (priorityAfter !== null) changes.priority_after = priorityAfter;
+    }
+    if (changedFields.includes('disclosure')) {
+      if (disclosureBefore) changes.disclosure_before = disclosureBefore;
+      if (disclosureAfter) changes.disclosure_after = disclosureAfter;
+    }
+    if (glossaryChanges.added.length) changes.glossary_added = glossaryChanges.added;
+    if (glossaryChanges.removed.length) changes.glossary_removed = glossaryChanges.removed;
+    return { summary: `updated ${changedFields.length ? changedFields.join(', ') : 'node metadata'}`, changes };
+  }
+
+  if (eventType === 'delete' || eventType === 'hard_delete') {
+    const contentBefore = truncatePreview(before.content);
+    const priorityBefore = snapshotNumber(before, 'priority');
+    const disclosureBefore = truncatePreview(before.disclosure);
+    const glossaryRemoved = snapshotKeywords(before);
+    if (contentBefore) changes.content_before_preview = contentBefore;
+    if (priorityBefore !== null) changes.priority_before = priorityBefore;
+    if (disclosureBefore) changes.disclosure_before = disclosureBefore;
+    if (glossaryRemoved.length) changes.glossary_removed = glossaryRemoved;
+    return { summary: eventType === 'hard_delete' ? 'hard deleted memory row' : 'deleted node', changes };
+  }
+
+  if (eventType === 'move') {
+    const oldUri = String(details.old_uri || before.uri || '').trim();
+    const newUri = String(details.new_uri || after.uri || '').trim();
+    if (oldUri) changes.old_uri = oldUri;
+    if (newUri) changes.new_uri = newUri;
+    return { summary: oldUri && newUri ? `moved ${oldUri} to ${newUri}` : 'moved node', changes };
+  }
+
+  if (eventType === 'glossary_add' || eventType === 'glossary_remove') {
+    const keyword = legacyKeywordFromEvent(eventType, before, after);
+    if (keyword) changes[eventType === 'glossary_add' ? 'glossary_added' : 'glossary_removed'] = [keyword];
+    return { summary: eventType === 'glossary_add' ? 'added glossary keyword' : 'removed glossary keyword', changes };
+  }
+
+  return { summary: eventType || 'memory event', changes };
+}
+
+function compactMemoryEventRow(row: Record<string, unknown>): DreamMemoryEventSummaryItem {
+  const details = asSnapshot(row.details);
+  const compact = compactEventChanges(row);
+  return {
+    id: Number(row.id || 0),
+    at: row.created_at ? new Date(row.created_at as string).toISOString() : null,
+    event_type: String(row.event_type || ''),
+    node_uri: String(row.node_uri || ''),
+    source: String(row.source || ''),
+    session_id: (row.session_id as string | null) || null,
+    client_type: eventClientType(details),
+    summary: compact.summary,
+    changes: compact.changes,
+  };
+}
+
+export async function getDreamMemoryEventSummary({
+  date = '',
+  timezone = 'Asia/Shanghai',
+  limit = 40,
+  eventType = '',
+  nodeUri = '',
+}: DreamMemoryEventSummaryOptions = {}): Promise<DreamMemoryEventSummary> {
+  const safeTimezone = sanitizeTimezone(timezone);
+  const safeDate = sanitizeDate(date, safeTimezone);
+  const safeEventType = sanitizeFilter(eventType, 60);
+  const safeNodeUri = sanitizeFilter(nodeUri, 240);
+  const safeLimit = clampLimit(limit, 1, 100, 40);
+
+  const clauses = [
+    `created_at >= (($1::date)::timestamp AT TIME ZONE $2)`,
+    `created_at < ((($1::date + 1)::timestamp) AT TIME ZONE $2)`,
+  ];
+  const params: unknown[] = [safeDate, safeTimezone];
+
+  if (safeEventType) {
+    params.push(safeEventType);
+    clauses.push(`event_type = $${params.length}`);
+  }
+  if (safeNodeUri) {
+    params.push(safeNodeUri);
+    clauses.push(`node_uri = $${params.length}`);
+  }
+
+  params.push(safeLimit);
+  const result = await sql(
+    `SELECT id, event_type, node_uri, node_uuid, source, session_id,
+      before_snapshot, after_snapshot, details, created_at
+     FROM memory_events
+     WHERE ${clauses.join(' AND ')}
+     ORDER BY created_at ASC, id ASC
+     LIMIT $${params.length}`,
+    params,
+  );
+
+  const events = result.rows.map((row) => compactMemoryEventRow(row as Record<string, unknown>));
+  const distinctNodes = new Set(events.map((event) => event.node_uri).filter(Boolean));
+  const countType = (predicate: (event: DreamMemoryEventSummaryItem) => boolean) => events.filter(predicate).length;
+
+  return {
+    date: safeDate,
+    timezone: safeTimezone,
+    filters: safeEventType || safeNodeUri ? { event_type: safeEventType || null, node_uri: safeNodeUri || null } : null,
+    summary: {
+      total_events: events.length,
+      creates: countType((event) => event.event_type === 'create'),
+      updates: countType((event) => event.event_type === 'update'),
+      deletes: countType((event) => event.event_type === 'delete' || event.event_type === 'hard_delete'),
+      moves: countType((event) => event.event_type === 'move'),
+      glossary_changes: countType((event) => event.event_type === 'glossary_add' || event.event_type === 'glossary_remove'),
+      distinct_nodes: distinctNodes.size,
+      truncated: events.length >= safeLimit,
+    },
+    events,
   };
 }
 

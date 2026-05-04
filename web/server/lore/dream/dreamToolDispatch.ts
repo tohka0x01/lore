@@ -10,7 +10,7 @@ import {
 } from '../recall/recallAnalytics';
 import { searchMemories } from '../search/search';
 import { listMemoryViewsByNode } from '../view/memoryViewQueries';
-import { getNodeWriteHistory } from '../memory/writeEvents';
+import { getDreamMemoryEventSummary, getNodeWriteHistory } from '../memory/writeEvents';
 import { markSessionRead } from '../memory/session';
 import { parseUri } from '../core/utils';
 import { inspectNeighbors } from './dreamToolReadHelpers';
@@ -105,6 +105,14 @@ export async function dispatchDreamTool(
       });
     case 'get_node_write_history':
       return await getNodeWriteHistory({ nodeUri: args.uri as string, limit: (args.limit as number) || 20 });
+    case 'get_memory_event_summary':
+      return await getDreamMemoryEventSummary({
+        date: (args.date as string) || '',
+        timezone: (args.timezone as string) || 'Asia/Shanghai',
+        eventType: (args.event_type as string) || '',
+        nodeUri: (args.node_uri as string) || '',
+        limit: (args.limit as number) || 40,
+      });
     case 'get_path_effectiveness_detail':
       return await getPathEffectiveness({ days: (args.days as number) || 7 });
     case 'inspect_neighbors':

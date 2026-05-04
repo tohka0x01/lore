@@ -6,6 +6,7 @@ import {
   logMemoryEvent,
   getWriteEventStats,
   getNodeWriteHistory,
+  getDreamMemoryEventSummary,
 } from '../writeEvents';
 
 const mockSql = vi.mocked(sql);
@@ -305,5 +306,111 @@ describe('getNodeWriteHistory', () => {
     const r = result as { events: any[] };
     expect(r.events[0].id).toBe(42);
     expect(r.events[0].created_at).toBe(new Date(ts).toISOString());
+  });
+});
+
+// ---------------------------------------------------------------------------
+// getDreamMemoryEventSummary
+// ---------------------------------------------------------------------------
+
+describe('getDreamMemoryEventSummary', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it('returns compact daily memory event summaries without raw snapshots', async () => {
+    mockSql.mockResolvedValue(makeResult([
+      {
+        id: '10',
+        event_type: 'create',
+        node_uri: 'project://alpha',
+        node_uuid: 'u-create',
+        source: 'mcp:lore_create_node',
+        session_id: 's1',
+        before_snapshot: null,
+        after_snapshot: {
+          content: 'created memory content '.repeat(20),
+          priority: 2,
+          disclosure: 'when alpha matters',
+          glossary_keywords: ['alpha', 'setup'],
+        },
+        details: { client_type: 'codex' },
+        created_at: '2026-05-04T02:00:00.000Z',
+      },
+      {
+        id: '11',
+        event_type: 'update',
+        node_uri: 'project://beta',
+        node_uuid: 'u-update',
+        source: 'dream:auto',
+        session_id: null,
+        before_snapshot: {
+          content: 'old beta content',
+          priority: 3,
+          disclosure: 'old trigger',
+          glossary_keywords: ['old'],
+        },
+        after_snapshot: {
+          content: 'new beta content',
+          priority: 2,
+          disclosure: 'new trigger',
+          glossary_keywords: ['new'],
+        },
+        details: { glossary_added: ['new'], glossary_removed: ['old'] },
+        created_at: '2026-05-04T03:00:00.000Z',
+      },
+    ]));
+
+    const result = await getDreamMemoryEventSummary({ date: '2026-05-04', timezone: 'Asia/Shanghai', limit: 20 });
+
+    expect(result).toMatchObject({
+      date: '2026-05-04',
+      timezone: 'Asia/Shanghai',
+      summary: {
+        total_events: 2,
+        creates: 1,
+        updates: 1,
+        deletes: 0,
+        moves: 0,
+        glossary_changes: 0,
+        distinct_nodes: 2,
+      },
+    });
+    expect(result.events).toHaveLength(2);
+    expect(result.events[0]).toMatchObject({
+      event_type: 'create',
+      node_uri: 'project://alpha',
+      client_type: 'codex',
+      changes: {
+        content_after_preview: expect.stringContaining('created memory content'),
+        priority_after: 2,
+        disclosure_after: 'when alpha matters',
+        glossary_added: ['alpha', 'setup'],
+      },
+    });
+    expect(result.events[1]).toMatchObject({
+      event_type: 'update',
+      node_uri: 'project://beta',
+      changes: {
+        changed_fields: ['content', 'priority', 'disclosure', 'glossary_keywords'],
+        content_before_preview: 'old beta content',
+        content_after_preview: 'new beta content',
+        priority_before: 3,
+        priority_after: 2,
+        disclosure_before: 'old trigger',
+        disclosure_after: 'new trigger',
+        glossary_added: ['new'],
+        glossary_removed: ['old'],
+      },
+    });
+    expect(result.events[0]).not.toHaveProperty('before_snapshot');
+    expect(result.events[0]).not.toHaveProperty('after_snapshot');
+    expect(result.events[0]).not.toHaveProperty('details');
+
+    const query = String(mockSql.mock.calls[0][0]);
+    const params = mockSql.mock.calls[0][1] as unknown[];
+    expect(query).toContain('created_at >=');
+    expect(query).toContain('AT TIME ZONE');
+    expect(params).toEqual(['2026-05-04', 'Asia/Shanghai', 20]);
   });
 });
