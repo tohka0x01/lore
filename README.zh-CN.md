@@ -178,7 +178,7 @@ Lore 提供 Claude Code plugin，发布在 `plugin` branch。
 
 ```bash
 export LORE_BASE_URL=http://127.0.0.1:18901
-claude plugins marketplace add FFatTiger/lore --ref plugin
+claude plugins marketplace add FFatTiger/lore#plugin
 claude plugins install lore@lore
 ```
 
