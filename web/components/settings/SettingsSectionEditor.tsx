@@ -1,6 +1,6 @@
 'use client';
 
-import React, { ChangeEvent } from 'react';
+import React, { ChangeEvent, type CSSProperties } from 'react';
 import clsx from 'clsx';
 import { AppInput, AppInputNumber, AppPasswordInput, AppSelect, Badge, Button, TextButton, ToggleSwitch } from '@/components/ui';
 import { useT } from '@/lib/i18n';
@@ -64,9 +64,11 @@ interface NumberInputProps {
   onChange: (v: number | '') => void;
   schema: FieldSchema;
   disabled: boolean;
+  controlClassName?: string;
+  controlStyle?: CSSProperties;
 }
 
-function NumberInput({ value, onChange, schema, disabled }: NumberInputProps): React.JSX.Element {
+function NumberInput({ value, onChange, schema, disabled, controlClassName, controlStyle }: NumberInputProps): React.JSX.Element {
   const step = schema.step ?? (schema.type === 'integer' ? 1 : 0.01);
   return (
     <AppInputNumber
@@ -76,7 +78,8 @@ function NumberInput({ value, onChange, schema, disabled }: NumberInputProps): R
       value={value == null || value === '' ? null : Number(value)}
       disabled={disabled}
       onChange={(v) => onChange(v == null ? '' : Number(v) as number)}
-      className="w-32 text-right tabular-nums"
+      className={clsx('w-32 text-right tabular-nums', controlClassName)}
+      style={controlStyle}
       size="md"
     />
   );
@@ -88,9 +91,19 @@ interface StringInputProps {
   disabled: boolean;
   secret?: boolean;
   secretConfigured?: boolean;
+  controlClassName?: string;
+  controlStyle?: CSSProperties;
 }
 
-function StringInput({ value, onChange, disabled, secret = false, secretConfigured = false }: StringInputProps): React.JSX.Element {
+function StringInput({
+  value,
+  onChange,
+  disabled,
+  secret = false,
+  secretConfigured = false,
+  controlClassName,
+  controlStyle,
+}: StringInputProps): React.JSX.Element {
   const { t } = useT();
   const InputComponent = secret ? AppPasswordInput : AppInput;
   return (
@@ -100,7 +113,8 @@ function StringInput({ value, onChange, disabled, secret = false, secretConfigur
       placeholder={secret && secretConfigured ? t('Stored') : undefined}
       autoComplete="off"
       onChange={(e: ChangeEvent<HTMLInputElement>) => onChange(e.target.value)}
-      className="py-1.5"
+      className={controlClassName || 'py-1.5'}
+      style={controlStyle}
     />
   );
 }
@@ -110,9 +124,11 @@ interface EnumInputProps {
   onChange: (v: string) => void;
   schema: FieldSchema;
   disabled: boolean;
+  controlClassName?: string;
+  controlStyle?: CSSProperties;
 }
 
-function EnumInput({ value, onChange, schema, disabled }: EnumInputProps): React.JSX.Element {
+function EnumInput({ value, onChange, schema, disabled, controlClassName, controlStyle }: EnumInputProps): React.JSX.Element {
   const labels = schema.option_labels || {};
   return (
     <AppSelect
@@ -121,6 +137,8 @@ function EnumInput({ value, onChange, schema, disabled }: EnumInputProps): React
       disabled={disabled}
       value={value == null ? '' : String(value)}
       onValueChange={onChange}
+      className={controlClassName}
+      style={controlStyle}
       options={(schema.options || []).map((opt) => ({
         value: opt,
         label: labels[opt] ? `${opt} — ${labels[opt]}` : opt,
@@ -157,16 +175,29 @@ interface FieldRowProps {
   onChange: (v: unknown) => void;
   onReset: () => void;
   saving: boolean;
+  controlClassName?: string;
+  controlStyle?: CSSProperties;
 }
 
-export function FieldRow({ schema, value, source, dirty, secretConfigured, onChange, onReset, saving }: FieldRowProps): React.JSX.Element {
+export function FieldRow({
+  schema,
+  value,
+  source,
+  dirty,
+  secretConfigured,
+  onChange,
+  onReset,
+  saving,
+  controlClassName,
+  controlStyle,
+}: FieldRowProps): React.JSX.Element {
   const { t } = useT();
   const isString = schema.type === 'string';
   const renderInput = () => {
-    if (schema.type === 'number' || schema.type === 'integer') return <NumberInput value={value} onChange={onChange as (v: number | '') => void} schema={schema} disabled={saving} />;
-    if (schema.type === 'enum') return <EnumInput value={value} onChange={onChange as (v: string) => void} schema={schema} disabled={saving} />;
+    if (schema.type === 'number' || schema.type === 'integer') return <NumberInput value={value} onChange={onChange as (v: number | '') => void} schema={schema} disabled={saving} controlClassName={controlClassName} controlStyle={controlStyle} />;
+    if (schema.type === 'enum') return <EnumInput value={value} onChange={onChange as (v: string) => void} schema={schema} disabled={saving} controlClassName={controlClassName} controlStyle={controlStyle} />;
     if (schema.type === 'boolean') return <BooleanInput value={value} onChange={onChange as (v: boolean) => void} disabled={saving} />;
-    return <StringInput value={value} onChange={onChange as (v: string) => void} disabled={saving} secret={schema.secret} secretConfigured={secretConfigured} />;
+    return <StringInput value={value} onChange={onChange as (v: string) => void} disabled={saving} secret={schema.secret} secretConfigured={secretConfigured} controlClassName={controlClassName} controlStyle={controlStyle} />;
   };
 
   return (
@@ -212,6 +243,9 @@ interface SettingsSectionEditorProps {
   onChange: (key: string, value: unknown) => void;
   onReset: (key: string) => void;
   right?: React.ReactNode;
+  controlClassName?: string;
+  controlStyle?: CSSProperties;
+  hideHeader?: boolean;
 }
 
 export function SettingsSectionEditor({
@@ -222,16 +256,21 @@ export function SettingsSectionEditor({
   onChange,
   onReset,
   right,
+  controlClassName,
+  controlStyle,
+  hideHeader = false,
 }: SettingsSectionEditorProps): React.JSX.Element {
   return (
     <>
-      <div className="flex items-center justify-between gap-3 px-4 md:px-6 pt-4 md:pt-5 pb-3 md:pb-4 border-b border-separator-thin">
-        <div className="min-w-0">
-          <h2 className="text-[17px] md:text-[19px] font-semibold tracking-tight text-txt-primary">{section.label}</h2>
-          {section.description && <p className="mt-0.5 text-[12px] md:text-[13px] text-txt-secondary">{section.description}</p>}
+      {!hideHeader && (
+        <div className="flex items-center justify-between gap-3 px-4 md:px-6 pt-4 md:pt-5 pb-3 md:pb-4 border-b border-separator-thin">
+          <div className="min-w-0">
+            <h2 className="text-[17px] md:text-[19px] font-semibold tracking-tight text-txt-primary">{section.label}</h2>
+            {section.description && <p className="mt-0.5 text-[12px] md:text-[13px] text-txt-secondary">{section.description}</p>}
+          </div>
+          {right && <div className="flex items-center gap-2 shrink-0">{right}</div>}
         </div>
-        {right && <div className="flex items-center gap-2 shrink-0">{right}</div>}
-      </div>
+      )}
       {section.items.map((schema) => {
         const effectiveValue = schema.key in draft ? draft[schema.key] : data.values[schema.key];
         return (
@@ -245,6 +284,8 @@ export function SettingsSectionEditor({
             onChange={(v) => onChange(schema.key, v)}
             onReset={() => onReset(schema.key)}
             saving={saving}
+            controlClassName={controlClassName}
+            controlStyle={controlStyle}
           />
         );
       })}

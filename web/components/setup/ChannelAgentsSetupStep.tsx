@@ -3,11 +3,14 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import clsx from 'clsx';
 import { AxiosError } from 'axios';
-import { Bot, RefreshCw, Save } from 'lucide-react';
+import { ArrowRight, Check, RefreshCw } from 'lucide-react';
 import { usePathname, useRouter } from 'next/navigation';
 import { AppTextArea, Badge, Button, LoadingBlock, Notice, surfaceCardClassName } from '@/components/ui';
 import { SetupBackButton, SetupFlowShell } from '@/components/setup/SetupFlowShell';
+import { getSetupAdvanceTarget, isLastSetupStep, setupAdvanceLabel } from '@/components/setup/setupFlowActions';
 import { useConfirm } from '@/components/ConfirmDialog';
+import { ChannelAvatar } from '@/components/UpdaterDisplay';
+import { clientTypeLabel } from '@/components/clientTypeMeta';
 import { getBootStatus, getSetupFlowStatus, saveBootStatus } from '@/lib/api';
 import {
   CHANNEL_AGENTS_SETUP_STEP_ID,
@@ -22,6 +25,9 @@ interface NodeMessage {
   tone: 'success' | 'danger' | 'info';
   text: string;
 }
+
+const CHANNEL_AGENT_TEXTAREA_CLASS = '!h-[105px] !min-h-[105px] bg-bg-inset leading-relaxed';
+const CHANNEL_AGENT_TEXTAREA_HEIGHT = 105;
 
 function statusTone(state: BootStatusNode['state']): 'red' | 'orange' | 'green' {
   if (state === 'missing') return 'red';
@@ -45,15 +51,6 @@ function previousPath(setupStatus: SetupFlowStatus | null): string | null {
 function buildDrafts(nodes: BootStatusNode[]): Record<string, string> {
   return Object.fromEntries(
     nodes.map((node) => [node.uri, node.content || getDefaultBootContent(node.uri)]),
-  );
-}
-
-function buildSkipDrafts(nodes: BootStatusNode[]): Record<string, string> {
-  return Object.fromEntries(
-    nodes.map((node) => [
-      node.uri,
-      node.state === 'initialized' && node.content.trim() ? node.content : getDefaultBootContent(node.uri),
-    ]),
   );
 }
 
@@ -96,8 +93,8 @@ export default function ChannelAgentsSetupStep(): React.JSX.Element {
     void load();
   }, [load]);
 
-  const goNext = useCallback((nextSetupStatus: SetupFlowStatus | null) => {
-    const target = nextSetupStatus?.next_step || '/memory';
+  const goAdvance = useCallback((nextSetupStatus: SetupFlowStatus | null) => {
+    const target = getSetupAdvanceTarget(nextSetupStatus, CHANNEL_AGENTS_SETUP_STEP_ID);
     if (target !== pathname) router.replace(target);
   }, [pathname, router]);
 
@@ -120,14 +117,14 @@ export default function ChannelAgentsSetupStep(): React.JSX.Element {
       const nextSetupStatus = await getSetupFlowStatus();
       setSetupStatus(nextSetupStatus);
       await load();
-      goNext(nextSetupStatus);
+      goAdvance(nextSetupStatus);
     } catch (e) {
       const axiosErr = e as AxiosError<{ detail?: string }>;
       setError(axiosErr.response?.data?.detail || axiosErr.message || t('Failed to load'));
     } finally {
       setSaving(false);
     }
-  }, [goNext, load, t, toast]);
+  }, [goAdvance, load, t, toast]);
 
   const handleChange = useCallback((uri: string, value: string) => {
     setDrafts((prev) => ({ ...prev, [uri]: value }));
@@ -139,28 +136,34 @@ export default function ChannelAgentsSetupStep(): React.JSX.Element {
     });
   }, []);
 
-  const handleSave = useCallback(async () => {
+  const handleAdvance = useCallback(async () => {
+    const emptyNodes = nodes.filter((node) => !String(drafts[node.uri] ?? '').trim());
+    if (emptyNodes.length > 0) {
+      setMessage({
+        tone: 'danger',
+        text: `${t('Fill every field on this page before continuing.')} ${emptyNodes.map((node) => t(node.setup_title)).join(', ')}`,
+      });
+      return;
+    }
     await saveNodes(drafts, t('Changes saved'));
-  }, [drafts, saveNodes, t]);
-
-  const handleSkip = useCallback(async () => {
-    await saveNodes(buildSkipDrafts(nodes), t('Default saved'));
-  }, [nodes, saveNodes, t]);
+  }, [drafts, nodes, saveNodes, t]);
 
   const previous = useMemo(() => previousPath(setupStatus), [setupStatus]);
-  const completedCount = nodes.filter((node) => node.state === 'initialized').length;
+  const isLastStep = useMemo(() => isLastSetupStep(setupStatus, CHANNEL_AGENTS_SETUP_STEP_ID), [setupStatus]);
+  const advanceLabel = setupAdvanceLabel(setupStatus, CHANNEL_AGENTS_SETUP_STEP_ID, t);
 
   return (
     <SetupFlowShell
       stepId={CHANNEL_AGENTS_SETUP_STEP_ID}
       setupStatus={setupStatus}
       title={t('Channel agent setup')}
-      description={t('Review the runtime-specific agent boot memories for every supported channel in one page.')}
+      description={t('Review every supported channel in one page. Each channel keeps only its runtime-specific delta; shared rules stay in core://agent.')}
       right={
         <>
           {previous ? <SetupBackButton href={previous} /> : null}
-          <Button variant="secondary" onClick={() => void handleSkip()} disabled={saving || loading || nodes.length === 0}>
-            {saving ? t('Saving…') : t('Skip')}
+          <Button variant="primary" onClick={() => void handleAdvance()} disabled={saving || loading || nodes.length === 0}>
+            {saving ? <RefreshCw size={14} className="animate-spin" /> : isLastStep ? <Check size={14} /> : <ArrowRight size={14} />}
+            {saving ? t('Saving…') : advanceLabel}
           </Button>
         </>
       }
@@ -181,18 +184,6 @@ export default function ChannelAgentsSetupStep(): React.JSX.Element {
 
       {!loading && nodes.length > 0 && (
         <div className={clsx('animate-in stagger-2 overflow-hidden', surfaceCardClassName)}>
-          <div className="flex items-start justify-between gap-4 border-b border-separator-thin px-4 py-4 md:px-6 md:py-5">
-            <div className="min-w-0">
-              <h2 className="text-[18px] font-semibold tracking-tight text-txt-primary">{t('Channel agent boot memories')}</h2>
-              <p className="mt-1 max-w-2xl text-[13.5px] leading-relaxed text-txt-secondary">
-                {t('Each channel keeps only its runtime-specific delta; shared rules stay in core://agent.')}
-              </p>
-            </div>
-            <Badge tone={completedCount === nodes.length ? 'green' : 'blue'} size="lg">
-              {completedCount}/{nodes.length}
-            </Badge>
-          </div>
-
           <div className="divide-y divide-separator-thin">
             {nodes.map((node) => {
               const value = drafts[node.uri] ?? getDefaultBootContent(node.uri);
@@ -202,14 +193,14 @@ export default function ChannelAgentsSetupStep(): React.JSX.Element {
                 <section key={node.uri} className="px-4 py-4 md:px-6 md:py-5">
                   <div className="flex items-start justify-between gap-4 flex-wrap">
                     <div className="flex min-w-0 items-start gap-3">
-                      <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl border border-sys-blue/20 bg-sys-blue/10 text-sys-blue">
-                        <Bot size={17} />
+                      <div className="flex h-10 w-10 shrink-0 items-center justify-center">
+                        <ChannelAvatar clientType={node.client_type} size={40} elevated />
                       </div>
                       <div className="min-w-0">
                         <div className="flex items-center gap-2 flex-wrap">
                           <h3 className="text-[16px] font-semibold tracking-tight text-txt-primary">{t(node.setup_title)}</h3>
                           <Badge tone={statusTone(node.state)}>{statusLabel(t, node.state)}</Badge>
-                          {node.client_type && <Badge tone="default">{node.client_type}</Badge>}
+                          {node.client_type && <Badge tone="default">{t(clientTypeLabel(node.client_type))}</Badge>}
                           {usingDefault && <Badge tone="soft">{t('Default')}</Badge>}
                           {dirty && <Badge tone="blue">{t('Unsaved')}</Badge>}
                         </div>
@@ -230,7 +221,8 @@ export default function ChannelAgentsSetupStep(): React.JSX.Element {
                       value={value}
                       onChange={(event) => handleChange(node.uri, event.target.value)}
                       placeholder={t('Write the final memory content here')}
-                      className="bg-bg-inset leading-relaxed h-80 min-h-80"
+                      className={CHANNEL_AGENT_TEXTAREA_CLASS}
+                      style={{ height: CHANNEL_AGENT_TEXTAREA_HEIGHT, minHeight: CHANNEL_AGENT_TEXTAREA_HEIGHT }}
                       size="lg"
                     />
                   </div>
@@ -247,12 +239,6 @@ export default function ChannelAgentsSetupStep(): React.JSX.Element {
             </div>
           )}
 
-          <div className="flex items-center justify-end gap-2 border-t border-separator-thin px-4 py-3.5 md:px-6">
-            <Button variant="secondary" onClick={() => void handleSave()} disabled={saving || nodes.length === 0}>
-              {saving ? <RefreshCw size={14} className="animate-spin" /> : <Save size={14} />}
-              {saving ? t('Saving…') : t('Save all')}
-            </Button>
-          </div>
         </div>
       )}
     </SetupFlowShell>

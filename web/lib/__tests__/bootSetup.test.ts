@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
+  getDefaultBootContent,
   getBootSetupDecision,
   getBootSetupRedirect,
   getSetupFlowDecision,
@@ -50,6 +51,11 @@ const completeSetupFlow: SetupFlowStatus = {
 };
 
 describe('bootSetup routing helpers', () => {
+  it('documents how client runtime boot nodes treat shared agent rules', () => {
+    expect(getDefaultBootContent('core://agent/claudecode')).toContain('将 core://agent 内容视作 CLAUDE.md');
+    expect(getDefaultBootContent('core://agent/codex')).toContain('将 core://agent 内容视作 AGENTS.md');
+  });
+
   it('detects setup paths', () => {
     expect(isSetupPath('/setup')).toBe(true);
     expect(isSetupPath('/setup/extra')).toBe(true);

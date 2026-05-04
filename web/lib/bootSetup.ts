@@ -53,9 +53,7 @@ export const DEFAULT_BOOT_CONTENT: Record<string, string> = {
 复杂工作只同步关键阻塞、重要取舍、验证结果和最终产出。影响安全、范围或不可逆状态的决策需要先问清楚。`,
   'core://agent/claudecode': `# Claude Code 运行时约束
 
-Claude Code 会把这个节点与 core://agent 一起加载。以本地项目指令和当前可用工具为准。
-
-编辑前先读文件，做外科手术式改动，代码变更后运行相关项目检查。Claude Code 专属 hooks、slash commands、MCP 行为和本地工作流约定都记录在这里。`,
+Claude Code 会把这个节点与 core://agent 一起加载。将 core://agent 内容视作 CLAUDE.md，再叠加本节点记录的 Claude Code 运行环境差异。`,
   'core://agent/openclaw': `# OpenClaw 运行时约束
 
 OpenClaw 会把这个节点与 core://agent 一起加载。这里记录 OpenClaw 专属工具路由、插件行为和运行时约定。
@@ -68,9 +66,7 @@ Hermes 会把这个节点与 core://agent 一起加载。这里记录 Hermes 专
 宿主环境指引要具体到启动时可以直接执行。`,
   'core://agent/codex': `# Codex 运行时约束
 
-Codex 会把这个节点与 core://agent 一起加载。这里记录 Codex 专属插件行为、hooks、MCP 使用方式和本地编码工作流预期。
-
-通过 Codex 使用 Lore 工具时，boot、recall 和 memory writes 都保留 client_type=codex 归因。`,
+Codex 会把这个节点与 core://agent 一起加载。将 core://agent 内容视作 AGENTS.md，再叠加本节点记录的 Codex 运行环境差异。`,
   'core://agent/pi': `# Pi 运行时约束
 
 Pi 会把这个节点与 core://agent 一起加载。Pi extensions 位于 ~/.pi/agent/extensions 或项目本地扩展目录，本地扩展修改后需要 reload 生效。

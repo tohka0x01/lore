@@ -104,7 +104,7 @@ const GLOBAL_BOOT_NODES: readonly BootNodeSpec[] = [
     client_type: null,
     setup_slug: 'agent',
     setup_title: 'Agent boot memory',
-    setup_description: 'Write the fixed workflow-constraints node that every Lore agent loads at startup.',
+    setup_description: 'Use this as the shared AGENTS.md / CLAUDE.md-style working rules: repository instructions, collaboration boundaries, safety checks, coding workflow, and verification expectations that every Lore agent loads at startup.',
   },
   {
     id: 'soul',

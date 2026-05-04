@@ -47,7 +47,7 @@ Lore is built for agents that need continuity across sessions, tools, and runtim
 
 ### 1. Start the server
 
-Create a `docker-compose.yml` with the production images:
+Create a `docker-compose.yml`:
 
 ```yaml
 services:
@@ -88,8 +88,6 @@ volumes:
   lore_postgres_data:
   lore_snapshots:
 ```
-
-Lore writes snapshots and local backups inside the container under `/app/snapshots`; map persistent host storage to that path.
 
 Start Lore:
 

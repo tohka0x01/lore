@@ -4,7 +4,7 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import clsx from 'clsx';
 import { AxiosError } from 'axios';
 import { api } from '@/lib/api';
-import { PageCanvas, PageTitle, Section, Badge, Button, LoadingBlock, Notice } from '@/components/ui';
+import { PageCanvas, PageTitle, Section, Badge, Button, LoadingBlock, Notice, OutlineNavFloatingPanel, OutlineNavGroup, OutlineNavItem } from '@/components/ui';
 import { useT } from '@/lib/i18n';
 import { useConfirm } from '@/components/ConfirmDialog';
 import {
@@ -20,9 +20,52 @@ interface ToastState {
   text: string;
 }
 
+interface SettingsTocItem {
+  id: string;
+  label: string;
+}
+
+interface SettingsTocGroup {
+  label: string;
+  items: SettingsTocItem[];
+}
+
+const SETTINGS_TOC_GROUPS = [
+  { label: 'Recall', ids: ['recall_weights', 'recall_bonus', 'recall_recency', 'recall_display', 'views'] },
+  { label: 'Services', ids: ['embedding', 'view_llm'] },
+  { label: 'Automation', ids: ['policy', 'dream', 'backup', 'review'] },
+] as const;
+
+function settingsSectionAnchor(sectionId: string): string {
+  return `settings-section-${sectionId}`;
+}
+
+function buildSettingsTocGroups(sections: SectionGroup[], backupLabel: string): SettingsTocGroup[] {
+  const byId = new Map(sections.map((section) => [section.id, section]));
+  const groups: SettingsTocGroup[] = SETTINGS_TOC_GROUPS
+    .map((group) => ({
+      label: group.label,
+      items: group.ids
+        .map((id) => byId.get(id))
+        .filter(Boolean)
+        .map((section) => ({
+          id: settingsSectionAnchor(section!.id),
+          label: section!.label,
+        })),
+    }))
+    .filter((group) => group.items.length > 0);
+
+  groups.push({
+    label: 'Operations',
+    items: [{ id: settingsSectionAnchor('backup-actions'), label: backupLabel }],
+  });
+  return groups;
+}
+
 export default function SettingsPage(): React.JSX.Element {
   const { t } = useT();
   const [toast, setToast] = useState<ToastState | null>(null);
+  const [activeSectionId, setActiveSectionId] = useState<string | null>(null);
   const { confirm: confirmDialog } = useConfirm();
   const {
     data,
@@ -52,6 +95,8 @@ export default function SettingsPage(): React.JSX.Element {
   }, [toast]);
 
   const grouped = useMemo(() => groupSettingsSections(data), [data]);
+  const tocGroups = useMemo(() => buildSettingsTocGroups(grouped, t('Backup Actions')), [grouped, t]);
+  const tocItems = useMemo(() => tocGroups.flatMap((group) => group.items), [tocGroups]);
 
   const weightSum = useMemo((): number | null => {
     if (!data) return null;
@@ -83,60 +128,144 @@ export default function SettingsPage(): React.JSX.Element {
     return null;
   }, [handleRebuild, rebuilding, saving, t, weightSum]);
 
-  return (
-    <PageCanvas maxWidth="4xl">
-      <PageTitle
-        eyebrow={t('Configuration')}
-        title={t('Settings')}
-        description={t('Runtime parameters for the recall pipeline. Changes take effect immediately.')}
-        right={
-          <>
-            {dirtyKeys.length > 0 && (
-              <Button variant="ghost" onClick={clearDraft} disabled={saving}>
-                {t('Discard')}
-              </Button>
-            )}
-            <Button variant="primary" onClick={() => void handleSave()} disabled={saving || dirtyKeys.length === 0}>
-              {saving ? t('Saving…') : dirtyKeys.length > 0 ? `${t('Save')} ${dirtyKeys.length}` : t('Save')}
-            </Button>
-          </>
+  useEffect(() => {
+    if (tocItems.length === 0) return;
+    const firstElement = document.getElementById(tocItems[0].id);
+    const scrollRoot = firstElement?.closest('.overflow-y-auto') as HTMLElement | null;
+    let frame = 0;
+
+    const updateActiveSection = () => {
+      window.cancelAnimationFrame(frame);
+      frame = window.requestAnimationFrame(() => {
+        const rootTop = scrollRoot?.getBoundingClientRect().top ?? 0;
+        const anchorLine = rootTop + 96;
+        let nextActive = tocItems[0].id;
+        for (const item of tocItems) {
+          const element = document.getElementById(item.id);
+          if (!element) continue;
+          if (element.getBoundingClientRect().top <= anchorLine) nextActive = item.id;
+          else break;
         }
-      />
+        setActiveSectionId(nextActive);
+      });
+    };
 
-      {toast && (
-        <Notice tone={toast.type === 'success' ? 'success' : 'danger'} className="animate-scale mb-4">
-          {toast.text}
-        </Notice>
-      )}
-      {error && (
-        <Notice tone="danger" className="animate-scale mb-4">
-          {error}
-        </Notice>
-      )}
+    updateActiveSection();
+    scrollRoot?.addEventListener('scroll', updateActiveSection, { passive: true });
+    window.addEventListener('resize', updateActiveSection);
+    return () => {
+      window.cancelAnimationFrame(frame);
+      scrollRoot?.removeEventListener('scroll', updateActiveSection);
+      window.removeEventListener('resize', updateActiveSection);
+    };
+  }, [tocItems]);
 
-      {loading && <LoadingBlock />}
+  const jumpToSection = useCallback((id: string) => {
+    setActiveSectionId(id);
+    document.getElementById(id)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  }, []);
 
-      {data && !loading && (
-        <div className="space-y-5">
-          {grouped.map((section, index) => (
-            <div key={section.id} className={clsx('animate-in', `stagger-${Math.min(index + 1, 6)}`)}>
-              <Section>
-                <SettingsSectionEditor
-                  section={section}
-                  data={data}
-                  draft={draft}
-                  saving={saving}
-                  onChange={handleChange}
-                  onReset={(key) => void handleReset(key)}
-                  right={sectionRight(section)}
-                />
-              </Section>
+  return (
+    <PageCanvas maxWidth="6xl">
+      <div className="flex gap-6 lg:gap-10">
+        {data && !loading ? <SettingsToc groups={tocGroups} activeId={activeSectionId} onJump={jumpToSection} /> : <div className="hidden w-52 shrink-0 lg:block lg:w-56" />}
+
+        <div className="min-w-0 flex-1">
+          <PageTitle
+            eyebrow={t('Configuration')}
+            title={t('Settings')}
+            description={t('Runtime parameters for the recall pipeline. Changes take effect immediately.')}
+            right={
+              <>
+                {dirtyKeys.length > 0 && (
+                  <Button variant="ghost" onClick={clearDraft} disabled={saving}>
+                    {t('Discard')}
+                  </Button>
+                )}
+                <Button variant="primary" onClick={() => void handleSave()} disabled={saving || dirtyKeys.length === 0}>
+                  {saving ? t('Saving…') : dirtyKeys.length > 0 ? `${t('Save')} ${dirtyKeys.length}` : t('Save')}
+                </Button>
+              </>
+            }
+          />
+
+          {toast && (
+            <Notice tone={toast.type === 'success' ? 'success' : 'danger'} className="animate-scale mb-4">
+              {toast.text}
+            </Notice>
+          )}
+          {error && (
+            <Notice tone="danger" className="animate-scale mb-4">
+              {error}
+            </Notice>
+          )}
+
+          {loading && <LoadingBlock />}
+
+          {data && !loading && (
+            <div className="space-y-5">
+              {grouped.map((section, index) => (
+                <div
+                  key={section.id}
+                  id={settingsSectionAnchor(section.id)}
+                  className={clsx('scroll-mt-6 animate-in', `stagger-${Math.min(index + 1, 6)}`)}
+                >
+                  <Section>
+                    <SettingsSectionEditor
+                      section={section}
+                      data={data}
+                      draft={draft}
+                      saving={saving}
+                      onChange={handleChange}
+                      onReset={(key) => void handleReset(key)}
+                      right={sectionRight(section)}
+                    />
+                  </Section>
+                </div>
+              ))}
+              <div id={settingsSectionAnchor('backup-actions')} className="scroll-mt-6">
+                <BackupActionPanel />
+              </div>
             </div>
-          ))}
-          <BackupActionPanel />
+          )}
         </div>
-      )}
+      </div>
     </PageCanvas>
+  );
+}
+
+function SettingsToc({
+  groups,
+  activeId,
+  onJump,
+}: {
+  groups: SettingsTocGroup[];
+  activeId: string | null;
+  onJump: (id: string) => void;
+}): React.JSX.Element {
+  const { t } = useT();
+  return (
+    <OutlineNavFloatingPanel
+      ariaLabel="Settings sections"
+      left="max(2.5rem, calc((100vw - 1152px) / 2 + 2.5rem))"
+      panelClassName="w-52 lg:w-56"
+      placeholderClassName="w-52 lg:w-56"
+      title={t('Contents')}
+    >
+      {groups.map((group) => (
+        <OutlineNavGroup key={group.label} label={t(group.label)}>
+          {group.items.map((item) => (
+            <OutlineNavItem
+              key={item.id}
+              active={activeId === item.id}
+              onClick={() => onJump(item.id)}
+            >
+              {item.label}
+            </OutlineNavItem>
+          ))}
+        </OutlineNavGroup>
+      ))}
+    </OutlineNavFloatingPanel>
   );
 }
 

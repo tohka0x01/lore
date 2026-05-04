@@ -37,7 +37,7 @@ const BASE_BOOT_VIEW = {
       client_type: null,
       setup_slug: 'agent',
       setup_title: 'Agent boot memory',
-      setup_description: 'Write the fixed workflow-constraints node that every Lore agent loads at startup.',
+      setup_description: 'Use this as the shared AGENTS.md / CLAUDE.md-style working rules: repository instructions, collaboration boundaries, safety checks, coding workflow, and verification expectations that every Lore agent loads at startup.',
       state: 'initialized' as const,
       content: 'Agent memory',
       content_length: 12,
@@ -143,10 +143,10 @@ describe('buildSetupFlowStatus', () => {
     expect(result.steps).toEqual([
       { id: 'embedding', path: '/setup/embedding', label: 'Embedding setup', complete: true },
       { id: 'llm', path: '/setup/llm', label: 'View LLM setup', complete: false },
-      { id: 'boot:agent', path: '/setup/boot/agent', label: 'Agent boot memory', description: 'Write the fixed workflow-constraints node that every Lore agent loads at startup.', complete: true, role: 'agent', uri: 'core://agent', scope: 'global', client_type: null, setup_slug: 'agent' },
+      { id: 'boot:agent', path: '/setup/boot/agent', label: 'Agent boot memory', description: 'Use this as the shared AGENTS.md / CLAUDE.md-style working rules: repository instructions, collaboration boundaries, safety checks, coding workflow, and verification expectations that every Lore agent loads at startup.', complete: true, role: 'agent', uri: 'core://agent', scope: 'global', client_type: null, setup_slug: 'agent' },
       { id: 'boot:soul', path: '/setup/boot/soul', label: 'Soul boot memory', description: 'Write the fixed persona baseline that Lore carries into every session.', complete: false, role: 'soul', uri: 'core://soul', scope: 'global', client_type: null, setup_slug: 'soul' },
       { id: 'boot:user', path: '/setup/boot/user', label: 'User boot memory', description: 'Write the stable user profile Lore should remember across future sessions.', complete: false, role: 'user', uri: 'preferences://user', scope: 'global', client_type: null, setup_slug: 'user' },
-      { id: 'channel_agents', path: '/setup/channels', label: 'Channel agent setup', description: 'Review the runtime-specific agent boot memories for every supported channel in one page.', complete: true, role: 'agent', scope: 'client', client_type: null, setup_slug: 'channel_agents' },
+      { id: 'channel_agents', path: '/setup/channels', label: 'Channel agent setup', description: 'Review every supported channel in one page. Each channel keeps only its runtime-specific delta; shared rules stay in core://agent.', complete: true, role: 'agent', scope: 'client', client_type: null, setup_slug: 'channel_agents' },
     ]);
   });
 

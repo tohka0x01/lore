@@ -38,7 +38,7 @@ function buildChannelAgentsStep(nodes: BootStatusNode[]): SetupFlowStep | null {
     id: CHANNEL_AGENTS_SETUP_STEP_ID,
     path: getSetupStepPath(CHANNEL_AGENTS_SETUP_STEP_ID),
     label: 'Channel agent setup',
-    description: 'Review the runtime-specific agent boot memories for every supported channel in one page.',
+    description: 'Review every supported channel in one page. Each channel keeps only its runtime-specific delta; shared rules stay in core://agent.',
     complete: clientNodes.every((node) => node.state === 'initialized'),
     role: 'agent',
     scope: 'client',

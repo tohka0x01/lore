@@ -40,6 +40,7 @@ describe('settingsSchema', () => {
     expect(SCHEMA_BY_KEY.has('review.local.path')).toBe(false);
     expect(SCHEMA_BY_KEY.get('embedding.model')?.default).toBe('text-embedding-3-small');
     expect(SCHEMA_BY_KEY.get('view_llm.model')?.default).toBe('deepseek-v4-flash');
+    expect(SCHEMA_BY_KEY.get('backup.enabled')?.default).toBe(true);
   });
 
   it('does not expose selectable recall scoring algorithms', () => {

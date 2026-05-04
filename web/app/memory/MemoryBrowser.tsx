@@ -61,7 +61,7 @@ export default function MemoryBrowser(): React.JSX.Element {
   const hasEmptyState = !data.children?.length && !node?.content && !node?.memory_views?.length;
 
   return (
-    <div className="h-full w-full overflow-y-auto">
+    <div className="h-full w-full overflow-x-hidden overflow-y-auto">
       <div className="mx-auto max-w-[1400px] px-4 py-4 md:px-6 md:py-8">
         <div className="flex gap-5 md:gap-10">
           <MemoryBrowserSidebar
@@ -149,15 +149,15 @@ export default function MemoryBrowser(): React.JSX.Element {
                   setCreating={setCreating}
                 />
 
-                <div className="space-y-6">
+                {isRoot && (
                   <MemoryChildrenList childItems={data.children as ChildItem[]} domain={domain} isRoot={isRoot} navigateTo={navigateTo} navigateToHistory={navigateToHistory} />
+                )}
 
-                  {hasEmptyState && (
-                    <div className="py-16 text-center">
-                      <p className="text-[15px] text-txt-tertiary">{t('This folder is empty.')}</p>
-                    </div>
-                  )}
-                </div>
+                {hasEmptyState && (
+                  <div className="py-16 text-center">
+                    <p className="text-[15px] text-txt-tertiary">{t('This folder is empty.')}</p>
+                  </div>
+                )}
               </>
             )}
           </main>

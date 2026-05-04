@@ -339,7 +339,7 @@ export const SETTINGS_SCHEMA: SettingDef[] = [
     key: 'backup.enabled',
     section: 'backup',
     label: '定时备份',
-    type: 'boolean', default: false,
+    type: 'boolean', default: true,
     description: '启用后，系统每天在指定时间自动执行数据库备份',
   },
   {

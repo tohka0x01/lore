@@ -169,6 +169,13 @@
 ::-webkit-scrollbar-thumb:hover { background: var(--scrollbar-thumb-hover); }
 .no-scrollbar::-webkit-scrollbar { display: none; }
 .no-scrollbar { scrollbar-width: none; }
+.hover-x-scrollbar { overflow-x: hidden; }
+.hover-x-scrollbar:hover { overflow-x: auto; }
+.hover-x-scrollbar::-webkit-scrollbar { height: 0; }
+.hover-x-scrollbar:hover::-webkit-scrollbar { height: 8px; }
+.hover-x-scrollbar::-webkit-scrollbar-thumb:horizontal { background: transparent; }
+.hover-x-scrollbar:hover::-webkit-scrollbar-thumb:horizontal { background: var(--scrollbar-thumb); }
+.hover-x-scrollbar:hover::-webkit-scrollbar-thumb:horizontal:hover { background: var(--scrollbar-thumb-hover); }
 
 /* ── focus ring ─────────────────────────────────────────── */
 

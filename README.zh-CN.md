@@ -47,7 +47,7 @@ Lore 面向需要跨会话、跨工具、跨运行时连续性的 agent。
 
 ### 1. 启动服务器
 
-创建一个 `docker-compose.yml`，直接使用生产镜像：
+创建一个 `docker-compose.yml`：
 
 ```yaml
 services:
@@ -88,8 +88,6 @@ volumes:
   lore_postgres_data:
   lore_snapshots:
 ```
-
-Lore 在容器内固定把 snapshots 和本地备份写到 `/app/snapshots`；把宿主机持久化目录映射到这个路径即可。
 
 启动 Lore：
 

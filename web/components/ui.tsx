@@ -6,3 +6,4 @@ export * from './ui/controls';
 export * from './ui/provider';
 export * from './ui/table';
 export * from './ui/recall';
+export * from './ui/outlineNav';
