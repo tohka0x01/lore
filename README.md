@@ -8,9 +8,11 @@
   <img src="docs/screenshots/recall-analytics.jpg" alt="Recall Analytics">
 </p>
 
-| Recall Workbench | Memory Browser | Dream Diary |
-|:-:|:-:|:-:|
-| ![Recall Workbench](docs/screenshots/recall-workbench.jpg) | ![Memory Browser](docs/screenshots/memory-browser.jpg) | ![Dream Diary](docs/screenshots/dream-diary.jpg) |
+<p align="center">
+  <img src="docs/screenshots/recall-workbench.jpg" width="33%" />
+  <img src="docs/screenshots/memory-browser.jpg" width="33%" />
+  <img src="docs/screenshots/dream-diary.jpg" width="33%" />
+</p>
 
 ---
 
