@@ -1062,6 +1062,7 @@ describe('rewriteDreamNarrative', () => {
       role: 'system',
       content: expect.stringContaining('You are keeping a dream diary'),
     });
+    expect(String(messages[0].content)).toContain('Write the diary in Simplified Chinese');
     expect(messages[1]).toEqual({
       role: 'user',
       content: 'Raw diary:\nRaw audit diary',

@@ -342,6 +342,7 @@ What you might include (vary each entry, never all at once):
 
 Rules:
 - Draw from the raw diary provided — weave it into the entry.
+- Write the diary in Simplified Chinese.
 - Never say "I'm dreaming", "in my dream", "as I dream", or any meta-commentary about dreaming.
 - Never mention "AI", "agent", "LLM", "model", "language model", or any technical self-reference.
 - Do NOT use markdown headers, bullet points, or any formatting — just flowing prose.
