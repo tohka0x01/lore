@@ -16,6 +16,8 @@
 |:-:|
 | ![Settings](docs/screenshots/settings.jpg) |
 
+---
+
 ## 设计理念
 
 Lore 是给 AI agent 用的长期记忆系统。它提供持久记忆图谱、固定启动基线、每轮 prompt 前召回、显式读取追踪和谨慎写入工具。
@@ -42,6 +44,8 @@ Lore 关注完整的记忆生命周期：
 - **Dream maintenance** — 定时整理可以检查召回质量、结构放置和过期节点，并保留 rollback 历史。
 
 Lore 面向需要跨会话、跨工具、跨运行时连续性的 agent。
+
+---
 
 ## Quick Start
 
@@ -151,7 +155,7 @@ http://127.0.0.1:18901/setup
 
 语义 recall 和索引重建需要 Embedding。初始化阶段要求配置 View LLM，让 Dream 和 view refinement 在启用时直接可用。
 
-### 源码构建 fallback
+#### 源码构建
 
 本地开发或自定义构建使用源码方式：
 
@@ -162,6 +166,8 @@ cp .env.example .env
 # 先编辑 .env
 docker compose up -d --build
 ```
+
+---
 
 ## 接入 agent
 
@@ -183,6 +189,12 @@ claude plugins install lore@lore
 ```
 
 安装后重启 Claude Code。
+
+> **注意：** Claude Code 自带 auto-memory 功能，会写入 `~/.claude/memory/`。建议关闭以避免两套记忆系统竞争，使用 Lore 效果更好：
+> ```bash
+> export CLAUDE_CODE_DISABLE_AUTO_MEMORY=1
+> ```
+> 或在 `~/.claude/settings.json` 中设置 `"autoMemoryEnabled": false`。
 
 它会加入：
 
@@ -321,6 +333,8 @@ http://127.0.0.1:18901/api/mcp?client_type=mcp
 
 启用 `API_TOKEN` 时，以 bearer token 传入。
 
+---
+
 ## 日常使用
 
 agent 接入后，工作流是：
@@ -337,6 +351,8 @@ agent 接入后，工作流是：
 - `/recall` — 检查检索阶段和评分
 - `/dream` — 运行结构整理
 - `/settings` — 配置运行参数
+
+---
 
 ## 开发
 

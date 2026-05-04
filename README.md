@@ -16,6 +16,8 @@
 |:-:|
 | ![Settings](docs/screenshots/settings.jpg) |
 
+---
+
 ## Design philosophy
 
 Lore is a long-term memory system for AI agents. It gives an agent a durable memory graph, a fixed startup baseline, per-prompt recall, explicit read tracking, and cautious write tools.
@@ -42,6 +44,8 @@ Most agent memory systems stop at retrieval. Lore focuses on the full memory lif
 - **Dream maintenance** — scheduled review can inspect recall quality, structure, and stale nodes with rollback history.
 
 Lore is built for agents that need continuity across sessions, tools, and runtimes.
+
+---
 
 ## Quick start
 
@@ -151,7 +155,7 @@ Open `/settings` after setup for:
 
 Embedding is required for semantic recall and index rebuilds. View LLM is required during setup so Dream and view refinement are ready when you enable them.
 
-### Source build fallback
+#### Source build
 
 For local development or custom builds:
 
@@ -162,6 +166,8 @@ cp .env.example .env
 # edit .env first
 docker compose up -d --build
 ```
+
+---
 
 ## Connect agents
 
@@ -183,6 +189,12 @@ claude plugins install lore@lore
 ```
 
 Restart Claude Code after installing.
+
+> **Note:** Claude Code has a built-in auto-memory feature that writes to `~/.claude/memory/`. For best results, disable it so the two memory systems don't compete:
+> ```bash
+> export CLAUDE_CODE_DISABLE_AUTO_MEMORY=1
+> ```
+> Or set `"autoMemoryEnabled": false` in `~/.claude/settings.json`.
 
 What it adds:
 
@@ -321,6 +333,8 @@ http://127.0.0.1:18901/api/mcp?client_type=mcp
 
 If `API_TOKEN` is configured, pass it as a bearer token.
 
+---
+
 ## Daily use
 
 Once connected, the agent workflow is:
@@ -337,6 +351,8 @@ Useful UI pages:
 - `/recall` — inspect retrieval stages and scoring
 - `/dream` — run structural maintenance
 - `/settings` — configure runtime behavior
+
+---
 
 ## Development
 
