@@ -4,17 +4,11 @@
 
 ## 1. 截图
 
-| Memory Browser | Recall Workbench |
-|:-:|:-:|
-| ![Memory Browser](docs/screenshots/memory-browser.jpg) | ![Recall Workbench](docs/screenshots/recall-workbench.jpg) |
+![Recall Analytics](docs/screenshots/recall-analytics.jpg)
 
-| Recall Analytics | Dream Diary |
-|:-:|:-:|
-| ![Recall Analytics](docs/screenshots/recall-analytics.jpg) | ![Dream Diary](docs/screenshots/dream-diary.jpg) |
-
-| Settings |
-|:-:|
-| ![Settings](docs/screenshots/settings.jpg) |
+| Memory Browser | Recall Workbench | Dream Diary |
+|:-:|:-:|:-:|
+| ![Memory Browser](docs/screenshots/memory-browser.jpg) | ![Recall Workbench](docs/screenshots/recall-workbench.jpg) | ![Dream Diary](docs/screenshots/dream-diary.jpg) |
 
 ---
 
