@@ -4,7 +4,9 @@
 
 ## 1. 截图
 
-![Recall Analytics](docs/screenshots/recall-analytics.jpg)
+<p align="center">
+  <img src="docs/screenshots/recall-analytics.jpg" alt="Recall Analytics">
+</p>
 
 | Memory Browser | Recall Workbench | Dream Diary |
 |:-:|:-:|:-:|
