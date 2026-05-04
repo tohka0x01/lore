@@ -93,12 +93,12 @@ export function createMcpServer(context: McpServerContext = {}): InstanceType<ty
   // ── lore_get_node ────────────────────────────────────────────
   server.tool(
     'lore_get_node',
-    'Open a memory node to inspect its full content, metadata, and nearby structure. Pass session_id and query_id from the <recall> tag to enable read tracking and adoption.',
+    'Open a memory node. REQUIRED when opening a URI from a <recall>: copy the exact session_id and query_id from that <recall> tag.',
     {
       uri: z.string().describe('Full memory URI for the node you want to open, such as core://soul. Use core:// or project:// to browse a domain root; bare words are paths in the default domain.'),
       nav_only: z.boolean().optional().describe('If true, skip expensive glossary processing.'),
-      session_id: z.string().optional().describe('Session identifier from the <recall session_id="..."> tag.'),
-      query_id: z.string().optional().describe('Query identifier from the <recall query_id="..."> tag. Marks this recall as adopted.'),
+      session_id: z.string().optional().describe('REQUIRED when the URI came from <recall>: copy the exact session_id from that <recall> tag.'),
+      query_id: z.string().optional().describe('REQUIRED when the URI came from <recall>: copy the exact query_id from that <recall> tag.'),
     },
     async (args) => {
       try {

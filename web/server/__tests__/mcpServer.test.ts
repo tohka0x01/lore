@@ -58,6 +58,29 @@ describe('embedded MCP contract projections', () => {
     mockValidateDeletePolicy.mockResolvedValue({ errors: [], warnings: [] } as any);
   });
 
+  it('tells agents to pass recall session and query ids when opening recalled nodes', () => {
+    const server = createMcpServer();
+    const tool = (server as any)._registeredTools.lore_get_node;
+    const shape = tool.inputSchema._def.shape();
+    const text = [
+      tool.description,
+      shape.session_id.description,
+      shape.query_id.description,
+    ].join('\n');
+
+    expect(text).toContain('REQUIRED when opening a URI from a <recall>');
+    expect(text).toContain('copy the exact session_id');
+    expect(text).toContain('copy the exact query_id');
+    expect(shape.session_id.isOptional()).toBe(true);
+    expect(shape.query_id.isOptional()).toBe(true);
+    expect(tool.inputSchema.safeParse({ uri: 'core://agent' }).success).toBe(true);
+    expect(tool.inputSchema.safeParse({
+      uri: 'core://agent',
+      session_id: 'sess-1',
+      query_id: 'query-1',
+    }).success).toBe(true);
+  });
+
   it('projects create receipts from canonical uri fields', async () => {
     mockCreateNode.mockResolvedValueOnce({
       success: true,
