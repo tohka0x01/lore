@@ -1,4 +1,4 @@
-# Lore
+# Lore（一个打通所有 agent 的记忆系统）
 
 [English README](./README.md)
 

@@ -1,4 +1,4 @@
-# Lore
+# Lore — one memory system across all your agents
 
 [中文 README](./README.zh-CN.md)
 
