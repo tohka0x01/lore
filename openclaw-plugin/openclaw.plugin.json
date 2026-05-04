@@ -2,7 +2,25 @@
   "id": "lore",
   "name": "Lore",
   "description": "Primary Lore memory system for fixed boot baseline, recall, and cross-session project knowledge.",
-  "version": "1.0.6",
+  "version": "1.0.7",
+  "activation": {
+    "onStartup": true
+  },
+  "contracts": {
+    "tools": [
+      "lore_status",
+      "lore_boot",
+      "lore_get_node",
+      "lore_search",
+      "lore_list_domains",
+      "lore_create_node",
+      "lore_update_node",
+      "lore_delete_node",
+      "lore_move_node",
+      "lore_list_session_reads",
+      "lore_clear_session_reads"
+    ]
+  },
   "configSchema": {
     "type": "object",
     "additionalProperties": false,

@@ -7,7 +7,7 @@ import {
   normalizeSearchResults,
   normalizeKeywordList,
   normalizeUriList,
-} from '../index.ts';
+} from '../formatters';
 
 describe('formatNode', () => {
   it('formats a basic node', () => {

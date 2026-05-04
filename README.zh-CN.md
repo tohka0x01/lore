@@ -231,14 +231,22 @@ export LORE_BASE_URL=http://127.0.0.1:18901
 
 ### OpenClaw
 
-把 `openclaw-plugin/` 复制或 symlink 到 OpenClaw plugin path，然后在 OpenClaw 配置里写入 Lore 地址。
+安装：
 
-示例配置结构：
+```bash
+cd openclaw-plugin
+npm install
+npm run build
+openclaw plugins install . --force --dangerously-force-unsafe-install
+openclaw plugins enable lore
+```
+
+修改 `~/.openclaw/openclaw.json`：
 
 ```jsonc
 {
   "plugins": {
-    "load": { "paths": ["/path/to/openclaw-plugin"] },
+    "allow": ["lore"],
     "entries": {
       "lore": {
         "enabled": true,
@@ -246,7 +254,8 @@ export LORE_BASE_URL=http://127.0.0.1:18901
           "baseUrl": "http://127.0.0.1:18901",
           "apiToken": "replace-this-if-needed",
           "recallEnabled": true,
-          "startupHealthcheck": true
+          "startupHealthcheck": true,
+          "injectPromptGuidance": true
         }
       }
     }
@@ -254,7 +263,36 @@ export LORE_BASE_URL=http://127.0.0.1:18901
 }
 ```
 
-修改插件配置后重启 OpenClaw。
+如果配置了 `tools.allow`，也把 Lore tools 加进去：
+
+```jsonc
+{
+  "tools": {
+    "allow": [
+      "group:openclaw",
+      "group:runtime",
+      "group:fs",
+      "lore_status",
+      "lore_boot",
+      "lore_get_node",
+      "lore_search",
+      "lore_list_domains",
+      "lore_create_node",
+      "lore_update_node",
+      "lore_delete_node",
+      "lore_move_node",
+      "lore_list_session_reads",
+      "lore_clear_session_reads"
+    ]
+  }
+}
+```
+
+重启 OpenClaw：
+
+```bash
+openclaw gateway restart
+```
 
 ### Hermes
 

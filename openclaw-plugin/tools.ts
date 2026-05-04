@@ -1,14 +1,39 @@
-import { textResult, fetchJson, hasRecallConfig } from './api';
-import { resolveMemoryLocator, splitParentPathAndTitle, trimSlashes } from './uri';
-import { formatNode, formatBootView, normalizeSearchResults, normalizeKeywordList } from './formatters';
-import { markSessionRead } from './hooks';
+import { Type } from "@sinclair/typebox";
+import { textResult, fetchJson, hasRecallConfig } from "./api";
+import { resolveMemoryLocator, splitParentPathAndTitle, trimSlashes } from "./uri";
+import { formatNode, formatBootView, normalizeSearchResults, normalizeKeywordList } from "./formatters";
+import { markSessionRead } from "./hooks";
+
+// Shared TypeBox schemas for tool parameters
+const EmptySchema = Type.Object({});
+
+const UriParam = Type.String({
+  description: "Full memory URI, such as core://soul. Use core:// or project:// to browse a domain root; bare words are paths in the default domain.",
+});
+
+const SessionIdParam = Type.String({
+  description: "Session identifier from the <recall session_id=\"...\"> tag. Enables per-session read tracking and recall suppression.",
+});
+
+const QueryIdParam = Type.String({
+  description: "Query identifier from the <recall query_id=\"...\"> tag. Enables recall usage tracking.",
+});
+
+const InternalSessionId = Type.String({
+  description: "Internal session tracking field.",
+});
+
+const InternalSessionKey = Type.String({
+  description: "Internal session tracking field.",
+});
 
 export function registerTools(api: any, pluginCfg: any) {
+  api.logger?.info?.("lore: registerTools() starting");
   api.registerTool({
     name: "lore_status",
     label: "Lore status",
     description: "Check memory backend availability and connection health.",
-    parameters: { type: "object", additionalProperties: false, properties: {} },
+    parameters: EmptySchema,
     async execute() {
       try {
         const data = await fetchJson(pluginCfg, "/health", { method: "GET" });
@@ -23,7 +48,7 @@ export function registerTools(api: any, pluginCfg: any) {
     name: "lore_boot",
     label: "Lore boot",
     description: "Load the fixed boot memory view that restores the deterministic startup baseline and core operating context.",
-    parameters: { type: "object", additionalProperties: false, properties: {} },
+    parameters: EmptySchema,
     async execute() {
       try {
         const data = await fetchJson(pluginCfg, "/browse/boot", { method: "GET" });
@@ -39,19 +64,14 @@ export function registerTools(api: any, pluginCfg: any) {
     name: "lore_get_node",
     label: "Lore get node",
     description: "Open a memory node to inspect its full content, metadata, and nearby structure. Pass session_id and query_id from the <recall> tag to enable per-session read tracking and recall usage marking.",
-    parameters: {
-      type: "object",
-      additionalProperties: false,
-      required: ["uri"],
-      properties: {
-        uri: { type: "string", description: "Full memory URI for the node you want to open, such as core://soul. Use core:// or project:// to browse a domain root; bare words are paths in the default domain." },
-        nav_only: { type: "boolean", description: "If true, skip expensive glossary processing." },
-        session_id: { type: "string", description: "Session identifier from the <recall session_id=\"...\"> tag. Enables per-session read tracking and recall suppression." },
-        query_id: { type: "string", description: "Query identifier from the <recall query_id=\"...\"> tag. Enables recall usage tracking when the node is used in the answer." },
-        __session_id: { type: "string", description: "Internal session tracking field." },
-        __session_key: { type: "string", description: "Internal session tracking field." }
-      }
-    },
+    parameters: Type.Object({
+      uri: UriParam,
+      nav_only: Type.Optional(Type.Boolean({ description: "If true, skip expensive glossary processing." })),
+      session_id: Type.Optional(SessionIdParam),
+      query_id: Type.Optional(QueryIdParam),
+      __session_id: Type.Optional(InternalSessionId),
+      __session_key: Type.Optional(InternalSessionKey),
+    }),
     async execute(_id: any, params: any) {
       const navOnly = params?.nav_only === true;
       const sessionId = (typeof params?.session_id === "string" && params.session_id.trim()) || (typeof params?.__session_id === "string" && params.__session_id.trim()) || "";
@@ -100,17 +120,12 @@ export function registerTools(api: any, pluginCfg: any) {
     name: "lore_search",
     label: "Lore search",
     description: "Find relevant memories by keyword or domain when you need to locate prior knowledge.",
-    parameters: {
-      type: "object",
-      additionalProperties: false,
-      required: ["query"],
-      properties: {
-        query: { type: "string", description: "Search query text. Use a meaningful keyword or phrase; passing an empty string or * with a domain filter browses that domain root." },
-        domain: { type: "string", description: "Optional domain filter to narrow the search." },
-        limit: { type: "integer", minimum: 1, maximum: 100, description: "Maximum number of results (1-100)." },
-        content_limit: { type: "integer", minimum: 0, maximum: 20, description: "How many top results include full content (default 5)." }
-      }
-    },
+    parameters: Type.Object({
+      query: Type.String({ description: "Search query text. Use a meaningful keyword or phrase; passing an empty string or * with a domain filter browses that domain root." }),
+      domain: Type.Optional(Type.String({ description: "Optional domain filter to narrow the search." })),
+      limit: Type.Optional(Type.Integer({ minimum: 1, maximum: 100, description: "Maximum number of results (1-100)." })),
+      content_limit: Type.Optional(Type.Integer({ minimum: 0, maximum: 20, description: "How many top results include full content (default 5)." })),
+    }),
     async execute(_id: any, params: any) {
       const query = String(params?.query || "").trim();
       const domainFilter = typeof params?.domain === "string" && params.domain.trim() ? params.domain.trim() : null;
@@ -164,12 +179,12 @@ export function registerTools(api: any, pluginCfg: any) {
     name: "lore_list_domains",
     label: "Lore list domains",
     description: "Browse the top-level memory domains available in the memory system.",
-    parameters: { type: "object", additionalProperties: false, properties: {} },
+    parameters: EmptySchema,
     async execute() {
       try {
         const data = await fetchJson(pluginCfg, "/browse/domains", { method: "GET" });
         const text = Array.isArray(data) && data.length > 0
-          ? data.map((item: any) => `- ${item.domain} (${item.root_count}) — open root with lore_get_node uri=\"${item.domain}://\" nav_only=true`).join("\n")
+          ? data.map((item: any) => `- ${item.domain} (${item.root_count}) — open root with lore_get_node uri="${item.domain}://" nav_only=true`).join("\n")
           : "No domains found.";
         return textResult(text, { ok: true, domains: data });
       } catch (error: any) {
@@ -182,21 +197,16 @@ export function registerTools(api: any, pluginCfg: any) {
     name: "lore_create_node",
     label: "Lore create node",
     description: "Create a new long-term memory node for durable facts, rules, project knowledge, or conclusions worth keeping.",
-    parameters: {
-      type: "object",
-      additionalProperties: false,
-      required: ["content", "priority", "glossary"],
-      properties: {
-        uri: { type: "string", description: "Optional final memory URI. Use this when you already know exactly where the new memory should live. Intermediate paths in the URI must already exist." },
-        domain: { type: "string", description: "Target memory domain when you are not using `uri`." },
-        parent_path: { type: "string", description: "Parent location inside the chosen domain." },
-        content: { type: "string", description: "Memory text body." },
-        priority: { type: "integer", minimum: 0, description: "Importance tier: 0=core identity (max 5), 1=key facts (max 15), 2+=general." },
-        title: { type: "string", description: "Final path segment for the new memory." },
-        disclosure: { type: "string", description: "When this memory should be recalled." },
-        glossary: { type: "array", items: { type: "string", description: "Search keyword." }, description: "Initial glossary keywords written with this node create event for later retrieval." }
-      }
-    },
+    parameters: Type.Object({
+      content: Type.String({ description: "Memory text body." }),
+      priority: Type.Integer({ minimum: 0, description: "Importance tier: 0=core identity (max 5), 1=key facts (max 15), 2+=general." }),
+      glossary: Type.Array(Type.String({ description: "Search keyword." }), { description: "Initial glossary keywords written with this node create event for later retrieval." }),
+      uri: Type.Optional(Type.String({ description: "Optional final memory URI. Use this when you already know where the new memory should live. Intermediate paths must already exist." })),
+      domain: Type.Optional(Type.String({ description: "Target memory domain when you are not using `uri`." })),
+      parent_path: Type.Optional(Type.String({ description: "Parent location inside the chosen domain." })),
+      title: Type.Optional(Type.String({ description: "Final path segment for the new memory." })),
+      disclosure: Type.Optional(Type.String({ description: "When this memory should be recalled." })),
+    }),
     async execute(_id: any, params: any) {
       const glossary = normalizeKeywordList(params?.glossary);
       const body: any = {
@@ -244,21 +254,16 @@ export function registerTools(api: any, pluginCfg: any) {
     name: "lore_update_node",
     label: "Lore update node",
     description: "Revise an existing long-term memory node. Any provided content, metadata, and glossary fields are applied as one node update event; omitted fields are left unchanged.",
-    parameters: {
-      type: "object",
-      additionalProperties: false,
-      required: ["uri"],
-      properties: {
-        uri: { type: "string", description: "Full memory URI for the node you want to revise." },
-        content: { type: "string", description: "New content to replace the existing content; omit to leave content unchanged." },
-        priority: { type: "integer", minimum: 0, description: "New priority level; omit to leave priority unchanged." },
-        disclosure: { type: "string", description: "New disclosure / trigger condition; omit to leave disclosure unchanged." },
-        session_id: { type: "string", description: "Session ID for policy validation (read-before-update check)." },
-        glossary: { type: "array", items: { type: "string", description: "Search keyword." }, description: "Full replacement list for this node glossary. Omit to leave glossary unchanged; pass [] to clear it." },
-        glossary_add: { type: "array", items: { type: "string", description: "Search keyword." }, description: "Keywords to add as part of this same node update event." },
-        glossary_remove: { type: "array", items: { type: "string", description: "Search keyword." }, description: "Keywords to remove as part of this same node update event." }
-      }
-    },
+    parameters: Type.Object({
+      uri: UriParam,
+      content: Type.Optional(Type.String({ description: "New content to replace the existing content; omit to leave content unchanged." })),
+      priority: Type.Optional(Type.Integer({ minimum: 0, description: "New priority level; omit to leave priority unchanged." })),
+      disclosure: Type.Optional(Type.String({ description: "New disclosure / trigger condition; omit to leave disclosure unchanged." })),
+      session_id: Type.Optional(Type.String({ description: "Session ID for policy validation (read-before-update check)." })),
+      glossary: Type.Optional(Type.Array(Type.String({ description: "Search keyword." }), { description: "Full replacement list for this node glossary. Omit to leave unchanged; pass [] to clear." })),
+      glossary_add: Type.Optional(Type.Array(Type.String({ description: "Search keyword." }), { description: "Keywords to add as part of this same node update event." })),
+      glossary_remove: Type.Optional(Type.Array(Type.String({ description: "Search keyword." }), { description: "Keywords to remove as part of this same node update event." })),
+    }),
     async execute(_id: any, params: any) {
       const body: any = {};
       const glossaryAdd = normalizeKeywordList(params?.glossary_add);
@@ -293,15 +298,10 @@ export function registerTools(api: any, pluginCfg: any) {
     name: "lore_delete_node",
     label: "Lore delete node",
     description: "Remove a memory path that is obsolete, duplicated, or no longer wanted.",
-    parameters: {
-      type: "object",
-      additionalProperties: false,
-      required: ["uri"],
-      properties: {
-        uri: { type: "string", description: "Full memory URI for the path you want to remove." },
-        session_id: { type: "string", description: "Session ID for policy validation (read-before-delete check)." }
-      }
-    },
+    parameters: Type.Object({
+      uri: UriParam,
+      session_id: Type.Optional(Type.String({ description: "Session ID for policy validation (read-before-delete check)." })),
+    }),
     async execute(_id: any, params: any) {
       let domain = pluginCfg.defaultDomain;
       let path = "";
@@ -326,15 +326,10 @@ export function registerTools(api: any, pluginCfg: any) {
     name: "lore_move_node",
     label: "Lore move node",
     description: "Move or rename a memory node to a new URI path. Updates all child paths automatically.",
-    parameters: {
-      type: "object",
-      additionalProperties: false,
-      required: ["old_uri", "new_uri"],
-      properties: {
-        old_uri: { type: "string", description: "Current memory URI to move from." },
-        new_uri: { type: "string", description: "New memory URI to move to." },
-      }
-    },
+    parameters: Type.Object({
+      old_uri: Type.String({ description: "Current memory URI to move from." }),
+      new_uri: Type.String({ description: "New memory URI to move to." }),
+    }),
     async execute(_id: any, params: any) {
       const body = {
         old_uri: String(params?.old_uri || "").trim(),
@@ -355,12 +350,9 @@ export function registerTools(api: any, pluginCfg: any) {
     name: "lore_list_session_reads",
     label: "Lore list session reads",
     description: "Show which memory nodes have already been opened in this session.",
-    parameters: {
-      type: "object",
-      additionalProperties: false,
-      required: ["session_id"],
-      properties: { session_id: { type: "string" } }
-    },
+    parameters: Type.Object({
+      session_id: Type.String({ description: "Session identifier to query." }),
+    }),
     async execute(_id: any, params: any) {
       const sessionId = String(params?.session_id || "").trim();
       try {
@@ -380,12 +372,9 @@ export function registerTools(api: any, pluginCfg: any) {
     name: "lore_clear_session_reads",
     label: "Lore clear session reads",
     description: "Reset per-session memory read tracking.",
-    parameters: {
-      type: "object",
-      additionalProperties: false,
-      required: ["session_id"],
-      properties: { session_id: { type: "string" } }
-    },
+    parameters: Type.Object({
+      session_id: Type.String({ description: "Session identifier to clear." }),
+    }),
     async execute(_id: any, params: any) {
       const sessionId = String(params?.session_id || "").trim();
       try {

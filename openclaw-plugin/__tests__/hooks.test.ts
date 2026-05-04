@@ -154,8 +154,8 @@ describe('registerHooks', () => {
       registerHook(event: string, handler: any, meta: any) {
         hooks.push({ event, handler, meta });
       },
-      on(event: string, handler: any) {
-        events[event] = handler;
+      on(event: string, handler: any, options?: any) {
+        events[event] = { handler, options };
       },
       logger: { info: vi.fn(), warn: vi.fn() },
     };
@@ -165,29 +165,29 @@ describe('registerHooks', () => {
     const api = makeMockApi();
     registerHooks(api as any, { startupHealthcheck: false, injectPromptGuidance: false, recallEnabled: false }, '');
     expect('lore.status' in api.gatewayMethods).toBe(true);
-    const hookNames = api.hooks.map((h) => h.meta?.name);
-    expect(hookNames).toContain('lore.gateway-startup-healthcheck');
-    expect(hookNames).toContain('lore.inject-session-read-context');
-    expect(hookNames).toContain('lore.clear-session-reads');
+    expect('gateway_start' in api.events).toBe(true);
+    expect('before_tool_call' in api.events).toBe(true);
+    expect('session_end' in api.events).toBe(true);
     expect('before_prompt_build' in api.events).toBe(true);
   });
 
   it('before_tool_call hook skips non-get_node tools', async () => {
     const api = makeMockApi();
     registerHooks(api as any, { startupHealthcheck: false, injectPromptGuidance: false, recallEnabled: false }, '');
-    const hook = api.hooks.find((h) => h.meta?.name === 'lore.inject-session-read-context');
-    const result = await hook.handler({ toolName: 'other_tool' }, { sessionId: 'abc' });
+    const hook = api.events.before_tool_call;
+    const result = await hook.handler({ toolName: 'other_tool', context: { sessionId: 'abc' } });
     expect(result).toBeUndefined();
   });
 
   it('before_tool_call hook injects session id for lore_get_node', async () => {
     const api = makeMockApi();
     registerHooks(api as any, { startupHealthcheck: false, injectPromptGuidance: false, recallEnabled: false }, '');
-    const hook = api.hooks.find((h) => h.meta?.name === 'lore.inject-session-read-context');
-    const result = await hook.handler(
-      { toolName: 'lore_get_node', params: { uri: 'core://test' } },
-      { sessionId: 'sess-xyz', sessionKey: 'key-abc' },
-    );
+    const hook = api.events.before_tool_call;
+    const result = await hook.handler({
+      toolName: 'lore_get_node',
+      params: { uri: 'core://test' },
+      context: { sessionId: 'sess-xyz', sessionKey: 'key-abc' },
+    });
     expect(result?.params?.__session_id).toBe('sess-xyz');
     expect(result?.params?.__session_key).toBe('key-abc');
     expect(result?.params?.uri).toBe('core://test');
@@ -202,7 +202,7 @@ describe('registerHooks', () => {
     }));
     setPendingRecallUsage('sess-end', { queryId: 'q', nodeUris: ['core://a'] });
     registerHooks(api as any, { startupHealthcheck: false, injectPromptGuidance: false, recallEnabled: false, baseUrl: 'http://localhost' }, '');
-    const hook = api.hooks.find((h) => h.meta?.name === 'lore.clear-session-reads');
+    const hook = api.events.session_end;
     await hook.handler({ sessionId: 'sess-end' });
     expect(pendingRecallUsage.has('sess-end')).toBe(false);
     vi.unstubAllGlobals();

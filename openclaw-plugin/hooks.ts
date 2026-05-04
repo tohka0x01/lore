@@ -1,9 +1,9 @@
-import { readFileSync } from 'node:fs';
-import { execSync } from 'node:child_process';
-import { basename } from 'node:path';
-import { fetchJson, hasRecallConfig } from './api';
-import { normalizeUriList } from './formatters';
-import { formatRecallBlock } from './formatters';
+import { readFileSync } from "node:fs";
+import { execSync } from "node:child_process";
+import { basename } from "node:path";
+import { fetchJson, hasRecallConfig } from "./api";
+import { normalizeUriList } from "./formatters";
+import { formatRecallBlock } from "./formatters";
 
 const CLIENT_BOOT_URI = "core://agent/openclaw";
 
@@ -62,7 +62,6 @@ export function extractAssistantText(messages: any) {
 
 export async function fetchRecallBlock(pluginCfg: any, query: string, sessionId: string | undefined) {
   if (!hasRecallConfig(pluginCfg)) return null;
-  // All display params (min_display_score, max_display_items, etc.) controlled server-side via /settings
   const payload = { query, session_id: sessionId };
   const data = await fetchJson(pluginCfg, "/browse/recall", { method: "POST", body: JSON.stringify(payload) });
   const queryId = data?.event_log?.query_id || "";
@@ -230,7 +229,7 @@ export const DEFAULT_GUIDANCE = [
 
 export function loadPromptGuidance() {
   try {
-    const content = readFileSync(new URL('./AGENT_RULES.md', import.meta.url), 'utf8').trim();
+    const content = readFileSync(new URL("./AGENT_RULES.md", import.meta.url), "utf8").trim();
     return content || DEFAULT_GUIDANCE;
   } catch {
     return DEFAULT_GUIDANCE;
@@ -240,6 +239,7 @@ export function loadPromptGuidance() {
 // ---- Hook registration ----
 
 export function registerHooks(api: any, pluginCfg: any, GUIDANCE: string) {
+  // Gateway RPC method
   api.registerGatewayMethod("lore.status", async ({ respond }: any) => {
     try {
       const data = await fetchJson(pluginCfg, "/health", { method: "GET" });
@@ -249,8 +249,9 @@ export function registerHooks(api: any, pluginCfg: any, GUIDANCE: string) {
     }
   });
 
-  api.registerHook(
-    "gateway:startup",
+  // Gateway startup healthcheck
+  api.on(
+    "gateway_start",
     async () => {
       if (!pluginCfg.startupHealthcheck) return;
       try {
@@ -260,16 +261,15 @@ export function registerHooks(api: any, pluginCfg: any, GUIDANCE: string) {
         api.logger.warn(`lore: startup health check failed (${pluginCfg.baseUrl}): ${error.message}`);
       }
     },
-    {
-      name: "lore.gateway-startup-healthcheck",
-      description: "Checks Lore API reachability at gateway startup",
-    },
+    { priority: 50 },
   );
 
-  api.registerHook(
+  // Inject session tracking into lore_get_node calls
+  api.on(
     "before_tool_call",
-    async (event: any, ctx: any) => {
+    async (event: any) => {
       if (event?.toolName !== "lore_get_node") return;
+      const ctx = event?.context;
       if (!ctx?.sessionId) return;
       return {
         params: {
@@ -279,40 +279,38 @@ export function registerHooks(api: any, pluginCfg: any, GUIDANCE: string) {
         },
       };
     },
-    {
-      name: "lore.inject-session-read-context",
-      description: "Injects session tracking fields into lore_get_node before execution.",
-    },
+    { priority: 50 },
   );
 
-  api.registerHook(
+  // Cleanup on session end
+  api.on(
     "session_end",
     async (event: any) => {
       pendingRecallUsage.delete(event?.sessionId);
       _cachedStartupRecallSections.delete(event?.sessionId || "__global__");
       await clearSessionReads(pluginCfg, event?.sessionId);
     },
-    {
-      name: "lore.clear-session-reads",
-      description: "Clears per-session Lore read tracking when a session ends.",
-    },
+    { priority: 50 },
   );
 
-  api.on("before_prompt_build", async (event: any, ctx: any) => {
+  // Prompt building: inject guidance, boot content, and recall
+  api.on("before_prompt_build", async (event: any) => {
+    const ctx = event?.context;
+    const sessionId = ctx?.sessionId;
     const out: any = {};
 
     if (pluginCfg.injectPromptGuidance) {
       if (_cachedBootSection === null) {
         try {
           const bootData = await fetchJson(pluginCfg, "/browse/boot", { method: "GET" });
-          _cachedBootSection = formatBootSection(bootData) || '';
+          _cachedBootSection = formatBootSection(bootData) || "";
         } catch (error: any) {
           api.logger.warn(`lore: boot fetch failed: ${error.message}`);
-          _cachedBootSection = '';
+          _cachedBootSection = "";
         }
       }
 
-      const startupRecall = await fetchStartupRecallSection(pluginCfg, ctx?.sessionId);
+      const startupRecall = await fetchStartupRecallSection(pluginCfg, sessionId);
       out.appendSystemContext = [_cachedBootSection ? GUIDANCE + "\n\n" + _cachedBootSection : GUIDANCE, startupRecall]
         .filter(Boolean)
         .join("\n\n");
@@ -320,18 +318,18 @@ export function registerHooks(api: any, pluginCfg: any, GUIDANCE: string) {
 
     if (hasRecallConfig(pluginCfg) && typeof event?.prompt === "string" && event.prompt.trim()) {
       try {
-        const recalled = await fetchRecallBlock(pluginCfg, event.prompt, ctx?.sessionId);
+        const recalled = await fetchRecallBlock(pluginCfg, event.prompt, sessionId);
         if (recalled?.block) {
           out.prependContext = recalled.block;
-          setPendingRecallUsage(ctx?.sessionId, {
+          setPendingRecallUsage(sessionId, {
             queryId: recalled?.data?.event_log?.query_id,
             nodeUris: recalled?.data?.items,
           });
         } else {
-          pendingRecallUsage.delete(ctx?.sessionId);
+          pendingRecallUsage.delete(sessionId);
         }
       } catch (error: any) {
-        pendingRecallUsage.delete(ctx?.sessionId);
+        pendingRecallUsage.delete(sessionId);
         api.logger.warn(`lore: prompt recall failed: ${error.message}`);
       }
     }

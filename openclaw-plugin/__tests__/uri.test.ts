@@ -5,7 +5,7 @@ import {
   splitParentPathAndTitle,
   trimSlashes,
   sameLocator,
-} from '../index.ts';
+} from '../uri';
 
 describe('trimSlashes', () => {
   it('trims leading and trailing slashes', () => {

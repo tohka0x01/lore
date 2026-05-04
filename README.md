@@ -231,14 +231,22 @@ What it adds:
 
 ### OpenClaw
 
-Copy or symlink `openclaw-plugin/` into your OpenClaw plugin path, then configure OpenClaw with the Lore base URL.
+Install:
 
-Example config shape:
+```bash
+cd openclaw-plugin
+npm install
+npm run build
+openclaw plugins install . --force --dangerously-force-unsafe-install
+openclaw plugins enable lore
+```
+
+Edit `~/.openclaw/openclaw.json`:
 
 ```jsonc
 {
   "plugins": {
-    "load": { "paths": ["/path/to/openclaw-plugin"] },
+    "allow": ["lore"],
     "entries": {
       "lore": {
         "enabled": true,
@@ -246,7 +254,8 @@ Example config shape:
           "baseUrl": "http://127.0.0.1:18901",
           "apiToken": "replace-this-if-needed",
           "recallEnabled": true,
-          "startupHealthcheck": true
+          "startupHealthcheck": true,
+          "injectPromptGuidance": true
         }
       }
     }
@@ -254,7 +263,36 @@ Example config shape:
 }
 ```
 
-Restart OpenClaw after changing plugin config.
+If `tools.allow` is configured, add the Lore tools too:
+
+```jsonc
+{
+  "tools": {
+    "allow": [
+      "group:openclaw",
+      "group:runtime",
+      "group:fs",
+      "lore_status",
+      "lore_boot",
+      "lore_get_node",
+      "lore_search",
+      "lore_list_domains",
+      "lore_create_node",
+      "lore_update_node",
+      "lore_delete_node",
+      "lore_move_node",
+      "lore_list_session_reads",
+      "lore_clear_session_reads"
+    ]
+  }
+}
+```
+
+Restart OpenClaw:
+
+```bash
+openclaw gateway restart
+```
 
 ### Hermes
 
