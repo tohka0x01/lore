@@ -13,7 +13,7 @@ import { listMemoryViewsByNode } from '../view/memoryViewQueries';
 import { getDreamMemoryEventSummary, getNodeWriteHistory } from '../memory/writeEvents';
 import { markSessionRead } from '../memory/session';
 import { parseUri } from '../core/utils';
-import { inspectNeighbors } from './dreamToolReadHelpers';
+import { inspectNeighbors, inspectTree } from './dreamToolReadHelpers';
 import {
   applyDreamWritePolicy,
   type DreamToolEventContext,
@@ -117,6 +117,15 @@ export async function dispatchDreamTool(
       return await getPathEffectiveness({ days: (args.days as number) || 7 });
     case 'inspect_neighbors':
       return await inspectNeighbors(args.uri as string, eventContext);
+    case 'inspect_tree':
+      return await inspectTree(
+        args.uri as string,
+        {
+          depth: (args.depth as number) || 2,
+          maxNodes: (args.max_nodes as number) || 60,
+        },
+        eventContext,
+      );
     case 'inspect_views':
       return await listMemoryViewsByNode({ uri: args.uri as string, limit: (args.limit as number) || 12 });
     case 'create_node': {

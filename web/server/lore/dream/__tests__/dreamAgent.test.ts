@@ -251,6 +251,7 @@ describe('buildDreamTools', () => {
     expect(names).toContain('get_memory_event_summary');
     expect(names).toContain('get_path_effectiveness_detail');
     expect(names).toContain('inspect_neighbors');
+    expect(names).toContain('inspect_tree');
     expect(names).toContain('inspect_views');
     expect(names).toContain('create_node');
     expect(names).toContain('update_node');
@@ -408,6 +409,100 @@ describe('executeDreamTool', () => {
     expect(result.parent?.uri).toBe('core://agent');
     expect(result.siblings).toEqual([{ uri: 'core://agent/profile', priority: 2 }]);
     expect(result.aliases).toEqual(['project://agent/settings']);
+  });
+
+  it('dispatches inspect_tree and returns bounded nested structure', async () => {
+    mockGetNodePayload
+      .mockResolvedValueOnce({
+        node: {
+          uri: 'core://project',
+          node_uuid: 'root-1',
+          priority: 2,
+          disclosure: '当排查项目结构时',
+          content: 'Project memory root with a longer body',
+          memory_views: [
+            { view_type: 'gist', text_content: 'Project gist from retrieval view' },
+            { view_type: 'question', text_content: 'When should project be recalled?' },
+          ],
+        },
+        children: [
+          {
+            uri: 'core://project/api',
+            node_uuid: 'api-1',
+            priority: 2,
+            disclosure: '当排查 API 时',
+            content_snippet: 'API child',
+            approx_children_count: 1,
+          },
+        ],
+        breadcrumbs: [],
+      } as any)
+      .mockResolvedValueOnce({
+        node: {
+          uri: 'core://project/api',
+          node_uuid: 'api-1',
+          priority: 2,
+          disclosure: '当排查 API 时',
+          content: 'API full content',
+          memory_views: [
+            { view_type: 'gist', text_content: 'API gist from retrieval view' },
+          ],
+        },
+        children: [
+          {
+            uri: 'core://project/api/routes',
+            node_uuid: 'routes-1',
+            priority: 3,
+            disclosure: null,
+            content_snippet: 'Routes child',
+            approx_children_count: 0,
+          },
+        ],
+        breadcrumbs: [],
+      } as any);
+
+    const result = await executeDreamTool('inspect_tree', { uri: 'core://project', depth: 2, max_nodes: 10 }, { source: 'dream:auto', session_id: 'dream:42' }) as Record<string, any>;
+
+    expect(mockGetNodePayload).toHaveBeenNthCalledWith(1, { domain: 'core', path: 'project' });
+    expect(mockGetNodePayload).toHaveBeenNthCalledWith(2, { domain: 'core', path: 'project/api' });
+    expect(result).toMatchObject({
+      uri: 'core://project',
+      depth: 2,
+      max_nodes: 10,
+      visited_nodes: 2,
+      truncated: false,
+      tree: {
+        uri: 'core://project',
+        content_snippet: 'Project gist from retrieval view',
+        child_count: 1,
+        children: [
+          {
+            uri: 'core://project/api',
+            content_snippet: 'API gist from retrieval view',
+            child_count: 1,
+            children: [
+              {
+                uri: 'core://project/api/routes',
+                child_count: 0,
+                children: [],
+              },
+            ],
+          },
+        ],
+      },
+    });
+    expect(mockMarkSessionRead).toHaveBeenCalledWith({
+      session_id: 'dream:42',
+      uri: 'core://project',
+      node_uuid: 'root-1',
+      source: 'dream:auto:inspect_tree',
+    });
+    expect(mockMarkSessionRead).toHaveBeenCalledWith({
+      session_id: 'dream:42',
+      uri: 'core://project/api',
+      node_uuid: 'api-1',
+      source: 'dream:auto:inspect_tree',
+    });
   });
 
   it('dispatches inspect_views', async () => {
@@ -943,6 +1038,9 @@ describe('buildDreamSystemPrompt', () => {
   it('provides structured decision framework for interventions', () => {
     const prompt = buildDreamSystemPrompt(makeInitialContext());
     expect(prompt).toContain('结构 / 边界');
+    expect(prompt).toContain('树结构');
+    expect(prompt).toContain('继续提炼');
+    expect(prompt).toContain('拆分、合并、删除');
     expect(prompt).toContain('disclosure / glossary');
     expect(prompt).toContain('最后才改内容');
     expect(prompt).toContain('不要润色');
