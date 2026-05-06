@@ -101,6 +101,7 @@ interface RecallCandidateInsertRow {
 interface LogRecallEventsArgs {
   queryId?: string | null;
   queryText: string;
+  durationMs?: number | null;
   exactRows?: SignalRow[];
   glossarySemanticRows?: SignalRow[];
   denseRows?: SignalRow[];
@@ -115,6 +116,7 @@ interface LogRecallEventsArgs {
 export async function logRecallEvents({
   queryId = null,
   queryText,
+  durationMs = null,
   exactRows = [],
   glossarySemanticRows = [],
   denseRows = [],
@@ -129,6 +131,7 @@ export async function logRecallEvents({
   if (!query) return { inserted_count: 0 };
 
   const effectiveQueryId = String(queryId || '').trim() || crypto.randomUUID();
+  const safeDurationMs = Number.isFinite(Number(durationMs)) ? Math.max(0, Math.round(Number(durationMs))) : null;
   const rankedMap = new Map(
     rankedCandidates.map((item, index) => [
       String(item.uri || '').trim(),
@@ -329,16 +332,18 @@ export async function logRecallEvents({
           merged_count,
           shown_count,
           used_count,
+          duration_ms,
           created_at
         ) VALUES (
-          $1, $2, $3, $4, $5, $6, 0, NOW()
+          $1, $2, $3, $4, $5, $6, 0, $7, NOW()
         )
         ON CONFLICT (query_id) DO UPDATE SET
           query_text = EXCLUDED.query_text,
           session_id = EXCLUDED.session_id,
           client_type = EXCLUDED.client_type,
           merged_count = EXCLUDED.merged_count,
-          shown_count = EXCLUDED.shown_count
+          shown_count = EXCLUDED.shown_count,
+          duration_ms = EXCLUDED.duration_ms
       `,
       [
         effectiveQueryId,
@@ -347,6 +352,7 @@ export async function logRecallEvents({
         clientType,
         candidateRows.length,
         shownCount,
+        safeDurationMs,
       ],
     );
 

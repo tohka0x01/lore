@@ -156,9 +156,12 @@ export async function ensureRecallIndex(embedding: Partial<EmbeddingConfig> | nu
 }
 
 export async function recallMemories(body: RecallRequestBody, context: RecallRequestContext = {}): Promise<RecallMemoriesResult> {
+  const startedAt = Date.now();
   const result = await runRecallPipeline(body, { aggregateCandidates });
+  const durationMs = Date.now() - startedAt;
   const eventLog = startRecallEventLog({
     queryText: result.query,
+    durationMs,
     exactRows: result.exact_rows,
     glossarySemanticRows: result.glossary_semantic_rows,
     denseRows: result.dense_rows,
@@ -185,11 +188,14 @@ export async function recallMemories(body: RecallRequestBody, context: RecallReq
 }
 
 export async function debugRecallMemories(body: RecallRequestBody, context: RecallRequestContext = {}): Promise<DebugRecallMemoriesResult> {
+  const startedAt = Date.now();
   const result = await runRecallPipeline(body, { aggregateCandidates });
+  const durationMs = Date.now() - startedAt;
   const eventLog =
     body?.log_events === true
       ? startRecallEventLog({
           queryText: result.query,
+          durationMs,
           exactRows: result.exact_rows,
           glossarySemanticRows: result.glossary_semantic_rows,
           denseRows: result.dense_rows,

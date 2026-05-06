@@ -1093,6 +1093,7 @@ export async function getRecallStats({
           merged_count,
           shown_count,
           used_count,
+          duration_ms,
           client_type,
           created_at
         FROM recall_queries
@@ -1221,6 +1222,7 @@ export async function getRecallStats({
     merged_count: Number(row.merged_count || 0),
     shown_count: Number(row.shown_count || 0),
     used_count: Number(row.used_count || 0),
+    duration_ms: asNumber(row.duration_ms),
     client_type: typeof row.client_type === 'string' && row.client_type.trim() ? row.client_type.trim() : null,
     created_at: row.created_at ? new Date(row.created_at as string).toISOString() : null,
   }));
@@ -1231,7 +1233,7 @@ export async function getRecallStats({
     const [qQuery, qCandidates, qEventsForDetail, qRecentEvents, qPaths] = await Promise.all([
       sql(
         `
-          SELECT query_id, query_text, session_id, client_type, merged_count, shown_count, used_count, created_at
+          SELECT query_id, query_text, session_id, client_type, merged_count, shown_count, used_count, duration_ms, created_at
           FROM recall_queries
           WHERE ${filterWhere}
           LIMIT 1
@@ -1323,6 +1325,7 @@ export async function getRecallStats({
       merged_count: Number(queryRow.merged_count ?? qCandidates.rows.length ?? 0),
       shown_count: Number(queryRow.shown_count ?? shownCount),
       used_count: Number(queryRow.used_count ?? usedCount),
+      duration_ms: asNumber(queryRow.duration_ms),
       merged_candidates: mergedCandidates,
       ...debugShape,
       nodes: qCandidates.rows.map((r: Record<string, unknown>) => ({

@@ -41,6 +41,17 @@ export function resolveFilterNumberDisplayValue(routeValue: number, pendingValue
   return pendingValue ?? routeValue;
 }
 
+export function formatRecallDurationMs(value: unknown): string {
+  const ms = Number(value);
+  if (!Number.isFinite(ms) || ms < 0) return '—';
+  if (ms < 1000) return `${Math.round(ms)}ms`;
+  const seconds = ms / 1000;
+  if (seconds < 60) return `${seconds.toFixed(seconds < 10 ? 1 : 0)}s`;
+  const minutes = Math.floor(seconds / 60);
+  const remainingSeconds = Math.round(seconds % 60);
+  return `${minutes}m ${remainingSeconds}s`;
+}
+
 interface RecentQueriesBlock {
   items: RowData[];
   total: number;
@@ -155,6 +166,7 @@ export default function RecallDrilldown(): React.JSX.Element {
       <div className="max-w-full text-[14px] font-medium leading-snug text-txt-primary">{trunc(v, 140)}</div>
     ) },
     { key: 'client_type', label: t('Source'), className: 'text-center', render: (v: unknown) => <div className="flex justify-center"><ClientAvatarLabel clientType={v} compact /></div> },
+    { key: 'duration_ms', label: t('Duration'), className: 'text-right', render: (v: unknown) => <span className="block whitespace-nowrap font-mono tabular-nums text-[12px] text-right text-txt-secondary">{formatRecallDurationMs(v)}</span> },
     { key: 'shown_count', label: t('Shown'), className: 'text-center', render: (v: unknown) => <span className="block font-mono tabular-nums text-sys-blue text-center">{String(v ?? '—')}</span> },
     { key: 'used_count', label: t('Used'), className: 'text-center', render: (v: unknown) => <span className="block font-mono tabular-nums text-sys-green text-center">{String(v ?? '—')}</span> },
     { key: 'created_at', label: t('When'), className: 'w-[8.5rem] text-right', render: (v: unknown) => (

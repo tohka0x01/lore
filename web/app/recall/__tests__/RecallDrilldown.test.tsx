@@ -75,7 +75,7 @@ vi.mock('../../../components/ui', () => ({
   asNumber: (value: unknown, fallback = 0) => Number(value) || fallback,
 }));
 
-import RecallDrilldown, { resolveFilterNumberDisplayValue } from '../RecallDrilldown';
+import RecallDrilldown, { formatRecallDurationMs, resolveFilterNumberDisplayValue } from '../RecallDrilldown';
 
 describe('RecallDrilldown overview', () => {
   beforeEach(() => {
@@ -149,5 +149,13 @@ describe('RecallDrilldown overview', () => {
   it('keeps a changed number visible while URL params catch up', () => {
     expect(resolveFilterNumberDisplayValue(14, 15)).toBe(15);
     expect(resolveFilterNumberDisplayValue(15, null)).toBe(15);
+  });
+
+  it('adds duration to the recent queries table', () => {
+    const html = renderToStaticMarkup(<RecallDrilldown />);
+
+    expect(html).toContain('Duration');
+    expect(formatRecallDurationMs(850)).toBe('850ms');
+    expect(formatRecallDurationMs(1530)).toBe('1.5s');
   });
 });

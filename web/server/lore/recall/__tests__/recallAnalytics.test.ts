@@ -672,6 +672,30 @@ describe('getRecallStats', () => {
     expect(sqlText).not.toContain('COUNT(DISTINCT node_uri) AS merged_count');
   });
 
+  it('includes query duration in recent query rows', async () => {
+    mockSql.mockImplementation(async (query: string) => {
+      const sqlText = String(query);
+      if (sqlText.includes('SELECT key, value FROM app_settings')) {
+        return makeResult([]);
+      }
+      if (sqlText.includes('FROM recall_queries') && sqlText.includes('SUM(merged_count)')) {
+        return makeResult([{ total_merged: '1', total_shown: '1', total_used: '0', query_count: '1', last_event_at: '2026-05-04T10:35:42Z' }]);
+      }
+      if (sqlText.includes('FROM recall_queries') && sqlText.includes('COUNT(*)::int AS total')) {
+        return makeResult([{ total: '1' }]);
+      }
+      if (sqlText.includes('FROM recall_queries') && sqlText.includes('ORDER BY created_at DESC')) {
+        expect(sqlText).toContain('duration_ms');
+        return makeResult([{ query_id: 'q1', query_text: 'sync plugin readme', merged_count: 1, shown_count: 1, used_count: 0, duration_ms: 1530, client_type: 'openclaw', created_at: '2026-05-04T10:35:42Z' }]);
+      }
+      return makeResult();
+    });
+
+    const stats = await getRecallStats();
+
+    expect(stats.recent_queries.items[0]).toMatchObject({ query_id: 'q1', duration_ms: 1530 });
+  });
+
   it('loads display threshold samples from recall_query_candidates', async () => {
     mockSql.mockResolvedValue(makeResult([{ total_merged: '0', total_shown: '0', total_used: '0', query_count: '0', last_event_at: null }]));
 

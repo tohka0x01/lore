@@ -313,6 +313,21 @@ describe('logRecallEvents', () => {
     expect(sqlTexts.some((query) => query.includes('INSERT INTO recall_events'))).toBe(true);
   });
 
+  it('writes query duration to the query rollup row', async () => {
+    await logRecallEvents({
+      queryId: 'q-duration',
+      queryText: 'duration query',
+      durationMs: 1530,
+      exactRows: [{ uri: 'core://a', exact_score: 0.9, weight: 1 }],
+      rankedCandidates: [{ uri: 'core://a', score: 0.91, matched_on: ['exact'] }],
+      displayedItems: [{ uri: 'core://a' }],
+    });
+
+    const queryInsert = mockClientQuery.mock.calls.find(([query]) => String(query).includes('INSERT INTO recall_queries'));
+    expect(String(queryInsert?.[0] || '')).toContain('duration_ms');
+    expect(queryInsert?.[1]).toContain(1530);
+  });
+
   it('keeps recall INSERT column and value expression counts aligned', async () => {
     await logRecallEvents({
       queryId: 'q-sql-shape',
@@ -328,7 +343,7 @@ describe('logRecallEvents', () => {
     const candidateInsert = sqlTexts.find((query) => query.includes('INSERT INTO recall_query_candidates'));
     const eventInsert = sqlTexts.find((query) => query.includes('INSERT INTO recall_events'));
 
-    expect(insertShape(queryInsert || '', 'recall_queries')).toEqual({ columns: 8, values: 8 });
+    expect(insertShape(queryInsert || '', 'recall_queries')).toEqual({ columns: 9, values: 9 });
     expect(insertShape(candidateInsert || '', 'recall_query_candidates')).toEqual({ columns: 9, values: 9 });
     expect(insertShape(eventInsert || '', 'recall_events')).toEqual({ columns: 15, values: 15 });
   });

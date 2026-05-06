@@ -273,6 +273,7 @@ describe('startRecallEventLog', () => {
       retrievalMeta: { strategy: 'raw_plus_lex_damp' },
       sessionId: 'session-1',
       clientType: 'claudecode',
+      durationMs: 1530,
       errorLabel: '[recall_events] failed to log recall events',
     });
 
@@ -291,6 +292,7 @@ describe('startRecallEventLog', () => {
       retrievalMeta: { strategy: 'raw_plus_lex_damp' },
       sessionId: 'session-1',
       clientType: 'claudecode',
+      durationMs: 1530,
     });
     expect(catchMock).toHaveBeenCalledTimes(1);
   });

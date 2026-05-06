@@ -10,6 +10,7 @@ export interface RecallEventLogState {
 
 interface StartRecallEventLogArgs {
   queryText: string;
+  durationMs?: number | null;
   exactRows: Record<string, unknown>[];
   glossarySemanticRows: Record<string, unknown>[];
   denseRows: Record<string, unknown>[];
@@ -24,6 +25,7 @@ interface StartRecallEventLogArgs {
 
 export function startRecallEventLog({
   queryText,
+  durationMs = null,
   exactRows,
   glossarySemanticRows,
   denseRows,
@@ -39,6 +41,7 @@ export function startRecallEventLog({
   logRecallEvents({
     queryId: eventLog.query_id,
     queryText,
+    durationMs,
     exactRows,
     glossarySemanticRows,
     denseRows,

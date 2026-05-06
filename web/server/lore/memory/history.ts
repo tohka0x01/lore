@@ -111,6 +111,15 @@ function eventTimeMs(event: FormattedEvent): number | null {
   return Number.isFinite(ms) ? ms : null;
 }
 
+function compareHistoryEventsByNewest(left: NormalizedHistoryEvent, right: NormalizedHistoryEvent): number {
+  const leftTime = eventTimeMs(left);
+  const rightTime = eventTimeMs(right);
+  if (leftTime !== null && rightTime !== null && leftTime !== rightTime) return rightTime - leftTime;
+  if (leftTime !== null && rightTime === null) return -1;
+  if (leftTime === null && rightTime !== null) return 1;
+  return right.id - left.id;
+}
+
 function sameWriteContext(base: FormattedEvent, event: FormattedEvent): boolean {
   return base.node_uuid === event.node_uuid
     && base.node_uri === event.node_uri
@@ -343,7 +352,9 @@ export async function getNodeHistory({
     disclosure: node.disclosure,
     priority: node.priority,
     glossary_keywords: glossaryKeywords,
-    events: groupLegacyGlossaryEvents(history.events).map((historyEvent) => normalizeHistoryEvent(historyEvent)),
+    events: groupLegacyGlossaryEvents(history.events)
+      .map((historyEvent) => normalizeHistoryEvent(historyEvent))
+      .sort(compareHistoryEventsByNewest),
   };
 }
 

@@ -211,6 +211,24 @@ describe('getNodeHistory', () => {
     expect(result.events[0]).toMatchObject({ id: 5, summary: 'update', rollback_supported: true });
   });
 
+  it('returns history events with the newest update first', async () => {
+    mockGetMemoryByPath.mockResolvedValue(currentNode());
+    mockGetGlossaryKeywords.mockResolvedValue([]);
+    mockGetNodeWriteHistory.mockResolvedValue({
+      node_uri: null,
+      node_uuid: 'uuid-1',
+      events: [
+        event({ id: 1, event_type: 'create', created_at: '2026-04-28T00:00:00.000Z' }),
+        event({ id: 2, event_type: 'update', created_at: '2026-04-29T00:00:00.000Z' }),
+        event({ id: 3, event_type: 'update', created_at: '2026-04-30T00:00:00.000Z' }),
+      ],
+    });
+
+    const result = await getNodeHistory({ domain: 'core', path: 'agent/prefs' });
+
+    expect(result.events.map((historyEvent) => historyEvent.id)).toEqual([3, 2, 1]);
+  });
+
   it('groups legacy create/update glossary events into the preceding history event', async () => {
     mockGetMemoryByPath.mockResolvedValue(currentNode());
     mockGetGlossaryKeywords.mockResolvedValue(['alpha', 'beta']);
