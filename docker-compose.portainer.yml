@@ -1,6 +1,6 @@
 services:
   postgres:
-    image: pgvector/pgvector:pg16
+    image: fffattiger/pgvector-zhparser:pg16
     restart: unless-stopped
     environment:
       POSTGRES_DB: ${POSTGRES_DB:-lore}
@@ -11,32 +11,22 @@ services:
     volumes:
       - ${POSTGRES_DATA_DIR:-./data/postgres}:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U lore -d lore"]
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-lore} -d ${POSTGRES_DB:-lore}"]
       interval: 10s
       timeout: 5s
       retries: 10
 
   web:
-    image: ${LORE_FRONTEND_IMAGE:-fffattiger/lore:latest}
+    image: fffattiger/lore:latest
     restart: unless-stopped
+    pull_policy: always
     depends_on:
       postgres:
         condition: service_healthy
     environment:
       DATABASE_URL: postgresql://${POSTGRES_USER:-lore}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-lore}
       API_TOKEN: ${API_TOKEN:-}
-      # Boot is fixed server-side to core://agent, core://soul, preferences://user
-      LORE_EMBEDDING_PROVIDER: ${LORE_EMBEDDING_PROVIDER:-openai_compatible}
-      LORE_EMBEDDING_BASE_URL: ${LORE_EMBEDDING_BASE_URL:-}
-      LORE_EMBEDDING_API_KEY: ${LORE_EMBEDDING_API_KEY:-}
-      LORE_EMBEDDING_MODEL: ${LORE_EMBEDDING_MODEL:-text-embedding-3-small}
-      LORE_VIEW_LLM_PROVIDER: ${LORE_VIEW_LLM_PROVIDER:-openai_compatible}
-      LORE_VIEW_LLM_BASE_URL: ${LORE_VIEW_LLM_BASE_URL:-}
-      LORE_VIEW_LLM_API_KEY: ${LORE_VIEW_LLM_API_KEY:-}
-      LORE_VIEW_LLM_MODEL: ${LORE_VIEW_LLM_MODEL:-deepseek-v4-flash}
-      LORE_VIEW_LLM_TIMEOUT_MS: ${LORE_VIEW_LLM_TIMEOUT_MS:-30000}
-      LORE_VIEW_LLM_API_VERSION: ${LORE_VIEW_LLM_API_VERSION:-}
-      LORE_VIEW_LLM_MAX_DOCS_PER_RUN: ${LORE_VIEW_LLM_MAX_DOCS_PER_RUN:-4}
+      CORE_MEMORY_URIS: ${CORE_MEMORY_URIS:-core://soul,preferences://user,core://agent}
     ports:
       - "${WEB_PORT:-18901}:18901"
     volumes:
