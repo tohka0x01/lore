@@ -5,10 +5,18 @@ on:
     types: [published]
 
 jobs:
-  web-amd64:
+  metadata:
     runs-on: ubuntu-latest
     outputs:
       version_tag: ${{ steps.version.outputs.tag }}
+    steps:
+      - name: Extract version from tag
+        id: version
+        run: echo "tag=${GITHUB_REF_NAME#v}" >> "$GITHUB_OUTPUT"
+
+  web-amd64:
+    runs-on: ubuntu-latest
+    needs: metadata
     steps:
       - uses: actions/checkout@v4
 
@@ -21,10 +29,6 @@ jobs:
           username: ${{ secrets.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_TOKEN }}
 
-      - name: Extract version from tag
-        id: version
-        run: echo "tag=${GITHUB_REF_NAME#v}" >> "$GITHUB_OUTPUT"
-
       - name: Build and push release
         uses: docker/build-push-action@v6
         with:
@@ -33,13 +37,13 @@ jobs:
           push: true
           tags: |
             fffattiger/lore:latest-amd64
-            fffattiger/lore:${{ steps.version.outputs.tag }}-amd64
+            fffattiger/lore:${{ needs.metadata.outputs.version_tag }}-amd64
           cache-from: type=gha,scope=web-amd64
           cache-to: type=gha,scope=web-amd64,mode=min
 
   web-arm64:
     runs-on: ubuntu-latest
-    needs: web-amd64
+    needs: metadata
     steps:
       - uses: actions/checkout@v4
 
@@ -63,9 +67,22 @@ jobs:
           push: true
           tags: |
             fffattiger/lore:latest-arm64
-            fffattiger/lore:${{ needs.web-amd64.outputs.version_tag }}-arm64
+            fffattiger/lore:${{ needs.metadata.outputs.version_tag }}-arm64
           cache-from: type=gha,scope=web-arm64
           cache-to: type=gha,scope=web-arm64,mode=min
+
+  manifest:
+    runs-on: ubuntu-latest
+    needs: [metadata, web-amd64, web-arm64]
+    steps:
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to Docker Hub
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
 
       - name: Publish multi-arch tags
         run: |
@@ -74,7 +91,7 @@ jobs:
             fffattiger/lore:latest-amd64 \
             fffattiger/lore:latest-arm64
           docker buildx imagetools create \
-            -t fffattiger/lore:${{ needs.web-amd64.outputs.version_tag }} \
-            fffattiger/lore:${{ needs.web-amd64.outputs.version_tag }}-amd64 \
-            fffattiger/lore:${{ needs.web-amd64.outputs.version_tag }}-arm64
+            -t fffattiger/lore:${{ needs.metadata.outputs.version_tag }} \
+            fffattiger/lore:${{ needs.metadata.outputs.version_tag }}-amd64 \
+            fffattiger/lore:${{ needs.metadata.outputs.version_tag }}-arm64
           docker buildx imagetools inspect fffattiger/lore:latest
