@@ -59,13 +59,13 @@ vi.mock('../../../components/ui', () => ({
       ? <label data-filter-pill="true" data-filter-pill-as="label" data-active={active ? 'true' : 'false'}>{children}</label>
       : <div data-filter-pill="true" data-filter-pill-as="div" data-active={active ? 'true' : 'false'}>{children}</div>
   ),
-  Table: ({ columns, rows, empty }: { columns: Array<{ key: string; label: React.ReactNode; render?: (value: unknown, row: Record<string, unknown>) => React.ReactNode }>; rows?: Record<string, unknown>[]; empty?: string }) => {
+  Table: ({ columns, rows, empty }: { columns: Array<{ key: string; label: React.ReactNode; className?: string; render?: (value: unknown, row: Record<string, unknown>) => React.ReactNode }>; rows?: Record<string, unknown>[]; empty?: string }) => {
     const keys = columns.map((column) => column.key);
     if (new Set(keys).size !== keys.length) throw new Error(`duplicate column keys: ${keys.join(',')}`);
     return (
       <table>
-        <thead><tr>{columns.map((column) => <th key={column.key}>{column.label}</th>)}</tr></thead>
-        <tbody>{rows?.length ? rows.map((row, index) => <tr key={index}>{columns.map((column) => <td key={column.key}>{column.render ? column.render(row[column.key], row) : String(row[column.key] ?? '—')}</td>)}</tr>) : <tr><td>{empty}</td></tr>}</tbody>
+        <thead><tr>{columns.map((column) => <th key={column.key} className={column.className}>{column.label}</th>)}</tr></thead>
+        <tbody>{rows?.length ? rows.map((row, index) => <tr key={index}>{columns.map((column) => <td key={column.key} className={column.className}>{column.render ? column.render(row[column.key], row) : String(row[column.key] ?? '—')}</td>)}</tr>) : <tr><td>{empty}</td></tr>}</tbody>
       </table>
     );
   },
@@ -155,6 +155,7 @@ describe('RecallDrilldown overview', () => {
     const html = renderToStaticMarkup(<RecallDrilldown />);
 
     expect(html).toContain('Duration');
+    expect(html).toContain('<th class="text-center">Duration</th>');
     expect(formatRecallDurationMs(850)).toBe('850ms');
     expect(formatRecallDurationMs(1530)).toBe('1.5s');
   });

@@ -166,7 +166,7 @@ export default function RecallDrilldown(): React.JSX.Element {
       <div className="max-w-full text-[14px] font-medium leading-snug text-txt-primary">{trunc(v, 140)}</div>
     ) },
     { key: 'client_type', label: t('Source'), className: 'text-center', render: (v: unknown) => <div className="flex justify-center"><ClientAvatarLabel clientType={v} compact /></div> },
-    { key: 'duration_ms', label: t('Duration'), className: 'text-right', render: (v: unknown) => <span className="block whitespace-nowrap font-mono tabular-nums text-[12px] text-right text-txt-secondary">{formatRecallDurationMs(v)}</span> },
+    { key: 'duration_ms', label: t('Duration'), className: 'text-center', render: (v: unknown) => <span className="block whitespace-nowrap font-mono tabular-nums text-[12px] text-center text-txt-secondary">{formatRecallDurationMs(v)}</span> },
     { key: 'shown_count', label: t('Shown'), className: 'text-center', render: (v: unknown) => <span className="block font-mono tabular-nums text-sys-blue text-center">{String(v ?? '—')}</span> },
     { key: 'used_count', label: t('Used'), className: 'text-center', render: (v: unknown) => <span className="block font-mono tabular-nums text-sys-green text-center">{String(v ?? '—')}</span> },
     { key: 'created_at', label: t('When'), className: 'w-[8.5rem] text-right', render: (v: unknown) => (
