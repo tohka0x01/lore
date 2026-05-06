@@ -49,7 +49,7 @@ import { getSettings, updateSettings } from '../../config/settings';
 import { bootView } from '../../memory/boot';
 import { deleteNodeByPath, updateNodeByPath, createNode, moveNode } from '../../memory/write';
 import { addGlossaryKeyword, removeGlossaryKeyword } from '../../search/glossary';
-import { listDreamWorkflowEvents } from '../dreamWorkflow';
+import { appendDreamWorkflowEvent, listDreamWorkflowEvents } from '../dreamWorkflow';
 import { loadLlmConfig, rewriteDreamNarrative, runDreamAgentLoop } from '../dreamAgent';
 import { ensureRecallIndex } from '../../recall/recall';
 import {
@@ -72,6 +72,7 @@ const mockMoveNode = vi.mocked(moveNode);
 const mockAddGlossaryKeyword = vi.mocked(addGlossaryKeyword);
 const mockRemoveGlossaryKeyword = vi.mocked(removeGlossaryKeyword);
 const mockListDreamWorkflowEvents = vi.mocked(listDreamWorkflowEvents);
+const mockAppendDreamWorkflowEvent = vi.mocked(appendDreamWorkflowEvent);
 const mockLoadLlmConfig = vi.mocked(loadLlmConfig);
 const mockRunDreamAgentLoop = vi.mocked(runDreamAgentLoop);
 const mockRewriteDreamNarrative = vi.mocked(rewriteDreamNarrative);
@@ -314,6 +315,7 @@ describe('runDream', () => {
     } as any);
     mockRewriteDreamNarrative.mockResolvedValue('poetic done');
     mockRunDreamAgentLoop.mockResolvedValue({ narrative: 'done', toolCalls: [], turns: 1 } as any);
+    mockAppendDreamWorkflowEvent.mockResolvedValue({ id: 1, diary_id: 1, event_type: 'event', payload: {}, created_at: '2024-01-01T00:00:00Z' } as any);
     mockBootView.mockResolvedValue({
       core_memories: [
         { uri: 'core://agent', content: 'agent boot', boot_role: 'agent', boot_role_label: 'workflow constraints', boot_purpose: 'Working rules' },
@@ -348,8 +350,25 @@ describe('runDream', () => {
       .mockResolvedValueOnce(makeResult([{ event_type: 'move', total: 2 }]))
       .mockResolvedValueOnce(makeResult());
 
+    mockGetSettings.mockResolvedValue({ 'dream.timezone': 'Asia/Shanghai' });
     const recallStats = { summary: { merged_count: 4, query_count: 2 }, recent_queries: { items: [{ query_id: 'q-1', query_text: 'q1', merged_count: 3, shown_count: 1, used_count: 0 }], total: 1, limit: 20, offset: 0, has_more: false } };
-    const recallReview = { summary: { reviewed_queries: 2, possible_missed_recalls: 3, zero_use_queries: 1, high_merge_low_use_queries: 1 }, reviewed_queries: [{ query_text: 'q1' }] };
+    const recallReview = {
+      date: '2026-05-07',
+      timezone: 'Asia/Shanghai',
+      limit: 100,
+      offset: 0,
+      summary: {
+        returned_queries: 2,
+        total_merged: 10,
+        total_shown: 3,
+        total_used: 1,
+        truncated: false,
+      },
+      queries: [
+        { query_id: 'q1', content: 'query one', content_full_chars: 9, session_id: 's1', client_type: 'codex', merged_count: 6, shown_count: 1, used_count: 0, created_at: '2026-05-07T01:00:00.000Z' },
+        { query_id: 'q2', content: 'query two', content_full_chars: 9, session_id: 's1', client_type: 'codex', merged_count: 4, shown_count: 2, used_count: 1, created_at: '2026-05-07T02:00:00.000Z' },
+      ],
+    };
     const writeStats = { summary: { total_events: 7 }, hot_nodes: [{ node_uri: 'core://x', total: 2, creates: 1, updates: 1, deletes: 0 }], recent_events: [] };
     const recallAnalytics = await import('../../recall/recallAnalytics');
     const writeEvents = await import('../../memory/writeEvents');
@@ -383,6 +402,7 @@ describe('runDream', () => {
         eventContext: { source: 'dream:auto', session_id: 'dream:1' },
       }),
     );
+    expect(vi.mocked(recallAnalytics.getDreamRecallReview)).toHaveBeenCalledWith({ limit: 100, timezone: 'Asia/Shanghai' });
 
     const updateCall = mockSql.mock.calls.find((call) => String(call[0]).includes('UPDATE dream_diary SET status = \'completed\''));
     expect(updateCall).toBeTruthy();
@@ -392,11 +412,12 @@ describe('runDream', () => {
     expect(updateCall?.[1]?.[5]).toBe('poetic done');
     const details = JSON.parse(String(updateCall?.[1]?.[7]));
     expect(summary).toEqual({
-      recall_review: {
-        reviewed_queries: 2,
-        zero_use_queries: 1,
-        high_merge_low_use_queries: 1,
-        possible_missed_recalls: 3,
+      recall_metadata: {
+        returned_queries: 2,
+        total_merged: 10,
+        total_shown: 3,
+        total_used: 1,
+        truncated: false,
       },
       durable_extraction: {
         created: 0,
@@ -414,7 +435,7 @@ describe('runDream', () => {
       activity: {
         recall_events: 4,
         recall_queries: 2,
-        reviewed_queries: 2,
+        metadata_queries: 2,
         write_events: 7,
       },
       agent: { tool_calls: 0, turns: 1 },
@@ -431,7 +452,7 @@ describe('runDream', () => {
         writeActivity: writeStats,
       },
       recallReview,
-      reviewed_queries: [{ query_text: 'q1' }],
+      recall_metadata_queries: recallReview.queries,
       durable_extraction: { created: 0, enriched: 0 },
       maintenance: {
         protected_blocks: 1,
@@ -440,6 +461,53 @@ describe('runDream', () => {
         moved: 2,
       },
     });
+  });
+
+  it('keeps dream completed when poetic rewrite fails and records fallback', async () => {
+    mockSql
+      .mockResolvedValueOnce(makeResult([{ id: 2 }]))
+      .mockResolvedValueOnce(makeResult([]))
+      .mockResolvedValueOnce(makeResult([]))
+      .mockResolvedValueOnce(makeResult());
+    mockGetSettings.mockResolvedValue({ 'dream.timezone': 'Asia/Shanghai' });
+    mockRewriteDreamNarrative.mockRejectedValueOnce(new Error('rewrite down'));
+    const recallAnalytics = await import('../../recall/recallAnalytics');
+    const writeEvents = await import('../../memory/writeEvents');
+    vi.mocked(recallAnalytics.getRecallStats).mockResolvedValue({ summary: { merged_count: 0, query_count: 0 } } as any);
+    vi.mocked(recallAnalytics.getDreamRecallReview).mockResolvedValue({ summary: { returned_queries: 0, total_merged: 0, total_shown: 0, total_used: 0, truncated: false }, queries: [] } as any);
+    vi.mocked(writeEvents.getWriteEventStats).mockResolvedValue({ summary: { total_events: 0 }, hot_nodes: [], recent_events: [] } as any);
+
+    const result = await runDream();
+
+    expect(result.status).toBe('completed');
+    expect(result.narrative).toBe('done');
+    expect(mockAppendDreamWorkflowEvent).toHaveBeenCalledWith(2, 'phase_completed', expect.objectContaining({
+      phase: 'poetic_rewrite',
+      summary: expect.objectContaining({ fallback: true, error: 'rewrite down' }),
+    }));
+  });
+
+  it('records phase, provider, and model when dream run fails', async () => {
+    mockSql
+      .mockResolvedValueOnce(makeResult([{ id: 3 }]))
+      .mockResolvedValueOnce(makeResult([]))
+      .mockResolvedValueOnce(makeResult());
+    mockGetSettings.mockResolvedValue({ 'dream.timezone': 'Asia/Shanghai' });
+    mockRunDreamAgentLoop.mockRejectedValueOnce(new Error('agent down'));
+    const recallAnalytics = await import('../../recall/recallAnalytics');
+    const writeEvents = await import('../../memory/writeEvents');
+    vi.mocked(recallAnalytics.getRecallStats).mockResolvedValue({ summary: { merged_count: 0, query_count: 0 } } as any);
+    vi.mocked(recallAnalytics.getDreamRecallReview).mockResolvedValue({ summary: { returned_queries: 0, total_merged: 0, total_shown: 0, total_used: 0, truncated: false }, queries: [] } as any);
+    vi.mocked(writeEvents.getWriteEventStats).mockResolvedValue({ summary: { total_events: 0 }, hot_nodes: [], recent_events: [] } as any);
+
+    await expect(runDream()).rejects.toThrow('agent down');
+
+    expect(mockAppendDreamWorkflowEvent).toHaveBeenCalledWith(3, 'run_failed', expect.objectContaining({
+      phase: 'agent_loop',
+      provider: 'openai_compatible',
+      model: 'gpt-4o-mini',
+      error: 'agent down',
+    }));
   });
 });
 

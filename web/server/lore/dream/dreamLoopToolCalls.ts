@@ -12,6 +12,7 @@ interface DreamLoopToolCallLogEntry {
   tool: string;
   args: Record<string, unknown>;
   result_preview: string;
+  result_size_chars?: number;
 }
 
 interface ProcessDreamToolCallsOptions {
@@ -104,16 +105,18 @@ export async function processDreamToolCalls({
       policy_warnings: policyWarnings,
     });
 
+    const serializedResult = JSON.stringify(result);
     toolCalls.push({
       tool: name,
       args,
-      result_preview: JSON.stringify(result).slice(0, 500),
+      result_preview: serializedResult.slice(0, 500),
+      result_size_chars: serializedResult.length,
     });
 
     messages.push({
       role: 'tool',
       tool_call_id: String(toolCall.id || ''),
-      content: JSON.stringify(result),
+      content: serializedResult,
     });
   }
 }

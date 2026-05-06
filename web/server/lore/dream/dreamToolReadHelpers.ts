@@ -2,6 +2,8 @@ import { getNodePayload } from '../memory/browse';
 import { markSessionRead } from '../memory/session';
 import { parseUri } from '../core/utils';
 import { listMemoryViewsByNode } from '../view/memoryViewQueries';
+import { getNodeWriteHistory } from '../memory/writeEvents';
+import { getProtectedBootOperation } from './dreamToolBootGuard';
 
 interface DreamReadEventContext {
   source: string;
@@ -41,6 +43,11 @@ function clampInteger(value: unknown, min: number, max: number, fallback: number
 function snippet(content: unknown): string {
   const text = String(content || '');
   return text.length > 180 ? `${text.slice(0, 180)}...` : text;
+}
+
+function preview(content: unknown, maxChars: number): string {
+  const text = String(content || '');
+  return text.length > maxChars ? text.slice(0, maxChars) : text;
 }
 
 function gistSnippetFromViews(views: unknown): string {
@@ -197,5 +204,156 @@ export async function inspectNeighbors(
     children,
     aliases,
     breadcrumbs,
+  };
+}
+
+function compactNode(node: Record<string, unknown> | null | undefined): Record<string, unknown> | null {
+  if (!node) return null;
+  return {
+    uri: node.uri,
+    node_uuid: node.node_uuid,
+    priority: Number.isFinite(Number(node.priority)) ? Number(node.priority) : null,
+    disclosure: typeof node.disclosure === 'string' && node.disclosure.trim() ? node.disclosure : null,
+    child_count: Number.isFinite(Number(node.approx_children_count)) ? Number(node.approx_children_count) : undefined,
+    content_snippet: gistSnippetFromViews(node.memory_views) || snippet(node.content_snippet || node.content),
+  };
+}
+
+function compactView(view: Record<string, unknown>): Record<string, unknown> {
+  const text = String(view.text_content || '');
+  return {
+    view_type: view.view_type ?? null,
+    source: view.source ?? null,
+    status: view.status ?? null,
+    weight: Number.isFinite(Number(view.weight)) ? Number(view.weight) : null,
+    text_content: preview(text, 600),
+    text_chars: text.length,
+    updated_at: view.updated_at ?? null,
+    metadata: view.metadata && typeof view.metadata === 'object' ? view.metadata : {},
+  };
+}
+
+export async function inspectMemoryNodeForDream(
+  uri: string,
+  {
+    siblingsLimit = 8,
+    childrenLimit = 12,
+    viewsLimit = 6,
+    historyLimit = 8,
+  }: {
+    siblingsLimit?: number;
+    childrenLimit?: number;
+    viewsLimit?: number;
+    historyLimit?: number;
+  } = {},
+  eventContext: DreamReadEventContext = { source: 'dream:auto' },
+): Promise<Record<string, unknown>> {
+  const safeSiblingsLimit = clampInteger(siblingsLimit, 0, 20, 8);
+  const safeChildrenLimit = clampInteger(childrenLimit, 0, 30, 12);
+  const safeViewsLimit = clampInteger(viewsLimit, 1, 8, 6);
+  const safeHistoryLimit = clampInteger(historyLimit, 1, 10, 8);
+  const { domain, path } = parseUri(uri);
+  const current = await getNodePayload({ domain, path });
+  await trackDreamRead(current.node, eventContext, 'inspect_memory_node_for_dream');
+  const node = current.node as unknown as Record<string, unknown>;
+  const segments = path.split('/').filter(Boolean);
+  const parentPath = segments.slice(0, -1).join('/');
+  const [parentPayload, views, writeHistory] = await Promise.all([
+    segments.length > 0 ? getNodePayload({ domain, path: parentPath }) : Promise.resolve(null),
+    listMemoryViewsByNode({ uri: String(node.uri || `${domain}://${path}`), nodeUuid: String(node.node_uuid || ''), limit: safeViewsLimit }),
+    getNodeWriteHistory({ nodeUri: String(node.uri || `${domain}://${path}`), limit: safeHistoryLimit }),
+  ]);
+  if (parentPayload) await trackDreamRead(parentPayload.node, eventContext, 'inspect_memory_node_for_dream_parent');
+  const siblings = parentPayload
+    ? (Array.isArray(parentPayload.children) ? parentPayload.children : [])
+        .filter((child) => String((child as unknown as Record<string, unknown>).uri || '') !== String(node.uri || ''))
+        .slice(0, safeSiblingsLimit)
+        .map((child) => compactNode(child as unknown as Record<string, unknown>))
+        .filter(Boolean)
+    : [];
+  const children = (Array.isArray(current.children) ? current.children : [])
+    .slice(0, safeChildrenLimit)
+    .map((child) => compactNode(child as unknown as Record<string, unknown>))
+    .filter(Boolean);
+  const content = String(node.content || '');
+  const payload: Record<string, unknown> = {
+    uri: node.uri || `${domain}://${path}`,
+    node_uuid: node.node_uuid ?? null,
+    priority: Number.isFinite(Number(node.priority)) ? Number(node.priority) : null,
+    disclosure: typeof node.disclosure === 'string' && node.disclosure.trim() ? node.disclosure : null,
+    glossary: Array.isArray(node.glossary_keywords) ? node.glossary_keywords : [],
+    aliases: Array.isArray(node.aliases) ? node.aliases : [],
+    content_chars: content.length,
+    content_preview: preview(content, 1200),
+    child_count: Array.isArray(current.children) ? current.children.length : 0,
+    parent: parentPayload ? compactNode(parentPayload.node as unknown as Record<string, unknown>) : null,
+    siblings,
+    children,
+    breadcrumbs: Array.isArray(current.breadcrumbs) ? current.breadcrumbs : [],
+    views: (Array.isArray(views) ? views : []).map((view) => compactView(view as unknown as Record<string, unknown>)),
+    write_history: writeHistory,
+    limits: {
+      siblings: safeSiblingsLimit,
+      children: safeChildrenLimit,
+      views: safeViewsLimit,
+      history: safeHistoryLimit,
+    },
+  };
+  payload.json_size_chars = JSON.stringify(payload).length;
+  return payload;
+}
+
+export async function refreshOrInspectViews(
+  uri: string,
+  { limit = 6 }: { limit?: number } = {},
+): Promise<Record<string, unknown>> {
+  const safeLimit = clampInteger(limit, 1, 8, 6);
+  const views = await listMemoryViewsByNode({ uri, limit: safeLimit });
+  const payload: Record<string, unknown> = {
+    uri,
+    mode: 'inspect_only',
+    refresh_supported: false,
+    views: (Array.isArray(views) ? views : []).map((view) => compactView(view as unknown as Record<string, unknown>)),
+  };
+  payload.json_size_chars = JSON.stringify(payload).length;
+  return payload;
+}
+
+export function validateMemoryChange(args: Record<string, unknown>): Record<string, unknown> {
+  const action = String(args.action || '').trim();
+  const uri = String(args.uri || '').trim();
+  const content = typeof args.content === 'string' ? args.content : '';
+  const disclosure = typeof args.disclosure === 'string' ? args.disclosure.trim() : '';
+  const priority = args.priority;
+  const protectedOp = getProtectedBootOperation(
+    action === 'move' || action === 'move_node' ? 'move_node' : action === 'delete' || action === 'delete_node' ? 'delete_node' : action === 'create' || action === 'create_node' ? 'create_node' : 'update_node',
+    {
+      uri,
+      old_uri: uri,
+      new_uri: args.new_uri,
+    },
+  );
+  const multiScenePattern = /\s或\s|\sOR\s|\/|、|,|，/i;
+  const warnings: string[] = [];
+  if ((action === 'create' || action === 'create_node' || content) && !disclosure) warnings.push('disclosure is missing');
+  if (disclosure && multiScenePattern.test(disclosure)) warnings.push('disclosure appears to describe multiple scenes');
+  if ((action === 'create' || action === 'create_node') && (priority === undefined || priority === null || priority === '')) warnings.push('priority is missing for create');
+  const parsed = uri ? parseUri(uri) : { domain: '', path: '' };
+  if ((action === 'create' || action === 'create_node') && parsed.path.split('/').filter(Boolean).length <= 1) warnings.push('create target has little parent context and may create a horizontal island');
+  if (protectedOp) warnings.push(protectedOp.reason || `protected path: ${protectedOp.blocked_uri}`);
+
+  return {
+    action,
+    uri,
+    blocked: Boolean(protectedOp),
+    warnings,
+    checks: {
+      has_disclosure: Boolean(disclosure),
+      disclosure_single_scene: !disclosure || !multiScenePattern.test(disclosure),
+      has_priority: priority !== undefined && priority !== null && priority !== '',
+      protected_path: Boolean(protectedOp),
+      create_has_parent_path: parsed.path.split('/').filter(Boolean).length > 1,
+      content_chars: content.length,
+    },
   };
 }

@@ -2,6 +2,7 @@ import { getNodePayload, listDomains } from '../memory/browse';
 import { createNode, deleteNodeByPath, moveNode, updateNodeByPath } from '../memory/write';
 import { getPathEffectiveness } from '../recall/feedbackAnalytics';
 import {
+  getDreamRecallReview,
   getDreamQueryCandidates,
   getDreamQueryEventSamples,
   getDreamQueryNodePaths,
@@ -13,7 +14,7 @@ import { listMemoryViewsByNode } from '../view/memoryViewQueries';
 import { getDreamMemoryEventSummary, getNodeWriteHistory } from '../memory/writeEvents';
 import { markSessionRead } from '../memory/session';
 import { parseUri } from '../core/utils';
-import { inspectNeighbors, inspectTree } from './dreamToolReadHelpers';
+import { inspectMemoryNodeForDream, inspectNeighbors, inspectTree, refreshOrInspectViews, validateMemoryChange } from './dreamToolReadHelpers';
 import {
   applyDreamWritePolicy,
   type DreamToolEventContext,
@@ -72,6 +73,13 @@ export async function dispatchDreamTool(
       return await searchMemories({ query: args.query as string, limit: (args.limit as number) || 10 });
     case 'list_domains':
       return await listDomains();
+    case 'get_today_recall_metadata':
+      return await getDreamRecallReview({
+        date: (args.date as string) || '',
+        timezone: (args.timezone as string) || 'Asia/Shanghai',
+        limit: (args.limit as number) || 100,
+        offset: (args.offset as number) || 0,
+      });
     case 'get_query_recall_detail':
       return await getDreamQueryRecallDetail({
         queryId: (args.query_id as string) || '',
@@ -128,6 +136,21 @@ export async function dispatchDreamTool(
       );
     case 'inspect_views':
       return await listMemoryViewsByNode({ uri: args.uri as string, limit: (args.limit as number) || 12 });
+    case 'refresh_or_inspect_views':
+      return await refreshOrInspectViews(args.uri as string, { limit: (args.limit as number) || 6 });
+    case 'inspect_memory_node_for_dream':
+      return await inspectMemoryNodeForDream(
+        args.uri as string,
+        {
+          siblingsLimit: (args.siblings_limit as number) || 8,
+          childrenLimit: (args.children_limit as number) || 12,
+          viewsLimit: (args.views_limit as number) || 6,
+          historyLimit: (args.history_limit as number) || 8,
+        },
+        eventContext,
+      );
+    case 'validate_memory_change':
+      return validateMemoryChange(args);
     case 'create_node': {
       const { domain, path } = args.uri ? parseUri(args.uri as string) : { domain: 'core', path: '' };
       const segments = path.split('/').filter(Boolean);

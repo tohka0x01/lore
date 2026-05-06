@@ -32,6 +32,7 @@ vi.mock('../../memory/write', () => ({
 }));
 vi.mock('../../recall/recallAnalytics', () => ({
   getRecallStats: vi.fn(),
+  getDreamRecallReview: vi.fn(),
   getDreamQueryRecallDetail: vi.fn(),
   getDreamQueryCandidates: vi.fn(),
   getDreamQueryPathBreakdown: vi.fn(),
@@ -72,6 +73,7 @@ import { searchMemories } from '../../search/search';
 import { createNode, updateNodeByPath, deleteNodeByPath, moveNode } from '../../memory/write';
 import { getBootNodeSpec } from '../../memory/boot';
 import {
+  getDreamRecallReview,
   getDreamQueryCandidates,
   getDreamQueryEventSamples,
   getDreamQueryNodePaths,
@@ -92,6 +94,9 @@ import {
   executeDreamTool,
   loadGuidanceFile,
   buildDreamSystemPrompt,
+  getDreamPhaseToolNames,
+  parseDreamAuditJson,
+  parseDreamPlanJson,
   rewriteDreamNarrative,
   runDreamAgentLoop,
   DREAM_EVENT_CONTEXT,
@@ -113,6 +118,7 @@ const mockUpdateNodeByPath = vi.mocked(updateNodeByPath);
 const mockDeleteNodeByPath = vi.mocked(deleteNodeByPath);
 const mockMoveNode = vi.mocked(moveNode);
 const mockGetBootNodeSpec = vi.mocked(getBootNodeSpec);
+const mockGetDreamRecallReview = vi.mocked(getDreamRecallReview);
 const mockGetRecallStats = vi.mocked(getRecallStats);
 const mockGetDreamQueryRecallDetail = vi.mocked(getDreamQueryRecallDetail);
 const mockGetDreamQueryCandidates = vi.mocked(getDreamQueryCandidates);
@@ -155,7 +161,7 @@ function makeInitialContext(overrides: Partial<DreamInitialContext> = {}): Dream
     ],
     guidance: '# MCP Guidance\npreloaded boot baseline\npreloaded guidance\nget_node is useful',
     recallStats: { summary: {}, by_path: [], noisy_nodes: [], recent_queries: { items: [], total: 0, limit: 20, offset: 0, has_more: false } },
-    recallReview: { summary: {}, reviewed_queries: [], signal_coverage: {} },
+    recallReview: { date: '2026-05-07', timezone: 'Asia/Shanghai', summary: {}, queries: [] },
     writeActivity: { summary: {}, hot_nodes: [], recent_events: [] },
     recentDiaries: [],
     ...overrides,
@@ -241,6 +247,7 @@ describe('buildDreamTools', () => {
     expect(names).toContain('get_node');
     expect(names).toContain('search');
     expect(names).toContain('list_domains');
+    expect(names).toContain('get_today_recall_metadata');
     expect(names).not.toContain('get_node_recall_detail');
     expect(names).toContain('get_query_recall_detail');
     expect(names).toContain('get_query_candidates');
@@ -253,6 +260,9 @@ describe('buildDreamTools', () => {
     expect(names).toContain('inspect_neighbors');
     expect(names).toContain('inspect_tree');
     expect(names).toContain('inspect_views');
+    expect(names).toContain('refresh_or_inspect_views');
+    expect(names).toContain('inspect_memory_node_for_dream');
+    expect(names).toContain('validate_memory_change');
     expect(names).toContain('create_node');
     expect(names).toContain('update_node');
     expect(names).toContain('delete_node');
@@ -277,6 +287,43 @@ describe('buildDreamTools', () => {
       expect(tool.parameters).toBeDefined();
       expect(tool.parameters.type).toBe('object');
     }
+  });
+});
+
+describe('Dream phase gates', () => {
+  it('keeps mutation tools unavailable during diagnosis', () => {
+    expect(getDreamPhaseToolNames('diagnose')).toEqual(expect.arrayContaining([
+      'search',
+      'get_node',
+      'inspect_tree',
+      'inspect_neighbors',
+      'inspect_views',
+      'refresh_or_inspect_views',
+      'get_query_recall_detail',
+      'get_query_candidates',
+      'get_query_path_breakdown',
+      'get_query_node_paths',
+      'get_query_event_samples',
+      'inspect_memory_node_for_dream',
+    ]));
+    expect(getDreamPhaseToolNames('diagnose')).not.toContain('create_node');
+    expect(getDreamPhaseToolNames('diagnose')).not.toContain('update_node');
+    expect(getDreamPhaseToolNames('diagnose')).not.toContain('delete_node');
+    expect(getDreamPhaseToolNames('diagnose')).not.toContain('move_node');
+  });
+
+  it('parses structured plan and audit JSON', () => {
+    expect(parseDreamPlanJson('{"tree_maintenance_candidates":[],"daily_memory_extraction_candidates":[],"recall_repair_candidates":[],"skip_reasons":["no evidence"]}')).toMatchObject({
+      tree_maintenance_candidates: [],
+      daily_memory_extraction_candidates: [],
+      recall_repair_candidates: [],
+      skip_reasons: ['no evidence'],
+    });
+
+    expect(parseDreamAuditJson('{"primary_focus":"no_change","changed_nodes":[],"evidence":[],"why_not_more_changes":"no strong evidence","expected_effect":"none","confidence":"high"}')).toMatchObject({
+      primary_focus: 'no_change',
+      why_not_more_changes: 'no strong evidence',
+    });
   });
 });
 
@@ -331,6 +378,12 @@ describe('executeDreamTool', () => {
     mockListDomains.mockResolvedValue(['core'] as any);
     await executeDreamTool('list_domains', {});
     expect(mockListDomains).toHaveBeenCalled();
+  });
+
+  it('dispatches get_today_recall_metadata to raw recall metadata helper', async () => {
+    mockGetDreamRecallReview.mockResolvedValue({ queries: [] } as any);
+    await executeDreamTool('get_today_recall_metadata', { date: '2026-05-07', timezone: 'Asia/Shanghai', limit: 100, offset: 10 });
+    expect(mockGetDreamRecallReview).toHaveBeenCalledWith({ date: '2026-05-07', timezone: 'Asia/Shanghai', limit: 100, offset: 10 });
   });
 
   it('dispatches get_query_recall_detail to dream-focused query detail', async () => {
@@ -509,6 +562,66 @@ describe('executeDreamTool', () => {
     mockListMemoryViewsByNode.mockResolvedValue([{ view_type: 'gist' }] as any);
     await executeDreamTool('inspect_views', { uri: 'core://test', limit: 5 });
     expect(mockListMemoryViewsByNode).toHaveBeenCalledWith({ uri: 'core://test', limit: 5 });
+  });
+
+  it('dispatches refresh_or_inspect_views as inspect-only view tool', async () => {
+    mockListMemoryViewsByNode.mockResolvedValue([{ view_type: 'gist', text_content: 'view body', updated_at: '2026-05-07T00:00:00Z' }] as any);
+    const result = await executeDreamTool('refresh_or_inspect_views', { uri: 'core://test', limit: 5 }) as Record<string, unknown>;
+    expect(mockListMemoryViewsByNode).toHaveBeenCalledWith({ uri: 'core://test', limit: 5 });
+    expect(result).toMatchObject({ uri: 'core://test', mode: 'inspect_only', refresh_supported: false });
+    expect(result.json_size_chars).toEqual(expect.any(Number));
+  });
+
+  it('dispatches inspect_memory_node_for_dream with compact node context', async () => {
+    mockGetNodePayload
+      .mockResolvedValueOnce({
+        node: {
+          uri: 'project://lore/dream',
+          node_uuid: 'node-1',
+          priority: 2,
+          disclosure: '当整理 dream 时',
+          content: 'Dream node content',
+          glossary_keywords: ['dream'],
+          aliases: [],
+        },
+        children: [{ uri: 'project://lore/dream/child', priority: 3, disclosure: 'child', content_snippet: 'child body', approx_children_count: 0 }],
+        breadcrumbs: [{ path: 'lore', label: 'lore' }],
+      } as any)
+      .mockResolvedValueOnce({
+        node: { uri: 'project://lore', node_uuid: 'parent-1', priority: 2, disclosure: 'parent', content: 'Parent' },
+        children: [
+          { uri: 'project://lore/dream', priority: 2 },
+          { uri: 'project://lore/runtime', priority: 2, disclosure: 'runtime', content_snippet: 'runtime body', approx_children_count: 0 },
+        ],
+        breadcrumbs: [],
+      } as any);
+    mockListMemoryViewsByNode.mockResolvedValue([{ view_type: 'gist', text_content: 'Dream gist', updated_at: '2026-05-07T00:00:00Z' }] as any);
+    mockGetNodeWriteHistory.mockResolvedValue({ events: [] } as any);
+
+    const result = await executeDreamTool('inspect_memory_node_for_dream', { uri: 'project://lore/dream', siblings_limit: 5, children_limit: 5, views_limit: 4, history_limit: 5 }) as Record<string, unknown>;
+
+    expect(result).toMatchObject({
+      uri: 'project://lore/dream',
+      content_chars: 18,
+      content_preview: 'Dream node content',
+      disclosure: '当整理 dream 时',
+      priority: 2,
+      glossary: ['dream'],
+      limits: { siblings: 5, children: 5, views: 4, history: 5 },
+      json_size_chars: expect.any(Number),
+    });
+  });
+
+  it('validates memory changes without mutating memory', async () => {
+    const result = await executeDreamTool('validate_memory_change', { action: 'create', uri: 'project://foo', content: 'x', priority: 2 }) as Record<string, unknown>;
+    expect(result).toMatchObject({
+      action: 'create',
+      uri: 'project://foo',
+      blocked: false,
+    });
+    expect(result.warnings).toContain('disclosure is missing');
+    expect(result.warnings).toContain('create target has little parent context and may create a horizontal island');
+    expect(mockCreateNode).not.toHaveBeenCalled();
   });
 
   it('tracks session reads for get_node when session context is provided', async () => {
@@ -817,6 +930,7 @@ describe('processDreamToolCalls', () => {
         tool: 'list_domains',
         args: {},
         result_preview: JSON.stringify({ items: ['core'] }),
+        result_size_chars: JSON.stringify({ items: ['core'] }).length,
       },
       {
         tool: 'update_node',
@@ -828,6 +942,13 @@ describe('processDreamToolCalls', () => {
           boot_role: 'agent',
           detail: 'blocked by boot protection',
         }),
+        result_size_chars: JSON.stringify({
+          blocked: true,
+          code: 'protected_boot_path',
+          blocked_uri: 'core://agent',
+          boot_role: 'agent',
+          detail: 'blocked by boot protection',
+        }).length,
       },
     ]);
     expect(events).toEqual([
@@ -1003,6 +1124,7 @@ describe('processDreamToolCalls', () => {
         tool: 'list_domains',
         args: {},
         result_preview: JSON.stringify({ ok: true }),
+        result_size_chars: JSON.stringify({ ok: true }).length,
       },
     ]);
   });
@@ -1024,10 +1146,12 @@ describe('loadGuidanceFile', () => {
 // ---------------------------------------------------------------------------
 
 describe('buildDreamSystemPrompt', () => {
-  it('establishes auditor identity and diagnostic framework', () => {
+  it('establishes memory digestion identity and priorities', () => {
     const prompt = buildDreamSystemPrompt(makeInitialContext());
-    expect(prompt).toContain('你是 Lore 记忆系统的质检员');
-    expect(prompt).toContain('至少有一类查询，在明天比今天更有可能召回正确的结果');
+    expect(prompt).toContain('你是 Lore 的夜间记忆消化系统');
+    expect(prompt).toContain('第一目标是让现有记忆树更成熟');
+    expect(prompt).toContain('第二目标是从今日用户内容中抽取值得长期保存的记忆');
+    expect(prompt).toContain('第三目标是根据 recall metadata 发现 glossary / disclosure / view / priority 问题');
     expect(prompt).toContain('Agent boot body');
     expect(prompt).toContain('Soul boot body');
     expect(prompt).toContain('User boot body');
@@ -1037,49 +1161,47 @@ describe('buildDreamSystemPrompt', () => {
 
   it('provides structured decision framework for interventions', () => {
     const prompt = buildDreamSystemPrompt(makeInitialContext());
-    expect(prompt).toContain('结构 / 边界');
+    expect(prompt).toContain('先看树，再考虑写');
+    expect(prompt).toContain('优先更新 / 提炼 / 合并现有节点');
+    expect(prompt).toContain('新建节点要更严格');
+    expect(prompt).toContain('禁止为了单条 query 横向新建很多项目碎片');
     expect(prompt).toContain('树结构');
-    expect(prompt).toContain('继续提炼');
-    expect(prompt).toContain('拆分、合并、删除');
+    expect(prompt).toContain('过长拆分');
+    expect(prompt).toContain('三条以上相似记忆提炼');
     expect(prompt).toContain('disclosure / glossary');
-    expect(prompt).toContain('最后才改内容');
-    expect(prompt).toContain('不要润色');
     expect(prompt).toContain('受保护的启动基线节点');
     expect(prompt).toContain('当前数据');
   });
 
   it('filters out non-actionable changes with explicit guardrails', () => {
     const prompt = buildDreamSystemPrompt(makeInitialContext());
-    expect(prompt).toContain('不为好看而改');
-    expect(prompt).toContain('不确定就不做');
-    expect(prompt).toContain('任何基于"可能是"');
+    expect(prompt).toContain('用户一次性的操作请求默认跳过');
+    expect(prompt).toContain('明确项目状态、偏好、架构决策、长期约束，可以记');
+    expect(prompt).toContain('能归入已有项目节点就更新已有节点');
+    expect(prompt).toContain('新建节点必须说明为什么更新旧节点不足够');
+    expect(prompt).toContain('只能总结 query_text 暴露出来的长期信息');
   });
 
-  it('replaces structured diary with decision record approach', () => {
+  it('requires structured audit diary', () => {
     const prompt = buildDreamSystemPrompt(makeInitialContext());
-    expect(prompt).toContain('决策记录');
-    expect(prompt).toContain('需要固定章节');
-    expect(prompt).not.toContain('Which recall requests you reviewed');
-    expect(prompt).not.toContain('Maintenance-only changes');
+    expect(prompt).toContain('primary_focus');
+    expect(prompt).toContain('why_not_more_changes');
+    expect(prompt).toContain('诗性日记只消费这个 audit');
   });
 
-  it('downgrades diary from structured output to honest decision log', () => {
-    const prompt = buildDreamSystemPrompt(makeInitialContext());
-    expect(prompt).toContain('如果你什么都没改，一句话就够');
-    expect(prompt).toContain('诚实比完整重要');
-    expect(prompt).toContain('不需要固定章节');
-  });
-
-  it('uses reviewed queries as the primary recall evidence (no longer duplicates recent queries)', () => {
+  it('uses today recall metadata as primary recall evidence', () => {
     const prompt = buildDreamSystemPrompt(makeInitialContext({
       recallReview: {
-        summary: { reviewed_queries: 1, possible_missed_recalls: 1 },
-        reviewed_queries: [{ query_id: 'q-1', query_text: 'long query text', merged_count: 3, shown_count: 2, used_count: 1, flags: [], selected_uris: [], used_uris: [], unrecalled_session_reads: [], unshown_session_reads: [], missed_recall_signals: [] }],
+        date: '2026-05-07',
+        timezone: 'Asia/Shanghai',
+        summary: { returned_queries: 1, total_merged: 3, total_shown: 2, total_used: 1, truncated: false },
+        queries: [{ query_id: 'q-1', content: 'long query text', merged_count: 3, shown_count: 2, used_count: 1, client_type: 'codex', session_id: 's1', created_at: '2026-05-07T00:00:00.000Z' }],
       } as any,
     }));
     expect(prompt).toContain('long query text');
-    expect(prompt).toContain('"shown"');
+    expect(prompt).toContain('今日 recall metadata');
     expect(prompt).not.toContain('近期查询概况');
+    expect(prompt).not.toContain('待审查询');
   });
 
   it('includes recent diary section in today context when provided', () => {
@@ -1092,34 +1214,28 @@ describe('buildDreamSystemPrompt', () => {
   it('includes query-level recall review and today-first mission', () => {
     const prompt = buildDreamSystemPrompt(makeInitialContext({
       recallReview: {
-        summary: { reviewed_queries: 1, possible_missed_recalls: 2 },
-        reviewed_queries: [
-          {
-            query_id: 'q-1',
-            query_text: 'why did boot not recall',
-            merged_count: 6,
-            shown_count: 1,
-            used_count: 0,
-            flags: ['zero_use', 'high_merge_low_use'],
-            selected_uris: ['core://agent'],
-            used_uris: [],
-            unrecalled_session_reads: ['core://soul'],
-            unshown_session_reads: [],
-            missed_recall_signals: [{ type: 'never_retrieved', uri: 'core://soul' }],
-          },
-        ],
+        summary: { returned_queries: 1, total_merged: 6, total_shown: 1, total_used: 0 },
+        queries: [{ query_id: 'q-1', content: 'why did boot not recall', merged_count: 6, shown_count: 1, used_count: 0 }],
       } as any,
     }));
     expect(prompt).toContain('why did boot not recall');
-    expect(prompt).toContain('质检员');
-    expect(prompt).toContain('high_merge_low_use');
+    expect(prompt).toContain('从今日 100 条 metadata 里挑可疑 query');
+    expect(prompt).toContain('用 get_query_recall_detail 看 shown nodes');
+    expect(prompt).toContain('用 get_query_candidates 看候选');
+    expect(prompt).toContain('用 inspect_memory_node_for_dream 看相关节点');
+    expect(prompt).toContain('glossary 缺词');
+    expect(prompt).toContain('view 内容弱');
+    expect(prompt).toContain('query 不值得处理');
+    expect(prompt).toContain('只有证据足够才改');
+    expect(prompt).not.toContain('high_merge_low_use');
+    expect(prompt).not.toContain('zero_use');
   });
 
   it('uses Chinese throughout the prompt with action-first mindset', () => {
     const prompt = buildDreamSystemPrompt(makeInitialContext());
-    expect(prompt).toContain('诊断框架');
-    expect(prompt).toContain('决策记录');
-    expect(prompt).toContain('至少有一类查询');
+    expect(prompt).toContain('阶段流程');
+    expect(prompt).toContain('结构化诊断');
+    expect(prompt).toContain('记忆树消化');
     expect(prompt).not.toContain('Dream 的宪法层');
     expect(prompt).not.toContain('Lore guidance 与这三个固定节点一起构成 Dream 的 baseline calibration');
   });
@@ -1128,8 +1244,8 @@ describe('buildDreamSystemPrompt', () => {
     const prompt = buildDreamSystemPrompt(makeInitialContext());
     expect(prompt).toContain('受保护的启动基线节点');
     expect(prompt).toContain('只读参考，不可修改');
-    expect(prompt).toContain('结构 / 边界');
-    expect(prompt).toContain('最后才改内容');
+    expect(prompt).toContain('优先更新 / 提炼 / 合并现有节点');
+    expect(prompt).toContain('最后才是 create_node');
   });
 });
 
@@ -1169,173 +1285,87 @@ describe('rewriteDreamNarrative', () => {
 });
 
 describe('runDreamAgentLoop', () => {
-  it('starts with a user kickoff message so providers do not receive an empty prompt', async () => {
-    mockGenerateTextWithTools.mockResolvedValueOnce(makeTextResponse('Final narrative'));
-
-    const config: LlmConfig = {
-      provider: 'anthropic',
-      base_url: 'http://localhost:1234',
+  function config(provider: LlmConfig['provider'] = 'openai_compatible'): LlmConfig {
+    return {
+      provider,
+      base_url: provider === 'anthropic' ? 'http://localhost:1234' : 'http://localhost:1234/v1',
       api_key: 'test-key',
-      model: 'claude-sonnet-4-6',
+      model: provider === 'anthropic' ? 'claude-sonnet-4-6' : 'gpt-4o-mini',
       timeout_ms: 5000,
       temperature: 0.3,
-      api_version: '2023-06-01',
+      api_version: provider === 'anthropic' ? '2023-06-01' : '',
     };
+  }
 
-    await runDreamAgentLoop(config, makeInitialContext());
-
-    expect(mockGenerateTextWithTools).toHaveBeenCalledTimes(1);
-    const [, messages] = mockGenerateTextWithTools.mock.calls[0];
-    expect(messages[0]).toMatchObject({ role: 'system' });
-    expect(messages[1]).toMatchObject({ role: 'user' });
-    expect(String((messages[1] as { content?: unknown }).content || '')).toContain('Begin the dream review');
-  });
-
-  it('emits workflow events for turns, tool calls, and final note', async () => {
+  it('runs hard phases and returns structured audit JSON as raw narrative', async () => {
     mockGenerateTextWithTools
-      .mockResolvedValueOnce(makeToolResponse([{ id: 'call-1', function: { name: 'list_domains', arguments: '{}' } }]))
-      .mockResolvedValueOnce(makeTextResponse('Final narrative'));
+      .mockResolvedValueOnce(makeTextResponse('{"diagnosis":"tree checked"}'))
+      .mockResolvedValueOnce(makeTextResponse('{"tree_maintenance_candidates":[],"daily_memory_extraction_candidates":[],"recall_repair_candidates":[],"skip_reasons":["no evidence"]}'))
+      .mockResolvedValueOnce(makeTextResponse('{"preflight":"none"}'))
+      .mockResolvedValueOnce(makeTextResponse('{"applied":[]}'))
+      .mockResolvedValueOnce(makeTextResponse('{"primary_focus":"no_change","changed_nodes":[],"evidence":[],"why_not_more_changes":"no strong evidence","expected_effect":"none","confidence":"high"}'));
 
     const events: Array<{ type: string; payload?: Record<string, unknown> }> = [];
-    const config: LlmConfig = {
-      provider: 'openai_compatible',
-      base_url: 'http://localhost:1234/v1',
-      api_key: 'test-key',
-      model: 'gpt-4o-mini',
-      timeout_ms: 5000,
-      temperature: 0.3,
-      api_version: '',
-    };
-
-    const result = await runDreamAgentLoop(config, makeInitialContext(), {
-      onEvent: async (type, payload) => {
-        events.push({ type, payload });
-      },
+    const result = await runDreamAgentLoop(config(), makeInitialContext(), {
+      onEvent: async (type, payload) => events.push({ type, payload }),
       eventContext: { source: 'dream:auto', session_id: 'dream:99' },
     });
 
-    expect(result.narrative).toBe('Final narrative');
-    expect(result.toolCalls).toHaveLength(1);
-    expect(events.map((event) => event.type)).toEqual([
-      'llm_turn_started',
-      'tool_call_started',
-      'tool_call_finished',
-      'llm_turn_started',
+    expect(mockGenerateTextWithTools).toHaveBeenCalledTimes(5);
+    const firstCallTools = mockGenerateTextWithTools.mock.calls[0][2].map((tool) => tool.name);
+    expect(firstCallTools).toContain('inspect_tree');
+    expect(firstCallTools).not.toContain('create_node');
+    const applyCallTools = mockGenerateTextWithTools.mock.calls[3][2].map((tool) => tool.name);
+    expect(applyCallTools).toContain('update_node');
+    expect(result.narrative).toContain('"primary_focus": "no_change"');
+    expect(result.turns).toBe(5);
+    expect(events.map((event) => event.type)).toEqual(expect.arrayContaining([
+      'phase_started',
+      'phase_completed',
       'assistant_note',
-    ]);
-    expect(events[1].payload).toMatchObject({ turn: 1, tool: 'list_domains' });
-    expect(events[2].payload).toMatchObject({
-      turn: 1,
-      tool: 'list_domains',
-      ok: true,
-      blocked: false,
-      protected_blocked: false,
-      policy_blocked: false,
-      warnings: [],
-      policy_warnings: [],
-    });
-    expect(events[4].payload).toMatchObject({ message: 'Final narrative' });
+    ]));
+    expect(events.find((event) => event.type === 'phase_started' && event.payload?.phase === 'diagnose')).toBeTruthy();
+    expect(events.find((event) => event.type === 'phase_completed' && event.payload?.phase === 'audit')).toBeTruthy();
   });
 
-  it('emits protected_node_blocked when a boot node write is blocked', async () => {
-    mockGetBootNodeSpec.mockImplementation((uri) => {
-      if (uri === 'core://agent') {
-        return {
-          uri: 'core://agent',
-          role: 'agent',
-          role_label: 'workflow constraints',
-          purpose: 'Working rules',
-          dream_protection: 'protected',
-        };
-      }
-      return null;
-    });
-    mockGenerateTextWithTools
-      .mockResolvedValueOnce(makeToolResponse([{ id: 'call-1', function: { name: 'update_node', arguments: '{"uri":"core://agent","content":"x"}' } }]))
-      .mockResolvedValueOnce(makeTextResponse('Blocked and moved on'));
-
-    const events: Array<{ type: string; payload?: Record<string, unknown> }> = [];
-    const config: LlmConfig = {
-      provider: 'openai_compatible',
-      base_url: 'http://localhost:1234/v1',
-      api_key: 'test-key',
-      model: 'gpt-4o-mini',
-      timeout_ms: 5000,
-      temperature: 0.3,
-      api_version: '',
-    };
-
-    const result = await runDreamAgentLoop(config, makeInitialContext(), {
-      onEvent: async (type, payload) => {
-        events.push({ type, payload });
-      },
-      eventContext: { source: 'dream:auto', session_id: 'dream:11' },
-    });
-
-    expect(result.narrative).toBe('Blocked and moved on');
-    expect(events.map((event) => event.type)).toEqual([
-      'llm_turn_started',
-      'tool_call_started',
-      'protected_node_blocked',
-      'tool_call_finished',
-      'llm_turn_started',
-      'assistant_note',
-    ]);
-    expect(events[2].payload).toMatchObject({
-      tool: 'update_node',
-      blocked_uri: 'core://agent',
-      boot_role: 'agent',
-      reason: 'dream:auto cannot update protected boot node core://agent (workflow constraints)',
-    });
-    expect(events[3].payload).toMatchObject({
-      tool: 'update_node',
-      ok: false,
-      blocked: true,
-      protected_blocked: true,
-      policy_blocked: false,
-      warnings: [],
-      policy_warnings: [],
-    });
-    expect(mockUpdateNodeByPath).not.toHaveBeenCalled();
-  });
-
-  it('supports anthropic tool use flow', async () => {
-    mockGenerateTextWithTools
-      .mockResolvedValueOnce(makeToolResponse([{ id: 'toolu_1', function: { name: 'list_domains', arguments: '{}' } }]))
-      .mockResolvedValueOnce(makeTextResponse('Anthropic final narrative'));
-
-    const config: LlmConfig = {
-      provider: 'anthropic',
-      base_url: 'http://localhost:1234',
-      api_key: 'test-key',
-      model: 'claude-sonnet-4-6',
-      timeout_ms: 5000,
-      temperature: 0.3,
-      api_version: '2023-06-01',
-    };
-
-    const result = await runDreamAgentLoop(config, makeInitialContext());
-    expect(result.narrative).toBe('Anthropic final narrative');
-    expect(result.toolCalls).toHaveLength(1);
-  });
-
-  it('supports openai responses tool flow', async () => {
+  it('executes tools inside the phase that allows them', async () => {
     mockGenerateTextWithTools
       .mockResolvedValueOnce(makeToolResponse([{ id: 'call-1', function: { name: 'list_domains', arguments: '{}' } }]))
-      .mockResolvedValueOnce(makeTextResponse('Responses final narrative'));
+      .mockResolvedValueOnce(makeTextResponse('{"diagnosis":"done"}'))
+      .mockResolvedValueOnce(makeTextResponse('{"tree_maintenance_candidates":[],"daily_memory_extraction_candidates":[],"recall_repair_candidates":[],"skip_reasons":[]}'))
+      .mockResolvedValueOnce(makeTextResponse('{"preflight":"none"}'))
+      .mockResolvedValueOnce(makeTextResponse('{"applied":[]}'))
+      .mockResolvedValueOnce(makeTextResponse('{"primary_focus":"no_change","changed_nodes":[],"evidence":[],"why_not_more_changes":"","expected_effect":"","confidence":"medium"}'));
 
-    const config: LlmConfig = {
-      provider: 'openai_responses',
-      base_url: 'http://localhost:1234/v1',
-      api_key: 'test-key',
-      model: 'gpt-4.1',
-      timeout_ms: 5000,
-      temperature: 0.3,
-      api_version: '',
-    };
+    mockListDomains.mockResolvedValue(['core'] as any);
+    const events: Array<{ type: string; payload?: Record<string, unknown> }> = [];
+    const result = await runDreamAgentLoop(config('anthropic'), makeInitialContext(), {
+      onEvent: async (type, payload) => events.push({ type, payload }),
+    });
 
-    const result = await runDreamAgentLoop(config, makeInitialContext());
-    expect(result.narrative).toBe('Responses final narrative');
     expect(result.toolCalls).toHaveLength(1);
+    expect(result.toolCalls[0]).toMatchObject({ tool: 'list_domains', result_size_chars: expect.any(Number) });
+    expect(events.map((event) => event.type)).toEqual(expect.arrayContaining(['tool_call_started', 'tool_call_finished']));
+  });
+
+  it('blocks writes after two successful apply mutations', async () => {
+    mockGenerateTextWithTools
+      .mockResolvedValueOnce(makeTextResponse('{"diagnosis":"done"}'))
+      .mockResolvedValueOnce(makeTextResponse('{"tree_maintenance_candidates":[{"action":"update_node","uri":"core://a"}],"daily_memory_extraction_candidates":[],"recall_repair_candidates":[],"skip_reasons":[]}'))
+      .mockResolvedValueOnce(makeTextResponse('{"preflight":"ok"}'))
+      .mockResolvedValueOnce(makeToolResponse([
+        { id: 'call-1', function: { name: 'update_node', arguments: '{"uri":"core://a","content":"a"}' } },
+        { id: 'call-2', function: { name: 'update_node', arguments: '{"uri":"core://b","content":"b"}' } },
+        { id: 'call-3', function: { name: 'update_node', arguments: '{"uri":"core://c","content":"c"}' } },
+      ]))
+      .mockResolvedValueOnce(makeTextResponse('{"applied":["a","b"]}'))
+      .mockResolvedValueOnce(makeTextResponse('{"primary_focus":"tree_maintenance","changed_nodes":["core://a","core://b"],"evidence":[],"why_not_more_changes":"write cap","expected_effect":"cleaner tree","confidence":"medium"}'));
+    mockUpdateNodeByPath.mockResolvedValue({ success: true } as any);
+
+    const result = await runDreamAgentLoop(config(), makeInitialContext());
+
+    expect(mockUpdateNodeByPath).toHaveBeenCalledTimes(2);
+    expect(result.toolCalls).toHaveLength(3);
+    expect(result.toolCalls[2].result_preview).toContain('dream_write_cap');
   });
 });

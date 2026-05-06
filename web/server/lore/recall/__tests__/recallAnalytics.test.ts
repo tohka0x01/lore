@@ -275,107 +275,89 @@ describe('getDreamRecallReview', () => {
     mockSql.mockReset();
   });
 
-  it('builds query-level missed recall review with session-read signals', async () => {
-    mockSql
-      .mockResolvedValueOnce(makeResult([
+  it('returns local-day raw recall metadata without heuristic flags', async () => {
+    mockSql.mockResolvedValueOnce(makeResult([
+      {
+        query_id: 'q1',
+        query_text: 'where is boot guidance',
+        session_id: 's1',
+        client_type: 'claudecode',
+        merged_count: '6',
+        shown_count: '1',
+        used_count: '0',
+        created_at: '2026-04-18T09:00:00Z',
+      },
+    ]));
+
+    const review = await getDreamRecallReview({ date: '2026-04-18', timezone: 'Asia/Shanghai', limit: 100 });
+
+    expect(review).toEqual({
+      date: '2026-04-18',
+      timezone: 'Asia/Shanghai',
+      limit: 100,
+      offset: 0,
+      summary: {
+        returned_queries: 1,
+        total_merged: 6,
+        total_shown: 1,
+        total_used: 0,
+        truncated: false,
+      },
+      queries: [
         {
           query_id: 'q1',
-          query_text: 'where is boot guidance',
+          content: 'where is boot guidance',
+          content_full_chars: 22,
           session_id: 's1',
           client_type: 'claudecode',
-          merged_count: '6',
-          shown_count: '1',
-          used_count: '0',
-          created_at: '2026-04-18T09:00:00Z',
+          merged_count: 6,
+          shown_count: 1,
+          used_count: 0,
+          created_at: '2026-04-18T09:00:00.000Z',
         },
-      ]))
-      .mockResolvedValueOnce(makeResult([
-        { query_id: 'q1', node_uri: 'core://shown', selected: true, used_in_answer: false },
-        { query_id: 'q1', node_uri: 'core://hidden', selected: false, used_in_answer: false },
-      ]))
-      .mockResolvedValueOnce(makeResult([
-        { uri: 'core://shown' },
-        { uri: 'core://manual_only' },
-      ]));
-
-    const review = await getDreamRecallReview({ days: 1, limit: 5 });
-
-    expect(review.window_days).toBe(1);
-    expect(review.signal_coverage.manual_read_after_weak_recall.status).toBe('session_scoped_proxy');
-    expect(review.summary).toEqual({
-      reviewed_queries: 1,
-      zero_use_queries: 1,
-      low_use_queries: 0,
-      high_merge_low_use_queries: 1,
-      unrecalled_session_reads: 1,
-      unshown_session_reads: 0,
-      possible_missed_recalls: 3,
+      ],
     });
-    expect(review.reviewed_queries[0]).toMatchObject({
-      query_id: 'q1',
-      query_text: 'where is boot guidance',
-      session_id: 's1',
-      merged_count: 6,
-      shown_count: 1,
-      used_count: 0,
-      flags: ['zero_use', 'high_merge_low_use'],
-      selected_uris: ['core://shown'],
-      used_uris: [],
-      unrecalled_session_reads: ['core://manual_only'],
-      unshown_session_reads: [],
-    });
-    expect(review.reviewed_queries[0].missed_recall_signals).toEqual([
-      expect.objectContaining({ type: 'zero_use' }),
-      expect.objectContaining({ type: 'high_merge_low_use' }),
-      expect.objectContaining({ type: 'never_retrieved', uri: 'core://manual_only' }),
-    ]);
+    expect(JSON.stringify(review)).not.toContain('zero_use');
+    expect(JSON.stringify(review)).not.toContain('high_merge_low_use');
+    expect(JSON.stringify(review)).not.toContain('missed_recall_signals');
 
     const sqlText = mockSql.mock.calls.map((call) => String(call[0])).join('\n');
     expect(sqlText).toContain('FROM recall_queries q');
-    expect(sqlText).toContain('FROM recall_query_candidates c');
+    expect(sqlText).not.toContain('FROM recall_query_candidates');
     expect(sqlText).not.toContain('FROM recall_events');
     expect(sqlText).not.toContain("metadata->>'query_id'");
   });
 
-  it('flags retrieved-not-selected and manual-read-after-weak-recall proxy signals', async () => {
-    mockSql
-      .mockResolvedValueOnce(makeResult([
-        {
-          query_id: 'q2',
-          query_text: 'user preference',
-          session_id: 's2',
-          client_type: '',
-          merged_count: '4',
-          shown_count: '1',
-          used_count: '1',
-          created_at: '2026-04-18T10:00:00Z',
-        },
-      ]))
-      .mockResolvedValueOnce(makeResult([
-        { query_id: 'q2', node_uri: 'preferences://user', selected: true, used_in_answer: true },
-        { query_id: 'q2', node_uri: 'core://agent', selected: false, used_in_answer: false },
-      ]))
-      .mockResolvedValueOnce(makeResult([
-        { uri: 'core://agent' },
-      ]));
+  it('limits query content preview to 50 characters and reports truncation', async () => {
+    mockSql.mockResolvedValueOnce(makeResult([
+      {
+        query_id: 'q2',
+        query_text: 'abcdefghijklmnopqrstuvwxyzabcdefghijklmnopqrstuvwxyz',
+        session_id: '',
+        client_type: '',
+        merged_count: '4',
+        shown_count: '2',
+        used_count: '1',
+        created_at: '2026-04-18T10:00:00Z',
+      },
+    ]));
 
-    const review = await getDreamRecallReview({ days: 1, limit: 5 });
+    const review = await getDreamRecallReview({ date: '2026-04-18', timezone: 'Asia/Shanghai', limit: 1, offset: 0 });
 
     expect(review.summary).toEqual({
-      reviewed_queries: 1,
-      zero_use_queries: 0,
-      low_use_queries: 1,
-      high_merge_low_use_queries: 0,
-      unrecalled_session_reads: 0,
-      unshown_session_reads: 1,
-      possible_missed_recalls: 3,
+      returned_queries: 1,
+      total_merged: 4,
+      total_shown: 2,
+      total_used: 1,
+      truncated: true,
     });
-    expect(review.reviewed_queries[0].flags).toEqual(['low_use']);
-    expect(review.reviewed_queries[0].missed_recall_signals).toEqual([
-      expect.objectContaining({ type: 'low_use' }),
-      expect.objectContaining({ type: 'retrieved_not_selected', uri: 'core://agent' }),
-      expect.objectContaining({ type: 'manual_read_after_weak_recall_proxy' }),
-    ]);
+    expect(review.queries[0]).toMatchObject({
+      query_id: 'q2',
+      content: 'abcdefghijklmnopqrstuvwxyzabcdefghijklmnopqrstuvwx',
+      content_full_chars: 52,
+      session_id: null,
+      client_type: null,
+    });
   });
 });
 
