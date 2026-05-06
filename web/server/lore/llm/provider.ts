@@ -4,7 +4,7 @@ import { createLanguageModel, type ResolvedViewLlmConfig } from './config';
 
 export interface ProviderMessage {
   role: string;
-  content?: string | null;
+  content?: string | Array<Record<string, unknown>> | null;
   tool_calls?: ProviderToolCall[];
   tool_call_id?: string;
 }
@@ -49,13 +49,33 @@ function getJsonHeaders(apiKey: string, apiVersion = ''): HeadersInit {
   return headers;
 }
 
-function buildPrompt(messages: ProviderMessage[], toolResults: ProviderToolResultMessage[] = []): {
+function normalizeAssistantContent(contentValue: ProviderMessage['content']): Array<Record<string, unknown>> {
+  if (!Array.isArray(contentValue)) {
+    return contentValue ? [{ type: 'text', text: contentValue }] : [];
+  }
+  const content: Array<Record<string, unknown>> = [];
+  for (const block of contentValue) {
+    if (!block || typeof block !== 'object') continue;
+    const type = String(block.type || '');
+    if (type === 'text' && typeof block.text === 'string') {
+      content.push({ type: 'text', text: block.text });
+      continue;
+    }
+    if (type === 'thinking') {
+      const thinkingText = typeof block.thinking === 'string' ? block.thinking : typeof block.text === 'string' ? block.text : '';
+      if (thinkingText.trim()) content.push({ type: 'text', text: `[thinking]\n${thinkingText}` });
+    }
+  }
+  return content;
+}
+
+export function buildProviderPrompt(messages: ProviderMessage[], toolResults: ProviderToolResultMessage[] = []): {
   system: string | undefined;
   messages: ModelMessage[];
 } {
   const system = messages
     .filter((message) => message.role === 'system')
-    .map((message) => message.content || '')
+    .map((message) => Array.isArray(message.content) ? '' : message.content || '')
     .join('\n\n')
     .trim() || undefined;
 
@@ -66,8 +86,7 @@ function buildPrompt(messages: ProviderMessage[], toolResults: ProviderToolResul
     if (message.role === 'system') continue;
 
     if (message.role === 'assistant') {
-      const content: Array<Record<string, unknown>> = [];
-      if (message.content) content.push({ type: 'text', text: message.content });
+      const content = normalizeAssistantContent(message.content);
       for (const call of message.tool_calls || []) {
         let input: Record<string, unknown> = {};
         try {
@@ -100,7 +119,7 @@ function buildPrompt(messages: ProviderMessage[], toolResults: ProviderToolResul
 
     modelMessages.push({
       role: message.role === 'user' ? 'user' : 'user',
-      content: [{ type: 'text', text: message.content || '' }],
+      content: [{ type: 'text', text: Array.isArray(message.content) ? JSON.stringify(message.content) : message.content || '' }],
     } as unknown as ModelMessage);
   }
 
@@ -147,7 +166,7 @@ export async function generateText(
   config: ResolvedViewLlmConfig,
   messages: ProviderMessage[],
 ): Promise<ProviderTextResponse> {
-  const prompt = buildPrompt(messages);
+  const prompt = buildProviderPrompt(messages);
   const result = await generateSdkText({
     model: createLanguageModel(config),
     system: prompt.system,
@@ -180,7 +199,7 @@ export async function generateTextWithTools(
     throw new Error(`Configured provider does not support tools: ${config.provider}`);
   }
 
-  const prompt = buildPrompt(messages, toolResults);
+  const prompt = buildProviderPrompt(messages, toolResults);
   const result = await generateSdkText({
     model: createLanguageModel(config),
     system: prompt.system,

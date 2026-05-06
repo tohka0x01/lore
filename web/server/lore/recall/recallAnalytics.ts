@@ -1,7 +1,6 @@
 import { sql } from '../../db';
 import { clampLimit } from '../core/utils';
 import { getSettings } from '../config/settings';
-import { getSessionReadUris } from './recallSessionReads';
 import {
   intervalDaysSql,
   asNumber,
@@ -473,46 +472,31 @@ interface RecallStatsArgs {
   clientType?: string;
 }
 
-interface DreamRecallReviewQuery {
+interface DreamRecallMetadataQuery {
   query_id: string;
-  query_text: string;
+  content: string;
+  content_full_chars: number;
   session_id: string | null;
   client_type: string | null;
   created_at: string | null;
   merged_count: number;
   shown_count: number;
   used_count: number;
-  flags: string[];
-  session_reads: string[];
-  selected_uris: string[];
-  used_uris: string[];
-  unrecalled_session_reads: string[];
-  unshown_session_reads: string[];
-  missed_recall_signals: Array<{
-    type: string;
-    uri?: string;
-    note?: string;
-  }>;
 }
 
 interface DreamRecallReviewResult {
-  window_days: number;
-  signal_coverage: {
-    manual_read_after_weak_recall: {
-      status: 'session_scoped_proxy';
-      note: string;
-    };
-  };
-  reviewed_queries: DreamRecallReviewQuery[];
+  date: string;
+  timezone: string;
+  limit: number;
+  offset: number;
   summary: {
-    reviewed_queries: number;
-    zero_use_queries: number;
-    low_use_queries: number;
-    high_merge_low_use_queries: number;
-    unrecalled_session_reads: number;
-    unshown_session_reads: number;
-    possible_missed_recalls: number;
+    returned_queries: number;
+    total_merged: number;
+    total_shown: number;
+    total_used: number;
+    truncated: boolean;
   };
+  queries: DreamRecallMetadataQuery[];
 }
 
 interface DreamQueryRecallDetailArgs {
@@ -844,21 +828,37 @@ export async function getDreamQueryEventSamples({
   };
 }
 
+function localDateString(timezone: string): string {
+  try {
+    return new Date().toLocaleDateString('en-CA', { timeZone: timezone });
+  } catch {
+    return new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Shanghai' });
+  }
+}
+
 export async function getDreamRecallReview({
-  days = 1,
-  limit = 12,
+  date = '',
+  timezone = 'Asia/Shanghai',
+  limit = 100,
   offset = 0,
 }: {
-  days?: number;
+  date?: string;
+  timezone?: string;
   limit?: number;
   offset?: number;
 } = {}): Promise<DreamRecallReviewResult> {
-  const safeDays = intervalDaysSql(days);
-  const safeLimit = clampLimit(limit, 1, 50, 12);
+  const safeTimezone = String(timezone || 'Asia/Shanghai').trim() || 'Asia/Shanghai';
+  const safeDate = sanitizeFilter(date, 20) || localDateString(safeTimezone);
+  const safeLimit = clampLimit(limit, 1, 100, 100);
   const safeOffset = Math.max(0, Number(offset) || 0);
 
-  const reviewedQueriesResult = await sql(
+  const result = await sql(
     `
+      WITH bounds AS (
+        SELECT
+          (($1::date)::timestamp AT TIME ZONE $2) AS start_at,
+          ((($1::date + 1)::timestamp) AT TIME ZONE $2) AS end_at
+      )
       SELECT
         q.query_id,
         q.query_text,
@@ -868,175 +868,44 @@ export async function getDreamRecallReview({
         q.shown_count,
         q.used_count,
         q.created_at
-      FROM recall_queries q
-      WHERE q.created_at >= NOW() - ($1::int * INTERVAL '1 day')
-        AND EXISTS (
-          SELECT 1
-          FROM recall_query_candidates c
-          JOIN paths p ON (p.domain || '://' || p.path) = c.node_uri
-          WHERE c.query_id = q.query_id
-        )
+      FROM recall_queries q, bounds
+      WHERE q.created_at >= bounds.start_at
+        AND q.created_at < bounds.end_at
       ORDER BY q.created_at DESC, q.query_id DESC
-      LIMIT $2
-      OFFSET $3
+      LIMIT $3
+      OFFSET $4
     `,
-    [safeDays, safeLimit, safeOffset],
+    [safeDate, safeTimezone, safeLimit, safeOffset],
   );
 
-  const queryIds = reviewedQueriesResult.rows
-    .map((row: Record<string, unknown>) => String(row.query_id || '').trim())
-    .filter(Boolean);
-
-  let candidateRows: Array<Record<string, unknown>> = [];
-  if (queryIds.length > 0) {
-    const candidateResult = await sql(
-      `
-        SELECT
-          c.query_id,
-          c.node_uri,
-          c.selected,
-          c.used_in_answer
-        FROM recall_query_candidates c
-        WHERE c.query_id = ANY($1::text[])
-          AND EXISTS (SELECT 1 FROM paths p WHERE (p.domain || '://' || p.path) = c.node_uri)
-      `,
-      [queryIds],
-    );
-    candidateRows = candidateResult.rows as Array<Record<string, unknown>>;
-  }
-
-  const candidatesByQuery = new Map<string, Array<Record<string, unknown>>>();
-  for (const row of candidateRows) {
-    const queryId = String(row.query_id || '').trim();
-    if (!queryId) continue;
-    const current = candidatesByQuery.get(queryId) || [];
-    current.push(row);
-    candidatesByQuery.set(queryId, current);
-  }
-
-  const sessionReadsCache = new Map<string, Promise<Set<string>>>();
-  const reviewedQueries = await Promise.all(reviewedQueriesResult.rows.map(async (row: Record<string, unknown>) => {
-    const queryId = String(row.query_id || '').trim();
-    const sessionId = typeof row.session_id === 'string' && row.session_id.trim() ? row.session_id.trim() : null;
-    const mergedCount = Number(row.merged_count || 0);
-    const shownCount = Number(row.shown_count || 0);
-    const usedCount = Number(row.used_count || 0);
-    const queryCandidates = candidatesByQuery.get(queryId) || [];
-    const candidateUris = new Set<string>();
-    const selectedUris = new Set<string>();
-    const usedUris = new Set<string>();
-
-    for (const candidate of queryCandidates) {
-      const uri = String(candidate.node_uri || '').trim();
-      if (!uri) continue;
-      candidateUris.add(uri);
-      if (candidate.selected === true) selectedUris.add(uri);
-      if (candidate.used_in_answer === true) usedUris.add(uri);
-    }
-
-    let sessionReads: string[] = [];
-    if (sessionId) {
-      let sessionReadsPromise = sessionReadsCache.get(sessionId);
-      if (!sessionReadsPromise) {
-        sessionReadsPromise = getSessionReadUris(sessionId);
-        sessionReadsCache.set(sessionId, sessionReadsPromise);
-      }
-      sessionReads = [...await sessionReadsPromise].sort((a, b) => a.localeCompare(b));
-    }
-
-    const unrecalledSessionReads = sessionReads.filter((uri) => !candidateUris.has(uri));
-    const unshownSessionReads = sessionReads.filter((uri) => candidateUris.has(uri) && !selectedUris.has(uri));
-    const flags: string[] = [];
-    if (usedCount === 0 && mergedCount > 0) flags.push('zero_use');
-    if (usedCount === 1 && mergedCount >= 4) flags.push('low_use');
-    if (mergedCount >= 6 && usedCount <= 1) flags.push('high_merge_low_use');
-
-    const missedRecallSignals: Array<{ type: string; uri?: string; note?: string }> = [];
-    const signalKeys = new Set<string>();
-    const addSignal = (type: string, uri?: string, note?: string) => {
-      const key = `${type}::${uri || ''}::${note || ''}`;
-      if (signalKeys.has(key)) return;
-      signalKeys.add(key);
-      missedRecallSignals.push({
-        type,
-        ...(uri ? { uri } : {}),
-        ...(note ? { note } : {}),
-      });
-    };
-
-    if (flags.includes('zero_use')) {
-      addSignal('zero_use', undefined, `Merged ${mergedCount} candidates but none were used in the answer.`);
-    }
-    if (flags.includes('low_use')) {
-      addSignal('low_use', undefined, `Merged ${mergedCount} candidates but only ${usedCount} candidate was used in the answer.`);
-    }
-    if (flags.includes('high_merge_low_use')) {
-      addSignal('high_merge_low_use', undefined, `Merged ${mergedCount} candidates but only ${usedCount} candidate${usedCount === 1 ? '' : 's'} were used.`);
-    }
-    for (const uri of unrecalledSessionReads) {
-      addSignal('never_retrieved', uri, 'Node was manually read in the same session but was never retrieved for this query.');
-    }
-    for (const uri of unshownSessionReads) {
-      addSignal('retrieved_not_selected', uri, 'Node was manually read in the same session after being retrieved without being shown.');
-    }
-    if (sessionReads.length > 0 && unshownSessionReads.length > 0 && (usedCount === 0 || shownCount <= 1)) {
-      addSignal(
-        'manual_read_after_weak_recall_proxy',
-        undefined,
-        'Session-scoped proxy only: same-session manual reads suggest a follow-up lookup after a weak recall result, but timing is not query-scoped.',
-      );
-    }
-
+  const queries = result.rows.map((row: Record<string, unknown>) => {
+    const queryText = String(row.query_text || '');
     return {
-      query_id: queryId,
-      query_text: String(row.query_text || ''),
-      session_id: sessionId,
+      query_id: String(row.query_id || '').trim(),
+      content: queryText.length > 50 ? queryText.slice(0, 50) : queryText,
+      content_full_chars: queryText.length,
+      session_id: typeof row.session_id === 'string' && row.session_id.trim() ? row.session_id.trim() : null,
       client_type: typeof row.client_type === 'string' && row.client_type.trim() ? row.client_type.trim() : null,
       created_at: row.created_at ? new Date(row.created_at as string).toISOString() : null,
-      merged_count: mergedCount,
-      shown_count: shownCount,
-      used_count: usedCount,
-      flags,
-      session_reads: sessionReads,
-      selected_uris: [...selectedUris].sort((a, b) => a.localeCompare(b)),
-      used_uris: [...usedUris].sort((a, b) => a.localeCompare(b)),
-      unrecalled_session_reads: unrecalledSessionReads,
-      unshown_session_reads: unshownSessionReads,
-      missed_recall_signals: missedRecallSignals,
+      merged_count: Number(row.merged_count || 0),
+      shown_count: Number(row.shown_count || 0),
+      used_count: Number(row.used_count || 0),
     };
-  }));
-
-  const summary = reviewedQueries.reduce(
-    (acc, query) => {
-      if (query.flags.includes('zero_use')) acc.zero_use_queries += 1;
-      if (query.flags.includes('low_use')) acc.low_use_queries += 1;
-      if (query.flags.includes('high_merge_low_use')) acc.high_merge_low_use_queries += 1;
-      acc.unrecalled_session_reads += query.unrecalled_session_reads.length;
-      acc.unshown_session_reads += query.unshown_session_reads.length;
-      acc.possible_missed_recalls += query.missed_recall_signals.length;
-      return acc;
-    },
-    {
-      reviewed_queries: reviewedQueries.length,
-      zero_use_queries: 0,
-      low_use_queries: 0,
-      high_merge_low_use_queries: 0,
-      unrecalled_session_reads: 0,
-      unshown_session_reads: 0,
-      possible_missed_recalls: 0,
-    },
-  );
+  });
 
   return {
-    window_days: safeDays,
-    signal_coverage: {
-      manual_read_after_weak_recall: {
-        status: 'session_scoped_proxy',
-        note: 'Dream can only infer manual-read-after-weak-recall from session-level reads, not strict per-query post-read timing.',
-      },
+    date: safeDate,
+    timezone: safeTimezone,
+    limit: safeLimit,
+    offset: safeOffset,
+    summary: {
+      returned_queries: queries.length,
+      total_merged: queries.reduce((sum, query) => sum + query.merged_count, 0),
+      total_shown: queries.reduce((sum, query) => sum + query.shown_count, 0),
+      total_used: queries.reduce((sum, query) => sum + query.used_count, 0),
+      truncated: queries.length >= safeLimit,
     },
-    reviewed_queries: reviewedQueries,
-    summary,
+    queries,
   };
 }
 

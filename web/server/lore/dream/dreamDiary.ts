@@ -76,6 +76,8 @@ export async function runDream(): Promise<DreamResult> {
   }
   _dreamRunning = true;
   const startedAt = Date.now();
+  let currentPhase = 'initializing';
+  let activeLlmConfig: Awaited<ReturnType<typeof loadLlmConfig>> | null = null;
 
   // Insert diary row
   const insertResult = await sql(
@@ -86,12 +88,15 @@ export async function runDream(): Promise<DreamResult> {
 
   try {
     // Step 1: Data collection
+    currentPhase = 'data_collection';
     console.log('[dream] step 1: data collection');
     await appendDreamWorkflowEvent(diaryId, 'phase_started', { phase: 'data_collection', label: 'Data collection' });
+    const dreamSettings = await getSettingsBatch(['dream.timezone']).catch(() => ({} as Record<string, unknown>)) || {};
+    const dreamTimezone = String(dreamSettings['dream.timezone'] || 'Asia/Shanghai');
     const [boot, recallStats, recallReview, writeStats] = await Promise.all([
       bootView({ client_type: 'admin' }),
       getRecallStats({ days: 1, limit: 20 }),
-      getDreamRecallReview({ days: 1, limit: 12 }),
+      getDreamRecallReview({ limit: 100, timezone: dreamTimezone }),
       getWriteEventStats({ days: 1, limit: 20 }),
     ]);
     const recallReviewRecord = recallReview as unknown as Record<string, unknown>;
@@ -102,8 +107,8 @@ export async function runDream(): Promise<DreamResult> {
       summary: {
         boot_loaded: (boot.core_memories || []).length,
         recall_queries: ((recallStats as Record<string, unknown>).summary as Record<string, unknown>)?.query_count || 0,
-        reviewed_queries: recallReviewSummaryRecord.reviewed_queries || 0,
-        possible_missed_recalls: recallReviewSummaryRecord.possible_missed_recalls || 0,
+        metadata_queries: recallReviewSummaryRecord.returned_queries || 0,
+        total_merged: recallReviewSummaryRecord.total_merged || 0,
         write_events: ((writeStats as unknown as Record<string, unknown>).summary as Record<string, unknown>)?.total_events || 0,
       },
     });
@@ -140,9 +145,11 @@ export async function runDream(): Promise<DreamResult> {
     };
 
     // Step 2: LLM agent loop
+    currentPhase = 'agent_loop';
     console.log('[dream] step 2: agent loop');
     await appendDreamWorkflowEvent(diaryId, 'phase_started', { phase: 'agent_loop', label: 'Agent loop' });
     const llmConfig = await loadLlmConfig();
+    activeLlmConfig = llmConfig;
     let agentResult: { narrative: string; toolCalls: ToolCallLogEntry[]; turns: number } = {
       narrative: '(LLM not configured — skipped agent loop)',
       toolCalls: [],
@@ -171,6 +178,7 @@ export async function runDream(): Promise<DreamResult> {
     if (!rawNarrative) rawNarrative = '(empty raw diary)';
     let poeticNarrative = rawNarrative;
     if (llmConfig) {
+      currentPhase = 'poetic_rewrite';
       console.log('[dream] step 3: poetic diary rewrite');
       await appendDreamWorkflowEvent(diaryId, 'phase_started', { phase: 'poetic_rewrite', label: 'Poetic diary rewrite' });
       try {
@@ -212,8 +220,8 @@ export async function runDream(): Promise<DreamResult> {
     const writeSummary = (writeStats as unknown as Record<string, unknown>).summary as Record<string, unknown> | undefined;
     const recallSummary = (recallStats as unknown as Record<string, unknown>).summary as Record<string, unknown> | undefined;
     const recallReviewSummary = recallReviewSummaryRecord;
-    const reviewedQueryItems = Array.isArray(recallReviewRecord.reviewed_queries)
-      ? (recallReviewRecord.reviewed_queries as Record<string, unknown>[])
+    const recallMetadataItems = Array.isArray(recallReviewRecord.queries)
+      ? (recallReviewRecord.queries as Record<string, unknown>[])
       : [];
     const memoryEventsTotal = Object.values(memoryChangeCounts).reduce((sum, count) => sum + Number(count || 0), 0);
     const durableCreates = Number(memoryChangeCounts.create || 0);
@@ -222,11 +230,12 @@ export async function runDream(): Promise<DreamResult> {
 
     // Step 4: Save diary
     const summary: Record<string, unknown> = {
-      recall_review: {
-        reviewed_queries: recallReviewSummary?.reviewed_queries || 0,
-        zero_use_queries: recallReviewSummary?.zero_use_queries || 0,
-        high_merge_low_use_queries: recallReviewSummary?.high_merge_low_use_queries || 0,
-        possible_missed_recalls: recallReviewSummary?.possible_missed_recalls || 0,
+      recall_metadata: {
+        returned_queries: recallReviewSummary?.returned_queries || 0,
+        total_merged: recallReviewSummary?.total_merged || 0,
+        total_shown: recallReviewSummary?.total_shown || 0,
+        total_used: recallReviewSummary?.total_used || 0,
+        truncated: recallReviewSummary?.truncated === true,
       },
       durable_extraction: {
         created: durableCreates,
@@ -244,7 +253,7 @@ export async function runDream(): Promise<DreamResult> {
       activity: {
         recall_events: recallSummary?.merged_count || 0,
         recall_queries: recallSummary?.query_count || 0,
-        reviewed_queries: recallReviewSummary?.reviewed_queries || 0,
+        metadata_queries: recallReviewSummary?.returned_queries || 0,
         write_events: writeSummary?.total_events || 0,
       },
       agent: { tool_calls: agentResult.toolCalls.length, turns: agentResult.turns },
@@ -258,7 +267,7 @@ export async function runDream(): Promise<DreamResult> {
       [diaryId, durationMs, JSON.stringify(summary), poeticNarrative, rawNarrative, poeticNarrative, JSON.stringify(agentResult.toolCalls), JSON.stringify({
         initial_context: initialContext,
         recallReview,
-        reviewed_queries: reviewedQueryItems.slice(0, 12),
+        recall_metadata_queries: recallMetadataItems.slice(0, 100),
         writeStats,
         maintenance: {
           protected_blocks: protectedBlocks,
@@ -297,6 +306,9 @@ export async function runDream(): Promise<DreamResult> {
     ).catch(() => {});
     await appendDreamWorkflowEvent(diaryId, 'run_failed', {
       duration_ms: durationMs,
+      phase: currentPhase,
+      provider: activeLlmConfig?.provider || null,
+      model: activeLlmConfig?.model || null,
       error: (err as Error).message,
     }).catch(() => {});
     console.error('[dream] failed', err);

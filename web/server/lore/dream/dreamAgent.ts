@@ -25,6 +25,7 @@ export interface ToolCallLogEntry {
   tool: string;
   args: Record<string, unknown>;
   result_preview: string;
+  result_size_chars?: number;
 }
 
 export interface DreamAgentResult {
@@ -45,6 +46,44 @@ export interface DreamAgentRunOptions {
 interface ChatMessage extends ProviderMessage {}
 
 interface ToolDefinition extends ProviderToolDefinition {}
+
+export type DreamPhase = 'diagnose' | 'plan' | 'preflight' | 'apply' | 'audit';
+
+const DREAM_PHASE_TOOLS: Record<DreamPhase, string[]> = {
+  diagnose: [
+    'get_today_recall_metadata',
+    'get_node',
+    'search',
+    'list_domains',
+    'get_query_recall_detail',
+    'get_query_candidates',
+    'get_query_path_breakdown',
+    'get_query_node_paths',
+    'get_query_event_samples',
+    'get_node_write_history',
+    'get_memory_event_summary',
+    'inspect_neighbors',
+    'inspect_tree',
+    'inspect_views',
+    'refresh_or_inspect_views',
+    'inspect_memory_node_for_dream',
+  ],
+  plan: [
+    'get_today_recall_metadata',
+    'get_node',
+    'search',
+    'get_query_recall_detail',
+    'get_query_candidates',
+    'inspect_neighbors',
+    'inspect_tree',
+    'inspect_views',
+    'refresh_or_inspect_views',
+    'inspect_memory_node_for_dream',
+  ],
+  preflight: ['validate_memory_change'],
+  apply: ['get_node', 'inspect_memory_node_for_dream', 'validate_memory_change', 'create_node', 'update_node', 'delete_node', 'move_node'],
+  audit: ['get_node', 'get_node_write_history', 'get_memory_event_summary'],
+};
 
 export interface DreamBootBaselineEntry {
   uri: string;
@@ -111,6 +150,7 @@ export function buildDreamTools(): ToolDefinition[] {
     { name: 'get_node', description: 'Read a memory node by URI', parameters: { type: 'object', properties: { uri: { type: 'string', description: 'Memory URI e.g. core://soul' } }, required: ['uri'] } },
     { name: 'search', description: 'Search memories by keyword', parameters: { type: 'object', properties: { query: { type: 'string' }, limit: { type: 'integer' } }, required: ['query'] } },
     { name: 'list_domains', description: 'List all memory domains', parameters: { type: 'object', properties: {} } },
+    { name: 'get_today_recall_metadata', description: 'Return bounded raw recall query metadata for one local date. No heuristic flags or algorithmic analysis.', parameters: { type: 'object', properties: { date: { type: 'string' }, timezone: { type: 'string' }, limit: { type: 'integer' }, offset: { type: 'integer' } } } },
     { name: 'get_query_recall_detail', description: 'Inspect one problematic query by query_id or query_text, returning query counts and shown node URIs only', parameters: { type: 'object', properties: { query_id: { type: 'string' }, query_text: { type: 'string' }, days: { type: 'integer' }, limit: { type: 'integer' } } } },
     { name: 'get_query_candidates', description: 'Inspect candidate-level rollups for one recall query; use this after get_query_recall_detail when shown nodes are not enough', parameters: { type: 'object', properties: { query_id: { type: 'string' }, limit: { type: 'integer' }, selected_only: { type: 'boolean' }, used_only: { type: 'boolean' } }, required: ['query_id'] } },
     { name: 'get_query_path_breakdown', description: 'Inspect retrieval path and view-type aggregates for one recall query', parameters: { type: 'object', properties: { query_id: { type: 'string' } }, required: ['query_id'] } },
@@ -122,11 +162,23 @@ export function buildDreamTools(): ToolDefinition[] {
     { name: 'inspect_neighbors', description: 'Inspect a node\'s parent, siblings, children, aliases, and breadcrumbs to understand structural context before editing', parameters: { type: 'object', properties: { uri: { type: 'string' } }, required: ['uri'] } },
     { name: 'inspect_tree', description: 'Inspect a bounded memory subtree before structural maintenance. Use this to decide whether a branch needs further extraction, split, merge, move, or deletion. Returns compact snippets and child counts, not full descendant content.', parameters: { type: 'object', properties: { uri: { type: 'string', description: 'Root memory URI to inspect.' }, depth: { type: 'integer', description: 'Tree depth to inspect. Defaults to 2; maximum is 4.' }, max_nodes: { type: 'integer', description: 'Maximum fully opened nodes. Defaults to 60; maximum is 120.' } }, required: ['uri'] } },
     { name: 'inspect_views', description: 'Inspect generated memory views for one node/path, including gist/question content, metadata, and freshness', parameters: { type: 'object', properties: { uri: { type: 'string' }, limit: { type: 'integer' } }, required: ['uri'] } },
+    { name: 'refresh_or_inspect_views', description: 'Inspect view content and freshness for one node. Current implementation is inspect-only and never rebuilds views.', parameters: { type: 'object', properties: { uri: { type: 'string' }, limit: { type: 'integer' } }, required: ['uri'] } },
+    { name: 'inspect_memory_node_for_dream', description: 'Return compact node content, disclosure, priority, glossary, views, parent, siblings, children, write history, and size metrics for Dream maintenance decisions.', parameters: { type: 'object', properties: { uri: { type: 'string' }, siblings_limit: { type: 'integer' }, children_limit: { type: 'integer' }, views_limit: { type: 'integer' }, history_limit: { type: 'integer' } }, required: ['uri'] } },
+    { name: 'validate_memory_change', description: 'Dry-run a proposed memory change and return warnings before Dream writes. This does not mutate memory.', parameters: { type: 'object', properties: { action: { type: 'string' }, uri: { type: 'string' }, new_uri: { type: 'string' }, content: { type: 'string' }, disclosure: { type: 'string' }, priority: { type: 'integer' }, glossary: { type: 'array', items: { type: 'string' } } }, required: ['action'] } },
     { name: 'create_node', description: 'Create a new memory node; glossary keywords are written with the node create event.', parameters: { type: 'object', properties: { uri: { type: 'string' }, content: { type: 'string' }, priority: { type: 'integer' }, disclosure: { type: 'string' }, glossary: { type: 'array', items: { type: 'string' }, description: 'Initial glossary keywords for retrieval.' } }, required: ['content', 'priority'] } },
     { name: 'update_node', description: 'Update an existing memory node. Provided content, metadata, and glossary fields are applied as one node update event; omitted fields stay unchanged.', parameters: { type: 'object', properties: { uri: { type: 'string' }, content: { type: 'string', description: 'New content; omit to leave unchanged.' }, priority: { type: 'integer', description: 'New priority; omit to leave unchanged.' }, disclosure: { type: 'string', description: 'New disclosure; omit to leave unchanged.' }, glossary: { type: 'array', items: { type: 'string' }, description: 'Full replacement glossary. Omit to leave unchanged; pass [] to clear.' }, glossary_add: { type: 'array', items: { type: 'string' }, description: 'Keywords to add in this same node update event.' }, glossary_remove: { type: 'array', items: { type: 'string' }, description: 'Keywords to remove in this same node update event.' } }, required: ['uri'] } },
     { name: 'delete_node', description: 'Delete a memory node', parameters: { type: 'object', properties: { uri: { type: 'string' } }, required: ['uri'] } },
     { name: 'move_node', description: 'Move/rename a memory node to a new URI', parameters: { type: 'object', properties: { old_uri: { type: 'string' }, new_uri: { type: 'string' } }, required: ['old_uri', 'new_uri'] } },
   ];
+}
+
+export function getDreamPhaseToolNames(phase: DreamPhase): string[] {
+  return [...DREAM_PHASE_TOOLS[phase]];
+}
+
+export function buildDreamToolsForPhase(phase: DreamPhase): ToolDefinition[] {
+  const allowed = new Set(getDreamPhaseToolNames(phase));
+  return buildDreamTools().filter((tool) => allowed.has(tool.name));
 }
 
 export async function executeDreamTool(
@@ -178,21 +230,62 @@ export function loadGuidanceFile(): string {
   }
 }
 
-function buildReviewedQueries(recallReview: Record<string, unknown>): Array<Record<string, unknown>> {
-  const reviewItems = (recallReview as any)?.reviewed_queries;
-  if (!Array.isArray(reviewItems)) return [];
-  return reviewItems.map((item: Record<string, unknown>) => ({
-    query_id: item.query_id,
-    query_text: item.query_text,
-    shown: Number(item.shown_count ?? 0),
-    used: Number(item.used_count ?? 0),
-    flags: Array.isArray(item.flags) ? item.flags : [],
-    selected_uris: Array.isArray(item.selected_uris) ? item.selected_uris : [],
-    used_uris: Array.isArray(item.used_uris) ? item.used_uris : [],
-    unrecalled_session_reads: Array.isArray(item.unrecalled_session_reads) ? item.unrecalled_session_reads : [],
-    unshown_session_reads: Array.isArray(item.unshown_session_reads) ? item.unshown_session_reads : [],
-    missed_recall_signals: Array.isArray(item.missed_recall_signals) ? item.missed_recall_signals : [],
-  }));
+function buildRecallMetadata(recallReview: Record<string, unknown>): Record<string, unknown> {
+  const queries = Array.isArray(recallReview.queries) ? recallReview.queries : [];
+  return {
+    date: recallReview.date,
+    timezone: recallReview.timezone,
+    summary: recallReview.summary || {},
+    queries: queries.map((item: Record<string, unknown>) => ({
+      query_id: item.query_id,
+      content: item.content,
+      session_id: item.session_id,
+      client_type: item.client_type,
+      merged_count: Number(item.merged_count ?? 0),
+      shown_count: Number(item.shown_count ?? 0),
+      used_count: Number(item.used_count ?? 0),
+      created_at: item.created_at ?? null,
+    })),
+  };
+}
+
+function extractJsonObject(text: string): Record<string, unknown> | null {
+  const trimmed = String(text || '').trim().replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/i, '').trim();
+  const start = trimmed.indexOf('{');
+  const end = trimmed.lastIndexOf('}');
+  if (start < 0 || end < start) return null;
+  try {
+    const parsed = JSON.parse(trimmed.slice(start, end + 1));
+    return parsed && typeof parsed === 'object' && !Array.isArray(parsed) ? parsed as Record<string, unknown> : null;
+  } catch {
+    return null;
+  }
+}
+
+function asArrayField(value: unknown): unknown[] {
+  return Array.isArray(value) ? value : [];
+}
+
+export function parseDreamPlanJson(text: string): Record<string, unknown> {
+  const parsed = extractJsonObject(text) || {};
+  return {
+    tree_maintenance_candidates: asArrayField(parsed.tree_maintenance_candidates),
+    daily_memory_extraction_candidates: asArrayField(parsed.daily_memory_extraction_candidates),
+    recall_repair_candidates: asArrayField(parsed.recall_repair_candidates),
+    skip_reasons: asArrayField(parsed.skip_reasons),
+  };
+}
+
+export function parseDreamAuditJson(text: string): Record<string, unknown> {
+  const parsed = extractJsonObject(text) || {};
+  return {
+    primary_focus: typeof parsed.primary_focus === 'string' ? parsed.primary_focus : 'no_change',
+    changed_nodes: asArrayField(parsed.changed_nodes),
+    evidence: asArrayField(parsed.evidence),
+    why_not_more_changes: typeof parsed.why_not_more_changes === 'string' ? parsed.why_not_more_changes : '',
+    expected_effect: typeof parsed.expected_effect === 'string' ? parsed.expected_effect : '',
+    confidence: typeof parsed.confidence === 'string' ? parsed.confidence : '',
+  };
 }
 
 function buildWriteDigest(writeActivity: Record<string, unknown>): Record<string, unknown> {
@@ -224,7 +317,7 @@ function buildWriteDigest(writeActivity: Record<string, unknown>): Record<string
 
 export function buildDreamSystemPrompt(initialContext: DreamInitialContext): string {
   const guidanceAvailable = Boolean(initialContext.guidance.trim());
-  const reviewedQueries = buildReviewedQueries(initialContext.recallReview);
+  const recallMetadata = buildRecallMetadata(initialContext.recallReview);
   const bootBaselineLines = initialContext.bootBaseline.length > 0
     ? initialContext.bootBaseline.map((entry) => `- ${entry.uri} — ${entry.role_label}`)
     : ['- (no boot memories loaded)'];
@@ -234,84 +327,75 @@ export function buildDreamSystemPrompt(initialContext: DreamInitialContext): str
     ? 'Read the guidance first and apply it to every write decision and to the final diary. Use the loaded boot baseline as always-available key memories throughout the review.'
     : 'Use the loaded boot baseline as always-available key memories throughout the review.';
 
-  const rules = `你是 Lore 记忆系统的质检员。你的工作不是写报告，是让明天的召回比今天更好。
+  const rules = `你是 Lore 的夜间记忆消化系统。第一目标是让现有记忆树更成熟：减少重复、提高密度、修正边界、提炼高层认知。第二目标是从今日用户内容中抽取值得长期保存的记忆。第三目标是根据 recall metadata 发现 glossary / disclosure / view / priority 问题。
 
-## 你的成功标准
+## 阶段流程
 
-今天结束时，你只为一个结果负责：**至少有一类查询，在明天比今天更有可能召回正确的结果。** 如果没有发现值得改进的问题，诚实地说"没有"就是成功。不要为了交差而做无意义的修改。
+Phase 1 collect：系统已收集 boot baseline、guidance、今日 recall metadata 100 条、今日 memory events、最近 dream diary。
+Phase 2 diagnose：只读诊断。先看树，再考虑写。允许 search、get_node、inspect_tree、inspect_neighbors、inspect_views、refresh_or_inspect_views、get_query_detail 系列工具。输出结构化诊断。
+Phase 3 plan：输出候选变更 JSON，字段为 tree_maintenance_candidates、daily_memory_extraction_candidates、recall_repair_candidates、skip_reasons。
+Phase 4 preflight：对候选逐个跑 validate_memory_change。
+Phase 5 apply：默认最多 1-2 个写入。优先更新 / 提炼 / 合并现有节点；其次拆分已有节点；再次 glossary / disclosure 微调；最后才是 create_node。
+Phase 6 audit：raw diary 输出结构化 audit JSON。诗性日记只消费这个 audit，不参与事实判断。
 
-## 诊断框架
+## 记忆树消化
 
-你面对的不是"好不好"的问题，而是"用户问了，系统有没有帮上忙"的问题。
+第一目标是让现有记忆树更成熟。重点审视现有树结构：抽取、提炼、合并、拆分、降格、删除、移动。目标是让节点总数趋稳，信息密度变高，避免横向扩张。
 
-判断一次召回是否出了问题，按严重程度排序：
+核心规则：
+- 先看树，再考虑写。
+- 优先更新 / 提炼 / 合并现有节点。
+- 新建节点要更严格：必须有明确父节点、明确 disclosure、明确长期价值。
+- 禁止为了单条 query 横向新建很多项目碎片。
+- 结构维护必须参考 guidance：过长拆分，多概念拆分，三条以上相似记忆提炼，缺背景补 why / 条件，成熟网络节点数趋稳甚至下降。
 
-1. **应该搜到但完全没搜到** — 用户问了已知领域的问题，相关记忆存在但没进候选列表。这是最严重的。
-2. **搜到了但没被采用** — 候选列表里有，但 agent 没选它。要么排名太低，要么 disclosure 触发条件不对，要么内容读起来不相关。
-3. **搜到了但内容帮不上忙** — 被采用了，但内容太模糊、缺背景、或者信息过时了。问题在记忆本身。
-4. **噪音** — 不相关的记忆被搜出来了，抢了位置。如果反复发生，disclosure 或 glossary 可能需要收窄。
+树结构属于核心证据。对可疑分支先用 inspect_tree 或 inspect_memory_node_for_dream 看父节点、兄弟节点、子节点、views、write history，再判断更新、拆分、合并、降格、删除、移动。
 
-不用给每个查询打分。找到最可疑的 2-3 个，集中精力。忽略一切看起来正常工作的。
+## 今日用户内容抽取
+
+今日用户内容来自 recall_queries.query_text。这里没有完整 assistant reply。只能总结 query_text 暴露出来的长期信息。
+用户一次性的操作请求默认跳过。
+明确项目状态、偏好、架构决策、长期约束，可以记。
+能归入已有项目节点就更新已有节点。
+没有稳定复用价值就跳过。
+新建节点必须说明为什么更新旧节点不足够。
+
+## recall 修复
+
+这部分先做人工判断式修复，不使用算法 flags。
+disclosure / glossary 调整必须来自 query 证据和节点上下文。
+判断路径：
+1. 从今日 100 条 metadata 里挑可疑 query。
+2. 用 get_query_recall_detail 看 shown nodes。
+3. 用 get_query_candidates 看候选。
+4. 用 inspect_memory_node_for_dream 看相关节点。
+5. 判断原因：glossary 缺词、disclosure 太窄 / 太宽、view 内容弱、节点边界混乱、记忆根本不存在、query 不值得处理。
+6. 只有证据足够才改。
 
 ${bootContextLine}
 受保护的启动基线节点（只读参考，不可修改）：
 ${bootBaselineLines.join('\n')}
 ${hasClientBoot ? '以上包含全局启动节点和客户端专属节点。core://agent 是共享规则层，core://agent/<client_type> 是运行环境专属层。' : '以上是系统的固定规则层，不要作为日常写入目标。'}
 
-## 决策：改什么、怎么改
+## 结构化诊断与 audit
 
-发现问题后，不是每种问题都值得改。你的改进选项和判断标准：
-
-**1. 结构 / 边界（最优先）**
-何时改：一条记忆塞了多个独立概念，或者两个不同节点在说同一件事但路径完全不同。
-怎么改：拆分或合并。拆分的标准是"每个节点只回答一类问题"。合并的标准是"分开放会导致一条被召回时另一条被漏掉"。
-树结构也属于结构证据。对可疑分支先用 inspect_tree 看树结构，判断这棵分支是否支持继续提炼：拆分、合并、删除、移动到更合适的位置。参考 guidance 的维护规则：内容过长或多个独立概念要拆；三条以上相似记忆要提炼；过时、重复、脱离上下文的节点要整理。
-
-**2. disclosure / glossary**
-何时改：disclosure 太宽泛导致不该触发时触发，或太窄导致该触发时不触发。glossary 缺少关键术语导致语义检索匹配不上。
-怎么改：收窄或扩展触发条件。disclosure 只能说一个场景（不包含"或"）。glossary 补上用户查询中出现过的术语。
-
-**3. priority**
-何时改：当前 priority 让质量差的记忆排在质量好的前面。或者同层记忆全是同一个 priority 没有梯度。
-怎么改：遵循 guidance 的 priority 规则，找参照物来定。
-
-**4. 内容**
-最后才改内容。只有当前内容缺了关键背景、信息确实过时了、或者表述方式被证明影响了检索质量时，才改。
-不要润色。不要为了"写得更漂亮"而改内容。
-
-## 什么样的情况不做
-
-以下情况**不做**：
-- "这个节点可以写得更详细" — 节点已经能回答当前查询了，不为好看而改
-- "这两个节点有点相关" — 能拆开各自独立服务不同查询，就别合并
-- "这里有个新话题可以新建节点" — 除非今天的查询暴露了一个明显的、反复出现的知识缺口
-- 任何基于"可能是"、"也许应该"的修改 — 不确定就不做
-
-## 日记
-
-日记是你的决策记录，不是工作报告。用中文写。
-
-**只记录你做过的决策和你看到的证据。** 没有结论就是没有结论，不需要凑字数。
-
-如果你做了改进，记录：
-- 改了什么、为什么改
-- 证据（哪个查询暴露了问题）
-- 预期效果（这次改进会让哪类查询在未来更容易命中）
-
-如果你什么都没改，一句话就够："今日召回数据未发现值得修改的问题。"
-
-不需要固定章节。不需要覆盖每个分类。诚实比完整重要。
-
-如果今天确实捕获了一条值得长期记住的新认知（不是从已有记忆提炼的，而是从今天的查询里新出现的），记录下来，然后考虑是否值得写入 Lore。但不要为了"这一节不能空着"而虚构。`;
+诊断先说明证据，再给候选。没有高置信证据就写 no_change。
+raw diary 必须是 JSON：
+{
+  "primary_focus": "tree_maintenance | daily_extraction | recall_repair | no_change",
+  "changed_nodes": [],
+  "evidence": [],
+  "why_not_more_changes": "",
+  "expected_effect": "",
+  "confidence": ""
+}`;
 
   return `${rules}
 
 ## 当前数据
 
-下面是今天的召回数据。
-
-### 待审查询
-${JSON.stringify(reviewedQueries, null, 2)}
+### 今日 recall metadata
+${JSON.stringify(recallMetadata, null, 2)}
 
 ### 近期写入活动
 ${JSON.stringify(buildWriteDigest(initialContext.writeActivity), null, 2)}
@@ -367,47 +451,110 @@ export async function runDreamAgentLoop(
   const onEvent = options.onEvent;
   const eventContext = buildDreamEventContext(options.eventContext);
   const systemPrompt = buildDreamSystemPrompt(initialContext);
-  const tools = buildDreamTools();
   const messages: ChatMessage[] = [
     { role: 'system', content: systemPrompt },
-    {
-      role: 'user',
-      content: 'Begin the dream review. Inspect today\'s recall evidence first, gather evidence before acting, and only then decide whether any durable extraction or maintenance is justified.',
-    },
   ];
   const toolCalls: ToolCallLogEntry[] = [];
+  let turns = 0;
+  let applyWrites = 0;
+  const phaseOutputs: Partial<Record<DreamPhase, string>> = {};
 
-  for (let turn = 0; turn < 12; turn += 1) {
-    await onEvent?.('llm_turn_started', { turn: turn + 1 });
-    const response = await chatWithTools(config, messages, tools);
-    const content = String(response.content || '');
-    const rawToolCalls = Array.isArray(response.tool_calls) ? response.tool_calls : [];
+  const isWriteTool = (name: string) => ['create_node', 'update_node', 'delete_node', 'move_node'].includes(name);
 
-    if (rawToolCalls.length === 0) {
-      if (content.trim()) {
-        await onEvent?.('assistant_note', { turn: turn + 1, message: content.trim() });
+  async function runPhase(phase: DreamPhase, label: string, prompt: string, maxTurns: number): Promise<string> {
+    const phaseStartToolCalls = toolCalls.length;
+    await onEvent?.('phase_started', { phase, label });
+    messages.push({ role: 'user', content: prompt });
+    for (let phaseTurn = 0; phaseTurn < maxTurns; phaseTurn += 1) {
+      turns += 1;
+      await onEvent?.('llm_turn_started', { turn: turns, phase });
+      const response = await chatWithTools(config, messages, buildDreamToolsForPhase(phase));
+      const content = String(response.content || '');
+      const rawToolCalls = Array.isArray(response.tool_calls) ? response.tool_calls : [];
+
+      if (rawToolCalls.length === 0) {
+        if (content.trim()) {
+          await onEvent?.('assistant_note', { turn: turns, phase, message: content.trim() });
+        }
+        await onEvent?.('phase_completed', {
+          phase,
+          label,
+          summary: { turns: phaseTurn + 1, tool_calls: toolCalls.length - phaseStartToolCalls },
+        });
+        return content.trim();
       }
-      return {
-        narrative: content.trim(),
-        toolCalls,
-        turns: turn + 1,
-      };
-    }
 
-    await processDreamToolCalls({
-      turn: turn + 1,
-      content,
-      rawToolCalls,
-      messages,
-      toolCalls,
-      onEvent,
-      executeTool: (name, args) => executeDreamTool(name, args, eventContext),
+      await processDreamToolCalls({
+        turn: turns,
+        content,
+        rawToolCalls,
+        messages,
+        toolCalls,
+        onEvent,
+        executeTool: async (name, args) => {
+          if (phase === 'apply' && isWriteTool(name)) {
+            if (applyWrites >= 2) {
+              return {
+                error: 'Dream apply write cap reached',
+                code: 'dream_write_cap',
+                blocked: true,
+                detail: 'Dream apply phase allows at most 2 write operations.',
+              };
+            }
+            const result = await executeDreamTool(name, args, eventContext);
+            const record = result && typeof result === 'object' ? result as Record<string, unknown> : null;
+            if (!record?.blocked && !record?.error) applyWrites += 1;
+            return result;
+          }
+          return executeDreamTool(name, args, eventContext);
+        },
+      });
+    }
+    const fallback = `Dream ${phase} phase stopped after reaching the turn limit.`;
+    await onEvent?.('phase_completed', {
+      phase,
+      label,
+      summary: { turns: maxTurns, tool_calls: toolCalls.length - phaseStartToolCalls, stopped: true },
     });
+    return fallback;
   }
 
+  phaseOutputs.diagnose = await runPhase(
+    'diagnose',
+    'Read-only diagnosis',
+    'Begin the dream review. Phase diagnose: inspect today recall metadata and memory tree evidence. This phase is read-only. Return concise structured diagnosis.',
+    4,
+  );
+  phaseOutputs.plan = await runPhase(
+    'plan',
+    'Structured candidate plan',
+    `Phase plan: use the diagnosis below and output JSON with tree_maintenance_candidates, daily_memory_extraction_candidates, recall_repair_candidates, skip_reasons.\n\nDiagnosis:\n${phaseOutputs.diagnose}`,
+    3,
+  );
+  const plan = parseDreamPlanJson(phaseOutputs.plan);
+  phaseOutputs.preflight = await runPhase(
+    'preflight',
+    'Preflight validation',
+    `Phase preflight: run validate_memory_change for each candidate that proposes a memory write. Return compact JSON.\n\nPlan:\n${JSON.stringify(plan, null, 2)}`,
+    3,
+  );
+  phaseOutputs.apply = await runPhase(
+    'apply',
+    'Bounded apply',
+    `Phase apply: apply at most 1-2 high-confidence changes. Prefer update / extract / merge over create_node. Stop when evidence is weak.\n\nPlan:\n${JSON.stringify(plan, null, 2)}\n\nPreflight:\n${phaseOutputs.preflight}`,
+    4,
+  );
+  phaseOutputs.audit = await runPhase(
+    'audit',
+    'Structured audit',
+    `Phase audit: output ONLY JSON with primary_focus, changed_nodes, evidence, why_not_more_changes, expected_effect, confidence.\n\nDiagnosis:\n${phaseOutputs.diagnose}\nPlan:\n${JSON.stringify(plan, null, 2)}\nPreflight:\n${phaseOutputs.preflight}\nApply:\n${phaseOutputs.apply}`,
+    2,
+  );
+
+  const audit = parseDreamAuditJson(phaseOutputs.audit);
   return {
-    narrative: 'Dream agent stopped after reaching the turn limit.',
+    narrative: JSON.stringify(audit, null, 2),
     toolCalls,
-    turns: 12,
+    turns,
   };
 }
