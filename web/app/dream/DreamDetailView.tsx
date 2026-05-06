@@ -31,6 +31,29 @@ function fmtDate(iso: string | null | undefined): string {
 
 type BadgeStatusTone = 'green' | 'red' | 'soft' | 'blue';
 type ChangeTone = 'green' | 'red' | 'orange' | 'blue';
+type BadgeTone = 'green' | 'red' | 'orange' | 'blue' | 'default' | 'soft';
+
+interface DreamAuditChange {
+  uri?: string;
+  action?: string;
+  result?: string;
+  candidate_ids?: string[];
+  changes?: string[];
+}
+
+interface DreamAuditEvidence {
+  query_id?: string;
+  reason?: string;
+}
+
+interface DreamAudit {
+  primary_focus?: string;
+  changed_nodes?: DreamAuditChange[];
+  evidence?: DreamAuditEvidence[];
+  why_not_more_changes?: string;
+  expected_effect?: string;
+  confidence?: string;
+}
 
 function statusTone(status: string): BadgeStatusTone {
   if (status === 'completed') return 'green';
@@ -44,6 +67,63 @@ function changeTone(type: string): ChangeTone {
   if (type === 'delete') return 'red';
   if (type === 'update') return 'orange';
   if (type === 'move') return 'blue';
+  return 'blue';
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return Boolean(value && typeof value === 'object' && !Array.isArray(value));
+}
+
+function toStringArray(value: unknown): string[] {
+  return Array.isArray(value)
+    ? value.filter((item): item is string => typeof item === 'string' && item.trim().length > 0)
+    : [];
+}
+
+function parseDreamAudit(rawNarrative: string): DreamAudit | null {
+  if (!rawNarrative.trim().startsWith('{')) return null;
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(rawNarrative);
+  } catch {
+    return null;
+  }
+  if (!isRecord(parsed)) return null;
+  const hasAuditShape = ['primary_focus', 'changed_nodes', 'evidence', 'why_not_more_changes', 'expected_effect', 'confidence']
+    .some((key) => Object.prototype.hasOwnProperty.call(parsed, key));
+  if (!hasAuditShape) return null;
+
+  const changedNodes = Array.isArray(parsed.changed_nodes)
+    ? parsed.changed_nodes.filter(isRecord).map((node) => ({
+      uri: typeof node.uri === 'string' ? node.uri : undefined,
+      action: typeof node.action === 'string' ? node.action : undefined,
+      result: typeof node.result === 'string' ? node.result : undefined,
+      candidate_ids: toStringArray(node.candidate_ids),
+      changes: toStringArray(node.changes),
+    }))
+    : undefined;
+
+  const evidence = Array.isArray(parsed.evidence)
+    ? parsed.evidence.filter(isRecord).map((item) => ({
+      query_id: typeof item.query_id === 'string' ? item.query_id : undefined,
+      reason: typeof item.reason === 'string' ? item.reason : undefined,
+    }))
+    : undefined;
+
+  return {
+    primary_focus: typeof parsed.primary_focus === 'string' ? parsed.primary_focus : undefined,
+    changed_nodes: changedNodes,
+    evidence,
+    why_not_more_changes: typeof parsed.why_not_more_changes === 'string' ? parsed.why_not_more_changes : undefined,
+    expected_effect: typeof parsed.expected_effect === 'string' ? parsed.expected_effect : undefined,
+    confidence: typeof parsed.confidence === 'string' ? parsed.confidence : undefined,
+  };
+}
+
+function resultTone(result: string | undefined): BadgeTone {
+  if (result === 'success' || result === 'applied') return 'green';
+  if (result === 'skipped') return 'soft';
+  if (result === 'blocked' || result === 'failed' || result === 'error') return 'red';
   return 'blue';
 }
 
@@ -258,7 +338,6 @@ interface DreamDetailViewProps {
 }
 
 export function DreamDetailView({ entry, loading, canRollback, rollingBack, onBack, onRollback, t }: DreamDetailViewProps): React.JSX.Element {
-  const [showOriginalDiary, setShowOriginalDiary] = useState(false);
   const stats = useMemo(() => {
     const toolCalls = entry?.tool_calls || [];
     const changes = entry?.memory_changes || [];
@@ -276,10 +355,6 @@ export function DreamDetailView({ entry, loading, canRollback, rollingBack, onBa
     };
   }, [entry]);
 
-  useEffect(() => {
-    setShowOriginalDiary(false);
-  }, [entry?.id]);
-
   if (loading || !entry) {
     return (
       <>
@@ -293,8 +368,7 @@ export function DreamDetailView({ entry, loading, canRollback, rollingBack, onBa
 
   const rawNarrative = entry.raw_narrative || entry.narrative || '';
   const poeticNarrative = entry.poetic_narrative || entry.narrative || rawNarrative;
-  const displayedNarrative = showOriginalDiary ? rawNarrative : poeticNarrative;
-  const canToggleDiary = Boolean(rawNarrative && poeticNarrative && rawNarrative !== poeticNarrative);
+  const audit = parseDreamAudit(rawNarrative);
 
   return (
     <>
@@ -322,20 +396,19 @@ export function DreamDetailView({ entry, loading, canRollback, rollingBack, onBa
         <StatCard label={t('Policy warnings')} value={stats.policyWarnings} tone="orange" compact />
       </div>
 
-      {displayedNarrative && (
+      {poeticNarrative && (
         <Section
-          title={showOriginalDiary ? t('Original Diary') : t('Diary')}
-          right={canToggleDiary ? (
-            <Button variant="ghost" onClick={() => setShowOriginalDiary(!showOriginalDiary)}>
-              {showOriginalDiary ? t('View diary') : t('View original diary')}
-            </Button>
-          ) : null}
+          title={t('Diary')}
           className="mb-5"
         >
           <div className="prose max-w-none">
-            <ReactMarkdown remarkPlugins={[remarkGfm]}>{displayedNarrative}</ReactMarkdown>
+            <ReactMarkdown remarkPlugins={[remarkGfm]}>{poeticNarrative}</ReactMarkdown>
           </div>
         </Section>
+      )}
+
+      {audit && (
+        <DreamAuditSection audit={audit} t={t} />
       )}
 
       {(entry.status === 'running' || (entry.workflow_events && entry.workflow_events.length > 0)) && (
@@ -366,6 +439,85 @@ export function DreamDetailView({ entry, loading, canRollback, rollingBack, onBa
         </Notice>
       )}
     </>
+  );
+}
+
+interface DreamAuditSectionProps {
+  audit: DreamAudit;
+  t: (key: string) => string;
+}
+
+function DreamAuditSection({ audit, t }: DreamAuditSectionProps): React.JSX.Element {
+  const changedNodes = audit.changed_nodes || [];
+  const evidence = audit.evidence || [];
+
+  return (
+    <Section title={t('Dream Audit')} className="mb-5">
+      <div className="space-y-4">
+        <div className="flex flex-wrap gap-2">
+          {audit.primary_focus && <Badge tone="blue">{t('Primary focus')}: {audit.primary_focus}</Badge>}
+          {audit.confidence && <Badge tone="green">{t('Confidence')}: {audit.confidence}</Badge>}
+          <Badge tone="default">{t('Changed nodes')}: {changedNodes.length}</Badge>
+          <Badge tone="default">{t('Evidence')}: {evidence.length}</Badge>
+        </div>
+
+        {changedNodes.length > 0 && (
+          <div>
+            <div className="mb-2 text-xs font-medium uppercase tracking-wide text-txt-tertiary">{t('Changed nodes')}</div>
+            <div className="space-y-2">
+              {changedNodes.map((node, index) => (
+                <div key={`${node.uri || 'node'}-${index}`} className="rounded-xl border border-separator-thin bg-bg-raised px-3 py-3">
+                  <div className="mb-2 flex flex-wrap items-center gap-2">
+                    {node.action && <Badge tone="blue">{node.action}</Badge>}
+                    {node.result && <Badge tone={resultTone(node.result)}>{node.result}</Badge>}
+                    {node.candidate_ids && node.candidate_ids.length > 0 && (
+                      <span className="text-[11px] text-txt-tertiary">{t('Candidates')}: {node.candidate_ids.join(', ')}</span>
+                    )}
+                  </div>
+                  {node.uri && <code className="block break-all text-xs font-mono text-txt-primary">{node.uri}</code>}
+                  {node.changes && node.changes.length > 0 && (
+                    <ul className="mt-2 list-disc space-y-1 pl-5 text-sm text-txt-secondary">
+                      {node.changes.map((change, changeIndex) => <li key={changeIndex}>{change}</li>)}
+                    </ul>
+                  )}
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {evidence.length > 0 && (
+          <div>
+            <div className="mb-2 text-xs font-medium uppercase tracking-wide text-txt-tertiary">{t('Evidence')}</div>
+            <div className="space-y-2">
+              {evidence.map((item, index) => (
+                <div key={`${item.query_id || 'evidence'}-${index}`} className="rounded-xl border border-separator-thin bg-bg-raised px-3 py-3">
+                  {item.query_id && <code className="block break-all text-[11px] font-mono text-txt-tertiary">{item.query_id}</code>}
+                  {item.reason && <p className="mt-1 text-sm text-txt-secondary">{item.reason}</p>}
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {(audit.why_not_more_changes || audit.expected_effect) && (
+          <div className="grid gap-3 md:grid-cols-2">
+            {audit.why_not_more_changes && (
+              <div className="rounded-xl border border-separator-thin bg-bg-raised px-3 py-3">
+                <div className="mb-1 text-xs font-medium uppercase tracking-wide text-txt-tertiary">{t('Why not more changes')}</div>
+                <p className="text-sm text-txt-secondary">{audit.why_not_more_changes}</p>
+              </div>
+            )}
+            {audit.expected_effect && (
+              <div className="rounded-xl border border-separator-thin bg-bg-raised px-3 py-3">
+                <div className="mb-1 text-xs font-medium uppercase tracking-wide text-txt-tertiary">{t('Expected effect')}</div>
+                <p className="text-sm text-txt-secondary">{audit.expected_effect}</p>
+              </div>
+            )}
+          </div>
+        )}
+      </div>
+    </Section>
   );
 }
 
