@@ -11,6 +11,7 @@ import {
 import { ensureMemoryViewsReady } from '../view/viewCrud';
 import {
   loadRecallDisplayConfig,
+  loadRecallSafetyConfig,
   loadRecallScoringConfig,
 } from './recallConfig';
 import {
@@ -18,7 +19,7 @@ import {
   type RecallDisplayItem,
   type RecallSuppressed,
 } from './recallDisplay';
-import { resolveRecallQuery } from './recallQuery';
+import { limitRecallQuery, resolveRecallQuery } from './recallQuery';
 import {
   type ScoredResult,
   type ScoringConfig,
@@ -48,6 +49,10 @@ export interface RecallPipelineResult {
     model: string | null;
     strategy: string;
     query_tokens: number;
+    query_chars: number;
+    original_query_chars: number;
+    query_truncated: boolean;
+    query_char_limit: number;
     recency_enabled: boolean;
     view_types: string[];
   };
@@ -89,7 +94,9 @@ export async function runRecallPipeline(
   { aggregateCandidates }: RunRecallPipelineOptions,
 ): Promise<RecallPipelineResult> {
   const rawQuery = body.query || '';
-  body.query = resolveRecallQuery(rawQuery);
+  const safetyConfig = await loadRecallSafetyConfig();
+  const limitedQuery = limitRecallQuery(resolveRecallQuery(rawQuery), safetyConfig.max_query_chars);
+  body.query = limitedQuery.query;
 
   const resolvedEmbedding = await resolveEmbeddingConfig(body?.embedding || null);
   const index = await ensureMemoryViewsReady();
@@ -173,6 +180,10 @@ export async function runRecallPipeline(
       model: resolvedEmbedding?.model || null,
       strategy: scoringConfig.strategy,
       query_tokens: scoringConfig.query_tokens as number,
+      query_chars: limitedQuery.queryChars,
+      original_query_chars: limitedQuery.originalQueryChars,
+      query_truncated: limitedQuery.truncated,
+      query_char_limit: limitedQuery.limit,
       recency_enabled: scoringConfig.recency_enabled,
       view_types: ['gist', 'question'],
     },

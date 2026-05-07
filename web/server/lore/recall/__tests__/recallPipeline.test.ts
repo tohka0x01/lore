@@ -23,6 +23,7 @@ vi.mock('../../view/viewCrud', () => ({
 }));
 vi.mock('../recallConfig', () => ({
   loadRecallDisplayConfig: vi.fn(),
+  loadRecallSafetyConfig: vi.fn(),
   loadRecallScoringConfig: vi.fn(),
 }));
 vi.mock('../recallDisplay', () => ({
@@ -44,6 +45,7 @@ import {
 import { ensureMemoryViewsReady } from '../../view/viewCrud';
 import {
   loadRecallDisplayConfig,
+  loadRecallSafetyConfig,
   loadRecallScoringConfig,
 } from '../recallConfig';
 import { buildRecallDisplay } from '../recallDisplay';
@@ -60,6 +62,7 @@ const mockFetchExactMemoryRows = vi.mocked(fetchExactMemoryRows);
 const mockFetchLexicalMemoryViewRows = vi.mocked(fetchLexicalMemoryViewRows);
 const mockEnsureMemoryViewsReady = vi.mocked(ensureMemoryViewsReady);
 const mockLoadRecallDisplayConfig = vi.mocked(loadRecallDisplayConfig);
+const mockLoadRecallSafetyConfig = vi.mocked(loadRecallSafetyConfig);
 const mockLoadRecallScoringConfig = vi.mocked(loadRecallScoringConfig);
 const mockBuildRecallDisplay = vi.mocked(buildRecallDisplay);
 const mockGetSessionReadUris = vi.mocked(getSessionReadUris);
@@ -141,6 +144,7 @@ describe('runRecallPipeline', () => {
     mockEnsureMemoryViewsReady.mockResolvedValue({ ready: true } as any);
     mockLoadRecallScoringConfig.mockResolvedValue({ ...scoringConfig } as any);
     mockLoadRecallDisplayConfig.mockResolvedValue({ ...displayConfig } as any);
+    mockLoadRecallSafetyConfig.mockResolvedValue({ max_query_chars: 200, timeout_ms: 2000 } as any);
     mockCountQueryTokens.mockResolvedValue(7);
     mockEmbedTexts.mockResolvedValue([[0.1, 0.2, 0.3]] as any);
     mockFetchExactMemoryRows.mockResolvedValue(exactRows as any);
@@ -237,8 +241,53 @@ describe('runRecallPipeline', () => {
       model: 'text-embedding-3-large',
       strategy: 'raw_plus_lex_damp',
       query_tokens: 7,
+      query_chars: 'actual query'.length,
+      original_query_chars: 'actual query'.length,
+      query_truncated: false,
+      query_char_limit: 200,
       recency_enabled: true,
       view_types: ['gist', 'question'],
+    });
+  });
+
+  it('limits overlong recall query text to 200 characters for retrieval', async () => {
+    const aggregateCandidates = vi.fn().mockReturnValue(aggregated);
+    const longQuery = 'a'.repeat(250);
+
+    const result = await runRecallPipeline({ query: longQuery }, { aggregateCandidates });
+
+    const truncatedQuery = 'a'.repeat(200);
+    expect(mockCountQueryTokens).toHaveBeenCalledWith(truncatedQuery);
+    expect(mockEmbedTexts).toHaveBeenCalledWith(resolvedEmbedding, [truncatedQuery]);
+    expect(mockFetchExactMemoryRows).toHaveBeenCalledWith(expect.objectContaining({ query: truncatedQuery }));
+    expect(mockFetchLexicalMemoryViewRows).toHaveBeenCalledWith(expect.objectContaining({ query: truncatedQuery }));
+    expect(result.query).toBe(truncatedQuery);
+    expect(result.retrieval_meta).toMatchObject({
+      query_chars: 200,
+      original_query_chars: 250,
+      query_truncated: true,
+      query_char_limit: 200,
+    });
+  });
+
+  it('uses configured max query characters for retrieval', async () => {
+    const aggregateCandidates = vi.fn().mockReturnValue(aggregated);
+    mockLoadRecallSafetyConfig.mockResolvedValueOnce({ max_query_chars: 80, timeout_ms: 2000 } as any);
+    const longQuery = 'b'.repeat(120);
+
+    const result = await runRecallPipeline({ query: longQuery }, { aggregateCandidates });
+
+    const truncatedQuery = 'b'.repeat(80);
+    expect(mockCountQueryTokens).toHaveBeenCalledWith(truncatedQuery);
+    expect(mockEmbedTexts).toHaveBeenCalledWith(resolvedEmbedding, [truncatedQuery]);
+    expect(mockFetchExactMemoryRows).toHaveBeenCalledWith(expect.objectContaining({ query: truncatedQuery }));
+    expect(mockFetchLexicalMemoryViewRows).toHaveBeenCalledWith(expect.objectContaining({ query: truncatedQuery }));
+    expect(result.query).toBe(truncatedQuery);
+    expect(result.retrieval_meta).toMatchObject({
+      query_chars: 80,
+      original_query_chars: 120,
+      query_truncated: true,
+      query_char_limit: 80,
     });
   });
 

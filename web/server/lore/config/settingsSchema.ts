@@ -153,6 +153,22 @@ export const SETTINGS_SCHEMA: SettingDef[] = [
     description: 'soft=分数足够高才展示；hard=完全隐藏',
   },
 
+  // -- Recall safety limits -------------------------------------------------
+  {
+    key: 'recall.safety.max_query_chars',
+    section: 'recall_safety',
+    label: '最大召回查询字符数',
+    type: 'integer', default: 200, min: 50, max: 2000, step: 10,
+    description: '用户内容过长时，recall 只使用前 N 个字符参与检索，并在返回内容中提示已截取。',
+  },
+  {
+    key: 'recall.safety.timeout_ms',
+    section: 'recall_safety',
+    label: '召回超时 (ms)',
+    type: 'integer', default: 2000, min: 500, max: 30000, step: 100,
+    description: 'recall 超过该时间后跳过并返回提示，避免长文本或慢查询阻塞主流程。',
+  },
+
   // -- View weights / priors ------------------------------------------------
   {
     key: 'views.weight.gist',
@@ -422,6 +438,7 @@ export const SECTIONS: SettingSection[] = [
   { id: 'recall_bonus', label: '加分参数', description: '优先级和多视图命中的加分' },
   { id: 'recall_recency', label: '时间衰减', description: '让近期更新的记忆排名更高（默认关闭）' },
   { id: 'recall_display', label: '展示阈值', description: '决定哪些候选注入到 prompt' },
+  { id: 'recall_safety', label: '召回保护', description: '限制超长查询和慢查询，避免 recall 阻塞主流程' },
   { id: 'views', label: '视图权重', description: 'gist/question 视图的权重与 prior' },
   { id: 'embedding', label: 'Embedding 服务', description: '向量化模型端点' },
   { id: 'view_llm', label: 'View LLM', description: '用于视图精炼的 LLM（可留空禁用）' },

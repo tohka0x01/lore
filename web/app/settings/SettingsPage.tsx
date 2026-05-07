@@ -31,7 +31,7 @@ interface SettingsTocGroup {
 }
 
 const SETTINGS_TOC_GROUPS = [
-  { label: 'Recall', ids: ['recall_weights', 'recall_bonus', 'recall_recency', 'recall_display', 'views'] },
+  { label: 'Recall', ids: ['recall_weights', 'recall_bonus', 'recall_recency', 'recall_display', 'recall_safety', 'views'] },
   { label: 'Services', ids: ['embedding', 'view_llm'] },
   { label: 'Automation', ids: ['policy', 'dream', 'backup', 'review'] },
 ] as const;

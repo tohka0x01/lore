@@ -9,6 +9,7 @@ import {
 } from './recallEventDispatch';
 import {
   getRecallRuntimeConfig as sharedGetRecallRuntimeConfig,
+  loadRecallSafetyConfig,
 } from './recallConfig';
 import {
   sanitizeDenseRow,
@@ -39,6 +40,7 @@ import {
 } from './recallPipeline';
 
 export const getRecallRuntimeConfig = sharedGetRecallRuntimeConfig;
+export { loadRecallSafetyConfig };
 export { sanitizeRecallQuery, resolveRecallQuery };
 export {
   sanitizeDenseRow,

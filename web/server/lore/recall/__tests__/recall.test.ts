@@ -97,6 +97,8 @@ function makeSettingsMock(overrides: Record<string, unknown> = {}) {
       'recall.display.min_display_score': 0.1,
       'recall.display.max_display_items': 8,
       'recall.display.read_node_display_mode': 'soft',
+      'recall.safety.max_query_chars': 200,
+      'recall.safety.timeout_ms': 2000,
       ...overrides,
     };
     const result: Record<string, unknown> = {};
@@ -624,6 +626,20 @@ describe('loadScoringConfig (via getRecallRuntimeConfig)', () => {
     const expected = [...getBootUris()].sort();
     expect(Array.isArray(config.core_memory_uris)).toBe(true);
     expect(config.core_memory_uris).toEqual(expected);
+  });
+
+  it('runtime config exposes recall safety settings', async () => {
+    vi.mocked(mockGetSettings).mockImplementation(
+      makeSettingsMock({
+        'recall.safety.max_query_chars': 150,
+        'recall.safety.timeout_ms': 3500,
+      }) as ReturnType<typeof vi.fn>,
+    );
+    const config = await getRecallRuntimeConfig(null);
+    expect((config as any).safety).toEqual({
+      max_query_chars: 150,
+      timeout_ms: 3500,
+    });
   });
 });
 

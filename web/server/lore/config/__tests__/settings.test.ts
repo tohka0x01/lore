@@ -41,6 +41,21 @@ describe('settingsSchema', () => {
     expect(SCHEMA_BY_KEY.get('embedding.model')?.default).toBe('text-embedding-3-small');
     expect(SCHEMA_BY_KEY.get('view_llm.model')?.default).toBe('deepseek-v4-flash');
     expect(SCHEMA_BY_KEY.get('backup.enabled')?.default).toBe(true);
+    expect(SCHEMA_BY_KEY.get('recall.safety.max_query_chars')).toMatchObject({
+      section: 'recall_safety',
+      type: 'integer',
+      default: 200,
+      min: 50,
+      max: 2000,
+    });
+    expect(SCHEMA_BY_KEY.get('recall.safety.timeout_ms')).toMatchObject({
+      section: 'recall_safety',
+      type: 'integer',
+      default: 2000,
+      min: 500,
+      max: 30000,
+    });
+    expect(SECTIONS.some((section) => section.id === 'recall_safety')).toBe(true);
   });
 
   it('does not expose selectable recall scoring algorithms', () => {

@@ -7,6 +7,8 @@
 const METADATA_PREFIX_RE =
   /^(?:\s*(?:Conversation info|Sender|Channel info|Reply info)\s*\(untrusted metadata\)\s*:\s*```[a-z]*[\s\S]*?```\s*)+/i;
 
+export const RECALL_QUERY_CHAR_LIMIT = 200;
+
 export function sanitizeRecallQuery(raw: string): string {
   if (!raw) return '';
   return raw.replace(METADATA_PREFIX_RE, '').trim();
@@ -15,4 +17,24 @@ export function sanitizeRecallQuery(raw: string): string {
 export function resolveRecallQuery(raw: string): string {
   const sanitized = sanitizeRecallQuery(raw);
   return sanitized || raw;
+}
+
+export function limitRecallQuery(raw: string, limit = RECALL_QUERY_CHAR_LIMIT): {
+  query: string;
+  originalQueryChars: number;
+  queryChars: number;
+  truncated: boolean;
+  limit: number;
+} {
+  const query = String(raw || '').trim();
+  const safeLimit = Math.max(1, Math.trunc(Number(limit) || RECALL_QUERY_CHAR_LIMIT));
+  const truncated = query.length > safeLimit;
+  const limitedQuery = truncated ? query.slice(0, safeLimit) : query;
+  return {
+    query: limitedQuery,
+    originalQueryChars: query.length,
+    queryChars: limitedQuery.length,
+    truncated,
+    limit: safeLimit,
+  };
 }

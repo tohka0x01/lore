@@ -53,6 +53,7 @@ import * as recallUsageRoute from '../recall/usage/route';
 vi.mock('../../../../server/lore/recall/recall', () => ({
   recallMemories: vi.fn(),
   getRecallRuntimeConfig: vi.fn(),
+  loadRecallSafetyConfig: vi.fn(),
 }));
 vi.mock('../../../../server/lore/recall/recallAnalytics', () => ({
   getRecallStats: vi.fn(),
@@ -66,7 +67,7 @@ vi.mock('../../../../server/lore/recall/recallEventLog', () => ({
   markRecallEventsUsedInAnswer: vi.fn(),
 }));
 
-import { getRecallRuntimeConfig, recallMemories } from '../../../../server/lore/recall/recall';
+import { getRecallRuntimeConfig, loadRecallSafetyConfig, recallMemories } from '../../../../server/lore/recall/recall';
 import { getRecallStats } from '../../../../server/lore/recall/recallAnalytics';
 import { listSessionReads, markSessionRead, clearSessionReads } from '../../../../server/lore/memory/session';
 import { markRecallEventsUsedInAnswer } from '../../../../server/lore/recall/recallEventLog';
@@ -90,6 +91,7 @@ const mockAddGlossaryKeyword = vi.mocked(addGlossaryKeyword);
 const mockRemoveGlossaryKeyword = vi.mocked(removeGlossaryKeyword);
 const mockRecallMemories = vi.mocked(recallMemories);
 const mockGetRecallRuntimeConfig = vi.mocked(getRecallRuntimeConfig);
+const mockLoadRecallSafetyConfig = vi.mocked(loadRecallSafetyConfig);
 const mockGetRecallStats = vi.mocked(getRecallStats);
 const mockListSessionReads = vi.mocked(listSessionReads);
 const mockMarkSessionRead = vi.mocked(markSessionRead);
@@ -105,6 +107,7 @@ describe('browse route contracts', () => {
     mockValidateUpdatePolicy.mockResolvedValue({ errors: [], warnings: [] } as any);
     mockValidateDeletePolicy.mockResolvedValue({ errors: [], warnings: [] } as any);
     mockGetRecallRuntimeConfig.mockResolvedValue({} as any);
+    mockLoadRecallSafetyConfig.mockResolvedValue({ max_query_chars: 200, timeout_ms: 2000 } as any);
   });
 
   it('adds canonical and legacy warning envelopes to create validation failures', async () => {
@@ -300,6 +303,100 @@ describe('browse route contracts', () => {
     const usageBody = await usageResponse.json();
     expect(usageResponse.status).toBe(422);
     expect(usageBody.code).toBe('validation_error');
+  });
+
+  it('adds an English recall notice when the query was truncated', async () => {
+    mockRecallMemories.mockResolvedValueOnce({
+      items: [],
+      retrieval_meta: {
+        query_truncated: true,
+        query_char_limit: 200,
+      },
+    } as any);
+
+    const request = new Request('http://localhost/api/browse/recall', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ query: 'x'.repeat(250) }),
+    }) as any;
+    request.nextUrl = new URL(request.url);
+
+    const response = await recallRoute.POST(request);
+    const body = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(body.items[0]).toMatchObject({
+      uri: 'notice://recall/query_truncated',
+      cues: [expect.stringContaining('User content is too long')],
+    });
+    expect(body.items[0].cues[0]).toContain('first 200 characters');
+    expect(body.items[0].cues[0]).toContain('lore_search');
+  });
+
+  it('returns an English notice-only payload when recall times out', async () => {
+    vi.useFakeTimers();
+    try {
+      mockRecallMemories.mockImplementationOnce(() => new Promise(() => {}) as any);
+
+      const request = new Request('http://localhost/api/browse/recall', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ query: 'slow' }),
+      }) as any;
+      request.nextUrl = new URL(request.url);
+
+      const responsePromise = recallRoute.POST(request);
+      await vi.advanceTimersByTimeAsync(2001);
+      const response = await responsePromise;
+      const body = await response.json();
+
+      expect(response.status).toBe(200);
+      expect(body.items[0]).toMatchObject({
+        uri: 'notice://recall/timeout',
+        cues: [expect.stringContaining('Recall took longer than 2 seconds')],
+      });
+      expect(body.items[0].cues[0]).toContain('lore_search');
+      expect(body.items).toHaveLength(1);
+      expect(body.retrieval_meta).toMatchObject({ recall_timed_out: true, timeout_ms: 2000 });
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('uses configured recall timeout from settings', async () => {
+    vi.useFakeTimers();
+    try {
+      mockLoadRecallSafetyConfig.mockResolvedValueOnce({ max_query_chars: 200, timeout_ms: 3000 } as any);
+      mockRecallMemories.mockImplementationOnce(() => new Promise(() => {}) as any);
+
+      const request = new Request('http://localhost/api/browse/recall', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ query: 'slow' }),
+      }) as any;
+      request.nextUrl = new URL(request.url);
+
+      const responsePromise = recallRoute.POST(request);
+      await vi.advanceTimersByTimeAsync(2001);
+      const early = await Promise.race([
+        responsePromise.then(() => 'resolved'),
+        Promise.resolve('pending'),
+      ]);
+      expect(early).toBe('pending');
+
+      await vi.advanceTimersByTimeAsync(1000);
+      const response = await responsePromise;
+      const body = await response.json();
+
+      expect(response.status).toBe(200);
+      expect(body.items[0]).toMatchObject({
+        uri: 'notice://recall/timeout',
+        cues: [expect.stringContaining('Recall took longer than 3 seconds')],
+      });
+      expect(body.retrieval_meta).toMatchObject({ recall_timed_out: true, timeout_ms: 3000 });
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it('loads recall stats without dormant nodeUri plumbing', async () => {

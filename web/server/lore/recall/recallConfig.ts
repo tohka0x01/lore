@@ -25,6 +25,14 @@ export const SCORING_SETTING_KEYS = [
   'views.prior.question',
 ] as const;
 
+export const RECALL_SAFETY_SETTING_KEYS = [
+  'recall.safety.max_query_chars',
+  'recall.safety.timeout_ms',
+] as const;
+
+export const DEFAULT_RECALL_MAX_QUERY_CHARS = 200;
+export const DEFAULT_RECALL_TIMEOUT_MS = 2000;
+
 export interface LoadedScoringConfig extends ScoringConfig {
   strategy: string;
   recency_enabled: boolean;
@@ -39,6 +47,17 @@ export interface LoadedDisplayConfig {
   min_display_score: unknown;
   max_display_items: unknown;
   read_node_display_mode: unknown;
+}
+
+export interface LoadedSafetyConfig {
+  max_query_chars: number;
+  timeout_ms: number;
+}
+
+function positiveInteger(value: unknown, fallback: number): number {
+  const numberValue = Number(value);
+  if (!Number.isFinite(numberValue) || numberValue <= 0) return fallback;
+  return Math.trunc(numberValue);
 }
 
 export async function loadRecallScoringConfig(): Promise<LoadedScoringConfig> {
@@ -77,10 +96,21 @@ export async function loadRecallDisplayConfig(): Promise<LoadedDisplayConfig> {
   };
 }
 
+export async function loadRecallSafetyConfig(): Promise<LoadedSafetyConfig> {
+  const s = await getSettingsBatch([...RECALL_SAFETY_SETTING_KEYS]);
+  return {
+    max_query_chars: positiveInteger(s['recall.safety.max_query_chars'], DEFAULT_RECALL_MAX_QUERY_CHARS),
+    timeout_ms: positiveInteger(s['recall.safety.timeout_ms'], DEFAULT_RECALL_TIMEOUT_MS),
+  };
+}
+
 export async function getRecallRuntimeConfig(embedding: Partial<EmbeddingConfig> | null = null) {
   const resolvedEmbedding = await resolveEmbeddingConfig(embedding);
-  const scoring = await loadRecallScoringConfig();
-  const display = await loadRecallDisplayConfig();
+  const [scoring, display, safety] = await Promise.all([
+    loadRecallScoringConfig(),
+    loadRecallDisplayConfig(),
+    loadRecallSafetyConfig(),
+  ]);
   return {
     embedding: await getEmbeddingRuntimeConfig(resolvedEmbedding),
     memory_views: await getMemoryViewRuntimeConfig(resolvedEmbedding),
@@ -104,6 +134,7 @@ export async function getRecallRuntimeConfig(embedding: Partial<EmbeddingConfig>
       multi_view_cap: scoring.multi_view_cap,
     },
     display,
+    safety,
     core_memory_uris: [...getBootUris()].sort(),
   };
 }
