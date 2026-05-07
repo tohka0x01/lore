@@ -137,6 +137,7 @@ export async function chatWithTools(
   const response = await generateTextWithTools(config, messages, tools);
   return {
     content: response.content,
+    assistant_content: response.assistant_content,
     tool_calls: response.tool_calls,
   };
 }
@@ -285,6 +286,163 @@ export function parseDreamAuditJson(text: string): Record<string, unknown> {
     why_not_more_changes: typeof parsed.why_not_more_changes === 'string' ? parsed.why_not_more_changes : '',
     expected_effect: typeof parsed.expected_effect === 'string' ? parsed.expected_effect : '',
     confidence: typeof parsed.confidence === 'string' ? parsed.confidence : '',
+  };
+}
+
+const DREAM_WRITE_TOOLS = new Set(['create_node', 'update_node', 'delete_node', 'move_node']);
+
+interface DreamWriteChange {
+  tool: string;
+  operation: string;
+  uri: string;
+}
+
+function isString(value: unknown): value is string {
+  return typeof value === 'string' && value.trim().length > 0;
+}
+
+function parseToolResultPreview(preview: unknown): Record<string, unknown> | null {
+  return extractJsonObject(String(preview || ''));
+}
+
+function toolOperation(tool: string, result: Record<string, unknown> | null): string {
+  if (isString(result?.operation)) return result.operation;
+  if (tool === 'create_node') return 'create';
+  if (tool === 'update_node') return 'update';
+  if (tool === 'delete_node') return 'delete';
+  if (tool === 'move_node') return 'move';
+  return tool;
+}
+
+function toolChangedUri(entry: ToolCallLogEntry, result: Record<string, unknown> | null): string {
+  if (entry.tool === 'move_node') {
+    return [
+      result?.new_uri,
+      result?.uri,
+      entry.args.new_uri,
+      entry.args.uri,
+      entry.args.old_uri,
+    ].find(isString) || '';
+  }
+  return [
+    result?.uri,
+    result?.node_uri,
+    entry.args.uri,
+    entry.args.new_uri,
+    entry.args.old_uri,
+  ].find(isString) || '';
+}
+
+function isSuccessfulWriteToolCall(entry: ToolCallLogEntry, result: Record<string, unknown> | null): boolean {
+  if (!DREAM_WRITE_TOOLS.has(entry.tool)) return false;
+  if (result) {
+    if (result.blocked === true || result.error) return false;
+    return result.success === true || isString(result.operation) || isString(result.uri);
+  }
+  const preview = String(entry.result_preview || '');
+  return /"success"\s*:\s*true/.test(preview)
+    && !/"blocked"\s*:\s*true/.test(preview)
+    && !/"error"\s*:/.test(preview);
+}
+
+function collectSuccessfulWriteChanges(toolCalls: ToolCallLogEntry[]): DreamWriteChange[] {
+  const changes: DreamWriteChange[] = [];
+  for (const entry of toolCalls) {
+    const result = parseToolResultPreview(entry.result_preview);
+    if (!isSuccessfulWriteToolCall(entry, result)) continue;
+    const uri = toolChangedUri(entry, result);
+    if (!uri) continue;
+    changes.push({
+      tool: entry.tool,
+      operation: toolOperation(entry.tool, result),
+      uri,
+    });
+  }
+  return changes;
+}
+
+function planSectionMentionsUri(plan: Record<string, unknown>, key: string, uri: string): boolean {
+  return asArrayField(plan[key]).some((candidate) => {
+    if (isString(candidate)) return candidate === uri;
+    if (!candidate || typeof candidate !== 'object') return false;
+    return JSON.stringify(candidate).includes(uri);
+  });
+}
+
+function inferPrimaryFocusFromWrites(plan: Record<string, unknown>, writes: DreamWriteChange[]): string {
+  const sections: Array<[string, string]> = [
+    ['tree_maintenance_candidates', 'tree_maintenance'],
+    ['daily_memory_extraction_candidates', 'daily_extraction'],
+    ['recall_repair_candidates', 'recall_repair'],
+  ];
+  for (const write of writes) {
+    const matched = sections.find(([key]) => planSectionMentionsUri(plan, key, write.uri));
+    if (matched) return matched[1];
+  }
+  const firstNonEmpty = sections.find(([key]) => asArrayField(plan[key]).length > 0);
+  return firstNonEmpty?.[1] || 'tree_maintenance';
+}
+
+function auditNodeUri(value: unknown): string {
+  if (isString(value)) return value;
+  if (value && typeof value === 'object' && isString((value as Record<string, unknown>).uri)) {
+    return (value as Record<string, unknown>).uri as string;
+  }
+  return '';
+}
+
+function auditEvidenceKey(value: unknown): string {
+  if (isString(value)) return value;
+  if (value && typeof value === 'object' && isString((value as Record<string, unknown>).reason)) {
+    return (value as Record<string, unknown>).reason as string;
+  }
+  return JSON.stringify(value);
+}
+
+function auditBackedByToolWrites(
+  audit: Record<string, unknown>,
+  plan: Record<string, unknown>,
+  toolCalls: ToolCallLogEntry[],
+): Record<string, unknown> {
+  const writes = collectSuccessfulWriteChanges(toolCalls);
+  if (writes.length === 0) return audit;
+
+  const changedNodes = asArrayField(audit.changed_nodes).map((node) => (
+    isString(node) ? { uri: node } : node
+  ));
+  const changedNodeUris = new Set(changedNodes.map(auditNodeUri).filter(isString));
+  for (const write of writes) {
+    if (changedNodeUris.has(write.uri)) continue;
+    changedNodes.push({ uri: write.uri, action: write.operation, result: 'success' });
+    changedNodeUris.add(write.uri);
+  }
+
+  const evidence = asArrayField(audit.evidence).map((item) => (
+    isString(item) ? { reason: item } : item
+  ));
+  const evidenceKeys = new Set(evidence.map(auditEvidenceKey).filter(isString));
+  for (const write of writes) {
+    const reason = `${write.tool} succeeded: ${write.uri}`;
+    if (evidenceKeys.has(reason)) continue;
+    evidence.push({ reason });
+    evidenceKeys.add(reason);
+  }
+  const primaryFocus = audit.primary_focus === 'no_change' || !isString(audit.primary_focus)
+    ? inferPrimaryFocusFromWrites(plan, writes)
+    : audit.primary_focus;
+
+  return {
+    ...audit,
+    primary_focus: primaryFocus,
+    changed_nodes: changedNodes,
+    evidence,
+    why_not_more_changes: isString(audit.why_not_more_changes)
+      ? audit.why_not_more_changes
+      : 'Dream apply phase completed with bounded writes; no additional high-confidence changes were applied.',
+    expected_effect: isString(audit.expected_effect)
+      ? audit.expected_effect
+      : 'Memory tree reflects the successful Dream write.',
+    confidence: isString(audit.confidence) ? audit.confidence : 'medium',
   };
 }
 
@@ -486,7 +644,7 @@ export async function runDreamAgentLoop(
 
       await processDreamToolCalls({
         turn: turns,
-        content,
+        content: (response.assistant_content as ProviderMessage['content'] | undefined) ?? content,
         rawToolCalls,
         messages,
         toolCalls,
@@ -551,7 +709,7 @@ export async function runDreamAgentLoop(
     2,
   );
 
-  const audit = parseDreamAuditJson(phaseOutputs.audit);
+  const audit = auditBackedByToolWrites(parseDreamAuditJson(phaseOutputs.audit), plan, toolCalls);
   return {
     narrative: JSON.stringify(audit, null, 2),
     toolCalls,

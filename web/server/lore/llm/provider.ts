@@ -35,6 +35,7 @@ export interface ProviderTextResponse {
 
 export interface ProviderToolResponse {
   content: string | null;
+  assistant_content?: ProviderMessage['content'];
   tool_calls: ProviderToolCall[];
   raw: unknown;
 }
@@ -47,6 +48,10 @@ function getJsonHeaders(apiKey: string, apiVersion = ''): HeadersInit {
   if (apiKey) headers.Authorization = `Bearer ${apiKey}`;
   if (apiVersion) headers['anthropic-version'] = apiVersion;
   return headers;
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return Boolean(value && typeof value === 'object' && !Array.isArray(value));
 }
 
 function normalizeAssistantContent(contentValue: ProviderMessage['content']): Array<Record<string, unknown>> {
@@ -63,10 +68,62 @@ function normalizeAssistantContent(contentValue: ProviderMessage['content']): Ar
     }
     if (type === 'thinking') {
       const thinkingText = typeof block.thinking === 'string' ? block.thinking : typeof block.text === 'string' ? block.text : '';
-      if (thinkingText.trim()) content.push({ type: 'text', text: `[thinking]\n${thinkingText}` });
+      if (thinkingText.trim()) {
+        const signature = typeof block.signature === 'string' ? block.signature : undefined;
+        content.push({
+          type: 'reasoning',
+          text: thinkingText,
+          ...(signature ? { providerOptions: { anthropic: { signature } } } : {}),
+        });
+      }
+      continue;
+    }
+    if (type === 'redacted_thinking') {
+      const data = typeof block.data === 'string' ? block.data : undefined;
+      if (data) content.push({ type: 'reasoning', text: '', providerOptions: { anthropic: { redactedData: data } } });
+      continue;
+    }
+    if (type === 'reasoning') {
+      const reasoningText = typeof block.text === 'string' ? block.text : '';
+      if (reasoningText.trim() || block.providerOptions || block.providerMetadata) {
+        content.push({
+          type: 'reasoning',
+          text: reasoningText,
+          ...(isRecord(block.providerOptions) ? { providerOptions: block.providerOptions } : {}),
+          ...(isRecord(block.providerMetadata) && !isRecord(block.providerOptions) ? { providerOptions: block.providerMetadata } : {}),
+        });
+      }
     }
   }
   return content;
+}
+
+function toProviderAssistantContent(responseMessages: unknown): ProviderMessage['content'] | undefined {
+  if (!Array.isArray(responseMessages)) return undefined;
+  const assistant = responseMessages.find((message): message is Record<string, unknown> => isRecord(message) && message.role === 'assistant');
+  if (!assistant) return undefined;
+  const content = assistant.content;
+  if (typeof content === 'string') return content;
+  if (!Array.isArray(content)) return undefined;
+
+  const preserved: Array<Record<string, unknown>> = [];
+  for (const part of content) {
+    if (!isRecord(part)) continue;
+    if (part.type === 'text' && typeof part.text === 'string') {
+      preserved.push({ type: 'text', text: part.text });
+      continue;
+    }
+    if (part.type === 'reasoning') {
+      preserved.push({
+        type: 'reasoning',
+        text: typeof part.text === 'string' ? part.text : '',
+        ...(isRecord(part.providerOptions) ? { providerOptions: part.providerOptions } : {}),
+        ...(isRecord(part.providerMetadata) && !isRecord(part.providerOptions) ? { providerMetadata: part.providerMetadata } : {}),
+      });
+    }
+  }
+
+  return preserved.length > 0 ? preserved : undefined;
 }
 
 export function buildProviderPrompt(messages: ProviderMessage[], toolResults: ProviderToolResultMessage[] = []): {
@@ -215,6 +272,7 @@ export async function generateTextWithTools(
 
   return {
     content: result.text.trim() || null,
+    assistant_content: toProviderAssistantContent(result.response.messages),
     tool_calls: toProviderToolCalls(result.toolCalls.map((call) => ({
       toolCallId: call.toolCallId,
       toolName: call.toolName,

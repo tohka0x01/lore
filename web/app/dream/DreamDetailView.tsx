@@ -165,70 +165,6 @@ function getSummaryBadges(entry: DreamEntry, t: (key: string) => string): Array<
   return badges;
 }
 
-function formatProtectedNodeBlockedDetail(payload: Record<string, unknown> | undefined, t: (key: string) => string): string {
-  if (!payload) return '';
-  const blockedUri = typeof payload.blocked_uri === 'string' ? payload.blocked_uri : '';
-  const requestedOldUri = typeof payload.requested_old_uri === 'string' ? payload.requested_old_uri : '';
-  const requestedNewUri = typeof payload.requested_new_uri === 'string' ? payload.requested_new_uri : '';
-  const tool = typeof payload.tool === 'string' ? payload.tool : '';
-
-  if (tool === 'update_node' && blockedUri) return `${t('Protected boot node')} ${blockedUri} ${t('cannot be updated')}`;
-  if (tool === 'delete_node' && blockedUri) return `${t('Protected boot node')} ${blockedUri} ${t('cannot be deleted')}`;
-  if (tool === 'move_node' && blockedUri) {
-    if (requestedNewUri && requestedNewUri === blockedUri) {
-      return requestedOldUri
-        ? `${t('Cannot move')} ${requestedOldUri} ${t('to protected boot path')} ${blockedUri}`
-        : `${t('Cannot move')} ${t('another node')} ${t('to protected boot path')} ${blockedUri}`;
-    }
-    return `${t('Protected boot node')} ${blockedUri} ${t('cannot be moved')}`;
-  }
-  if (blockedUri) return `${t('Protected boot node')} ${blockedUri} ${t('blocked the action')}`;
-  return '';
-}
-
-function getPolicyWarnings(payload: Record<string, unknown> | undefined): string[] {
-  if (!payload) return [];
-  const raw = Array.isArray(payload.policy_warnings)
-    ? payload.policy_warnings
-    : Array.isArray(payload.warnings)
-      ? payload.warnings
-      : [];
-  return Array.from(new Set(raw.filter((value): value is string => typeof value === 'string' && value.trim().length > 0).map((value) => value.trim())));
-}
-
-function formatPolicySignalDetail(payload: Record<string, unknown> | undefined): string {
-  if (!payload) return '';
-  const tool = typeof payload.tool === 'string' ? payload.tool : '';
-  const reason = typeof payload.reason === 'string'
-    ? payload.reason.trim()
-    : typeof payload.detail === 'string'
-      ? payload.detail.trim()
-      : '';
-  const warnings = getPolicyWarnings(payload);
-  const parts: string[] = [];
-  if (tool) parts.push(tool);
-  if (reason) parts.push(reason);
-  if (warnings.length > 0) parts.push(warnings.join(' · '));
-  return parts.join(' · ');
-}
-
-function pickWorkflowArgs(payload: Record<string, unknown> | undefined): string {
-  if (!payload) return '';
-  const preferredKeys = ['uri', 'old_uri', 'new_uri', 'requested_old_uri', 'requested_new_uri', 'blocked_uri', 'query', 'keyword', 'node_uuid', 'days', 'limit', 'priority'];
-  const compact: Record<string, unknown> = {};
-  for (const key of preferredKeys) {
-    if (payload[key] !== undefined) compact[key] = payload[key];
-  }
-  if (payload.tool && Object.keys(compact).length === 0) {
-    for (const [key, value] of Object.entries(payload)) {
-      if (key === 'tool' || key === 'turn' || key === 'ok' || key === 'result_preview') continue;
-      compact[key] = value;
-    }
-  }
-  const text = JSON.stringify(compact);
-  return text && text !== '{}' ? text : '';
-}
-
 function workflowEventLabel(eventType: string): string {
   switch (eventType) {
     case 'run_started': return 'Run started';
@@ -255,76 +191,138 @@ function workflowEventTone(eventType: string): 'green' | 'red' | 'orange' | 'blu
   return 'blue';
 }
 
-function buildWorkflowRows(
+type WorkflowStageRow = {
+  key: string;
+  label: string;
+  tone: 'green' | 'red' | 'orange' | 'blue' | 'default';
+  detail: string;
+  conclusion: string;
+  time: string | null;
+  status: 'running' | 'completed';
+};
+
+function formatStageSummary(summary: unknown, t: (key: string) => string): string {
+  if (!isRecord(summary)) return '';
+  const fields: Array<[string, string]> = [
+    ['turns', 'turns'],
+    ['tool_calls', 'calls'],
+    ['recall_queries', 'Recall queries'],
+    ['metadata_queries', 'Metadata queries'],
+    ['write_events', 'Write events'],
+  ];
+  return fields
+    .flatMap(([key, label]) => {
+      const value = summary[key];
+      return typeof value === 'number' && value > 0 ? [`${t(label)} ${value}`] : [];
+    })
+    .join(' · ');
+}
+
+function parseJsonRecord(text: string): Record<string, unknown> | null {
+  try {
+    const parsed: unknown = JSON.parse(text);
+    return isRecord(parsed) ? parsed : null;
+  } catch {
+    return null;
+  }
+}
+
+function firstStringItems(value: unknown, limit = 2): string[] {
+  return Array.isArray(value)
+    ? value.filter((item): item is string => typeof item === 'string' && item.trim().length > 0).slice(0, limit)
+    : [];
+}
+
+function objectArrayLength(value: unknown): number {
+  return Array.isArray(value) ? value.filter(isRecord).length : 0;
+}
+
+function formatStageConclusionFromNote(message: string, t: (key: string) => string): string {
+  const note = parseJsonRecord(message);
+  if (!note) return '';
+
+  const parts: string[] = [];
+  const recommendedFocus = typeof note.recommended_next_phase_focus === 'string' ? note.recommended_next_phase_focus : '';
+  if (recommendedFocus) parts.push(`${t('Focus')}: ${recommendedFocus}`);
+
+  const candidates = firstStringItems(note.high_confidence_next_candidates);
+  if (candidates.length > 0) parts.push(candidates.join(' · '));
+
+  const planCandidates = objectArrayLength(note.tree_maintenance_candidates);
+  if (planCandidates > 0) parts.push(`${t('Candidates')} ${planCandidates}`);
+
+  const recallRepairs = objectArrayLength(note.recall_repair_candidates);
+  if (recallRepairs > 0) parts.push(`${t('Recall repairs')} ${recallRepairs}`);
+
+  const validated = objectArrayLength(note.validated_candidates);
+  if (validated > 0) parts.push(`${t('Validated')} ${validated}`);
+
+  const recommendedApply = firstStringItems(note.recommended_apply);
+  if (recommendedApply.length > 0) parts.push(`${t('Recommended apply')} ${recommendedApply.length}`);
+
+  const appliedChanges = objectArrayLength(note.applied_changes);
+  if (appliedChanges > 0) parts.push(`${t('Applied changes')} ${appliedChanges}`);
+
+  const skipped = objectArrayLength(note.skipped);
+  if (skipped > 0) parts.push(`${t('Skipped')} ${skipped}`);
+
+  const changedNodes = objectArrayLength(note.changed_nodes);
+  if (changedNodes > 0) parts.push(`${t('Changed nodes')} ${changedNodes}`);
+
+  const confidence = typeof note.confidence === 'string' ? note.confidence : '';
+  if (confidence) parts.push(`${t('Confidence')}: ${confidence}`);
+
+  const expectedEffect = typeof note.expected_effect === 'string' ? note.expected_effect : '';
+  if (expectedEffect) parts.push(expectedEffect);
+
+  return parts.join(' · ');
+}
+
+function buildWorkflowStageRows(
   workflowEvents: DreamWorkflowEvent[],
   t: (key: string) => string,
-): Array<{ key: string; label: string; tone: 'green' | 'red' | 'orange' | 'blue' | 'default'; detail: string; time: string | null; }> {
-  const rows: Array<{ key: string; label: string; tone: 'green' | 'red' | 'orange' | 'blue' | 'default'; detail: string; time: string | null; }> = [];
-  const pendingTools = new Map<string, DreamWorkflowEvent>();
+): WorkflowStageRow[] {
+  const rowsByPhase = new Map<string, WorkflowStageRow>();
+  const conclusionsByPhase = new Map<string, string>();
+  const phaseOrder: string[] = [];
 
   for (const event of workflowEvents) {
-    if (event.event_type === 'tool_call_started') {
-      const tool = String(event.payload?.tool || 'tool');
-      const turn = String(event.payload?.turn || '');
-      pendingTools.set(`${turn}:${tool}`, event);
+    if (event.event_type === 'assistant_note') {
+      const message = typeof event.payload?.message === 'string' ? event.payload.message : '';
+      const phase = typeof event.payload?.phase === 'string' ? event.payload.phase : '';
+      const conclusion = formatStageConclusionFromNote(message, t);
+      if (phase && conclusion) {
+        conclusionsByPhase.set(phase, conclusion);
+        const existing = rowsByPhase.get(phase);
+        if (existing) rowsByPhase.set(phase, { ...existing, conclusion });
+      }
       continue;
     }
 
-    if (event.event_type === 'tool_call_finished') {
-      const tool = String(event.payload?.tool || 'tool');
-      const turn = String(event.payload?.turn || '');
-      const key = `${turn}:${tool}`;
-      const started = pendingTools.get(key);
-      pendingTools.delete(key);
-      rows.push({
-        key: `${event.id}`,
-        label: tool,
-        tone: event.payload?.ok === false ? 'red' : 'blue',
-        detail: pickWorkflowArgs((started?.payload as Record<string, unknown> | undefined) || event.payload),
-        time: event.created_at || started?.created_at || null,
-      });
+    if (event.event_type !== 'phase_started' && event.event_type !== 'phase_completed') {
       continue;
     }
-
-    if (event.event_type === 'llm_turn_started') continue;
-
-    if (event.event_type === 'phase_started' || event.event_type === 'phase_completed') {
-      rows.push({
-        key: `${event.id}`,
-        label: String(event.payload?.label || workflowEventLabel(event.event_type)),
-        tone: workflowEventTone(event.event_type),
-        detail: '',
-        time: event.created_at || null,
-      });
-      continue;
+    const phase = typeof event.payload?.phase === 'string' ? event.payload.phase : '';
+    const key = phase || `${event.id}`;
+    if (!rowsByPhase.has(key)) {
+      phaseOrder.push(key);
     }
-
-    rows.push({
-      key: `${event.id}`,
-      label: workflowEventLabel(event.event_type),
+    const existing = rowsByPhase.get(key);
+    rowsByPhase.set(key, {
+      key,
+      label: String(event.payload?.label || existing?.label || workflowEventLabel(event.event_type)),
       tone: workflowEventTone(event.event_type),
-      detail: event.event_type === 'assistant_note'
-        ? String(event.payload?.message || '')
-        : event.event_type === 'protected_node_blocked'
-          ? formatProtectedNodeBlockedDetail(event.payload, t)
-          : event.event_type === 'policy_validation_blocked' || event.event_type === 'policy_warning_emitted'
-            ? formatPolicySignalDetail(event.payload)
-            : '',
-      time: event.created_at || null,
+      detail: event.event_type === 'phase_completed' ? formatStageSummary(event.payload?.summary, t) : existing?.detail || '',
+      conclusion: conclusionsByPhase.get(key) || existing?.conclusion || '',
+      time: event.created_at || existing?.time || null,
+      status: event.event_type === 'phase_completed' ? 'completed' : existing?.status || 'running',
     });
   }
 
-  for (const event of pendingTools.values()) {
-    rows.push({
-      key: `pending-${event.id}`,
-      label: String(event.payload?.tool || 'tool'),
-      tone: 'blue',
-      detail: pickWorkflowArgs(event.payload),
-      time: event.created_at || null,
-    });
-  }
-
-  return rows;
+  return phaseOrder.flatMap((key) => {
+    const row = rowsByPhase.get(key);
+    return row ? [row] : [];
+  });
 }
 
 interface DreamDetailViewProps {
@@ -408,13 +406,13 @@ export function DreamDetailView({ entry, loading, canRollback, rollingBack, onBa
       )}
 
       {audit && (
-        <DreamAuditSection audit={audit} t={t} />
+        <DreamAuditSection audit={audit} showChangedNodesFallback={!entry.memory_changes?.length} t={t} />
       )}
 
       {(entry.status === 'running' || (entry.workflow_events && entry.workflow_events.length > 0)) && (
         <AgentWorkflowSection
           workflowEvents={entry.workflow_events || []}
-          defaultExpanded={entry.status === 'running'}
+          defaultExpanded
           t={t}
         />
       )}
@@ -444,11 +442,12 @@ export function DreamDetailView({ entry, loading, canRollback, rollingBack, onBa
 
 interface DreamAuditSectionProps {
   audit: DreamAudit;
+  showChangedNodesFallback: boolean;
   t: (key: string) => string;
 }
 
-function DreamAuditSection({ audit, t }: DreamAuditSectionProps): React.JSX.Element {
-  const changedNodes = audit.changed_nodes || [];
+function DreamAuditSection({ audit, showChangedNodesFallback, t }: DreamAuditSectionProps): React.JSX.Element {
+  const changedNodes = showChangedNodesFallback ? audit.changed_nodes || [] : [];
   const evidence = audit.evidence || [];
 
   return (
@@ -457,7 +456,7 @@ function DreamAuditSection({ audit, t }: DreamAuditSectionProps): React.JSX.Elem
         <div className="flex flex-wrap gap-2">
           {audit.primary_focus && <Badge tone="blue">{t('Primary focus')}: {audit.primary_focus}</Badge>}
           {audit.confidence && <Badge tone="green">{t('Confidence')}: {audit.confidence}</Badge>}
-          <Badge tone="default">{t('Changed nodes')}: {changedNodes.length}</Badge>
+          {showChangedNodesFallback && <Badge tone="default">{t('Changed nodes')}: {changedNodes.length}</Badge>}
           <Badge tone="default">{t('Evidence')}: {evidence.length}</Badge>
         </div>
 
@@ -529,7 +528,7 @@ interface AgentWorkflowSectionProps {
 
 function AgentWorkflowSection({ workflowEvents, defaultExpanded, t }: AgentWorkflowSectionProps): React.JSX.Element {
   const [expanded, setExpanded] = useState(defaultExpanded);
-  const rows = useMemo(() => buildWorkflowRows(workflowEvents, t), [workflowEvents, t]);
+  const rows = useMemo(() => buildWorkflowStageRows(workflowEvents, t), [workflowEvents, t]);
 
   useEffect(() => {
     setExpanded(defaultExpanded);
@@ -537,10 +536,14 @@ function AgentWorkflowSection({ workflowEvents, defaultExpanded, t }: AgentWorkf
 
   return (
     <Section
-      title={t('Agent Workflow')}
+      title={t('Agent Stages')}
       subtitle={`${rows.length}`}
       right={
-        <Button variant="ghost" onClick={() => setExpanded(!expanded)}>
+        <Button
+          aria-label={expanded ? t('Collapse agent stages') : t('Expand agent stages')}
+          variant="ghost"
+          onClick={() => setExpanded(!expanded)}
+        >
           <span aria-hidden>{expanded ? '▲' : '▼'}</span>
         </Button>
       }
@@ -551,9 +554,11 @@ function AgentWorkflowSection({ workflowEvents, defaultExpanded, t }: AgentWorkf
           <div className="space-y-2 max-h-[360px] overflow-y-auto sm:max-h-[560px]">
             {rows.map((row) => (
               <div key={row.key} className="flex items-start gap-2 rounded-xl border border-separator-thin bg-bg-raised px-3 py-3">
-                <Badge tone={row.tone}>{t(row.label)}</Badge>
-                <div className="min-w-0 flex-1">
-                  {row.detail && <div className="truncate text-xs font-mono text-txt-secondary">{row.detail}</div>}
+                <Badge tone={row.tone}>{t(row.status)}</Badge>
+                <div className="min-w-0 flex-1 text-sm">
+                  <div className="font-medium text-txt-primary">{t(row.label)}</div>
+                  {row.detail && <div className="mt-0.5 truncate text-xs text-txt-tertiary">{row.detail}</div>}
+                  {row.conclusion && <div className="mt-1 text-xs leading-relaxed text-txt-secondary">{row.conclusion}</div>}
                 </div>
                 <span className="shrink-0 text-xs text-txt-tertiary">{fmtDate(row.time)}</span>
               </div>

@@ -1328,6 +1328,41 @@ describe('runDreamAgentLoop', () => {
     expect(events.find((event) => event.type === 'phase_completed' && event.payload?.phase === 'audit')).toBeTruthy();
   });
 
+  it('does not report no_change when the apply phase already wrote memory but audit prose is not JSON', async () => {
+    mockGenerateTextWithTools.mockReset();
+    mockGenerateTextWithTools
+      .mockResolvedValueOnce(makeTextResponse('{"diagnosis":"extract recall truncation decision"}'))
+      .mockResolvedValueOnce(makeTextResponse('{"tree_maintenance_candidates":[],"daily_memory_extraction_candidates":[{"action":"create_node","uri":"project://lore_integration/recall_system/recall_query_text_truncation_strategy"}],"recall_repair_candidates":[],"skip_reasons":[]}'))
+      .mockResolvedValueOnce(makeTextResponse('{"validated":["project://lore_integration/recall_system/recall_query_text_truncation_strategy"]}'))
+      .mockResolvedValueOnce(makeToolResponse([
+        { id: 'call-1', function: { name: 'create_node', arguments: '{"uri":"project://lore_integration/recall_system/recall_query_text_truncation_strategy","content":"decision","priority":2}' } },
+      ]))
+      .mockResolvedValueOnce(makeTextResponse('{"applied":["project://lore_integration/recall_system/recall_query_text_truncation_strategy"]}'))
+      .mockResolvedValueOnce(makeTextResponse('Phase 6 audit complete. Single high-confidence write executed — `recall_query_text_truncation_strategy` created under `recall_system`.'));
+    mockCreateNode.mockResolvedValue({
+      success: true,
+      operation: 'create',
+      uri: 'project://lore_integration/recall_system/recall_query_text_truncation_strategy',
+      path: 'lore_integration/recall_system/recall_query_text_truncation_strategy',
+      node_uuid: 'new1',
+    } as any);
+
+    const result = await runDreamAgentLoop(config(), makeInitialContext());
+    const audit = JSON.parse(result.narrative);
+
+    expect(audit.primary_focus).not.toBe('no_change');
+    expect(audit.changed_nodes).toEqual([
+      {
+        uri: 'project://lore_integration/recall_system/recall_query_text_truncation_strategy',
+        action: 'create',
+        result: 'success',
+      },
+    ]);
+    expect(audit.evidence).toEqual(expect.arrayContaining([
+      expect.objectContaining({ reason: expect.stringContaining('create_node succeeded') }),
+    ]));
+  });
+
   it('executes tools inside the phase that allows them', async () => {
     mockGenerateTextWithTools
       .mockResolvedValueOnce(makeToolResponse([{ id: 'call-1', function: { name: 'list_domains', arguments: '{}' } }]))
@@ -1346,6 +1381,36 @@ describe('runDreamAgentLoop', () => {
     expect(result.toolCalls).toHaveLength(1);
     expect(result.toolCalls[0]).toMatchObject({ tool: 'list_domains', result_size_chars: expect.any(Number) });
     expect(events.map((event) => event.type)).toEqual(expect.arrayContaining(['tool_call_started', 'tool_call_finished']));
+  });
+
+  it('replays provider assistant content after tool calls', async () => {
+    mockGenerateTextWithTools.mockReset();
+    const assistantContent = [
+      { type: 'reasoning', text: 'deepseek thinking', providerOptions: { anthropic: { signature: 'sig-1' } } },
+      { type: 'text', text: 'calling list domains' },
+    ];
+    mockGenerateTextWithTools
+      .mockResolvedValueOnce({
+        content: null,
+        assistant_content: assistantContent,
+        tool_calls: [{ id: 'call-1', function: { name: 'list_domains', arguments: '{}' } }],
+        raw: {},
+      })
+      .mockResolvedValueOnce(makeTextResponse('{"diagnosis":"done"}'))
+      .mockResolvedValueOnce(makeTextResponse('{"tree_maintenance_candidates":[],"daily_memory_extraction_candidates":[],"recall_repair_candidates":[],"skip_reasons":[]}'))
+      .mockResolvedValueOnce(makeTextResponse('{"preflight":"none"}'))
+      .mockResolvedValueOnce(makeTextResponse('{"applied":[]}'))
+      .mockResolvedValueOnce(makeTextResponse('{"primary_focus":"no_change","changed_nodes":[],"evidence":[],"why_not_more_changes":"","expected_effect":"","confidence":"medium"}'));
+
+    mockListDomains.mockResolvedValue(['core'] as any);
+    await runDreamAgentLoop(config('anthropic'), makeInitialContext());
+
+    const secondCallMessages = mockGenerateTextWithTools.mock.calls[1][1];
+    expect(secondCallMessages).toContainEqual({
+      role: 'assistant',
+      content: assistantContent,
+      tool_calls: [{ id: 'call-1', function: { name: 'list_domains', arguments: '{}' } }],
+    });
   });
 
   it('blocks writes after two successful apply mutations', async () => {

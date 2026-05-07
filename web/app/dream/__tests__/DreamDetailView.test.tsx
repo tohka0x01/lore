@@ -68,4 +68,157 @@ describe('DreamDetailView', () => {
     expect(html).toContain('后续查询新版 Dream 定义时更稳定命中。');
     expect(html).toContain('high');
   });
+
+  it('shows final memory changes instead of repeating audit changed nodes', () => {
+    const audit = {
+      primary_focus: 'tree_maintenance',
+      changed_nodes: [
+        {
+          uri: 'project://lore_integration/dream_system/dream_prompt_workflow_review',
+          action: 'update_node',
+          result: 'success',
+          changes: ['audit duplicate summary'],
+        },
+      ],
+      expected_effect: 'future recall improves',
+      confidence: 'high',
+    };
+
+    const html = renderToStaticMarkup(
+      <DreamDetailView
+        entry={entry({
+          raw_narrative: JSON.stringify(audit),
+          memory_changes: [
+            {
+              type: 'update',
+              uri: 'project://lore_integration/dream_system/dream_prompt_workflow_review',
+              before: { content: 'before' },
+              after: { content: 'after' },
+            },
+          ],
+        })}
+        loading={false}
+        canRollback={false}
+        rollingBack={false}
+        onBack={() => undefined}
+        onRollback={() => undefined}
+        t={(key) => key}
+      />,
+    );
+
+    expect(html).toContain('Dream Audit');
+    expect(html).toContain('Memory Changes');
+    expect(html).not.toContain('audit duplicate summary');
+    expect(html).not.toContain('Changed nodes');
+    const uri = 'project://lore_integration/dream_system/dream_prompt_workflow_review';
+    expect(html.split(uri).length - 1).toBe(1);
+  });
+
+  it('shows agent stages without detailed tool workflow events', () => {
+    const html = renderToStaticMarkup(
+      <DreamDetailView
+        entry={entry({
+          status: 'running',
+          workflow_events: [
+            {
+              id: 1,
+              diary_id: 1,
+              event_type: 'phase_started',
+              payload: { phase: 'diagnose', label: 'Read-only diagnosis' },
+              created_at: '2024-01-01T00:00:00Z',
+            },
+            {
+              id: 2,
+              diary_id: 1,
+              event_type: 'tool_call_started',
+              payload: { tool: 'get_node', turn: 1 },
+              created_at: '2024-01-01T00:00:01Z',
+            },
+            {
+              id: 3,
+              diary_id: 1,
+              event_type: 'tool_call_finished',
+              payload: { tool: 'get_node', turn: 1, ok: true },
+              created_at: '2024-01-01T00:00:02Z',
+            },
+            {
+              id: 4,
+              diary_id: 1,
+              event_type: 'assistant_note',
+              payload: { message: 'verbose diagnostic note' },
+              created_at: '2024-01-01T00:00:03Z',
+            },
+            {
+              id: 5,
+              diary_id: 1,
+              event_type: 'phase_completed',
+              payload: { phase: 'diagnose', label: 'Read-only diagnosis', summary: { turns: 1, tool_calls: 1 } },
+              created_at: '2024-01-01T00:00:04Z',
+            },
+          ],
+        })}
+        loading={false}
+        canRollback={false}
+        rollingBack={false}
+        onBack={() => undefined}
+        onRollback={() => undefined}
+        t={(key) => key}
+      />,
+    );
+
+    expect(html).toContain('Agent Stages');
+    expect(html).toContain('Read-only diagnosis');
+    expect(html).not.toContain('Agent Workflow');
+    expect(html).not.toContain('get_node');
+    expect(html).not.toContain('verbose diagnostic note');
+  });
+
+  it('shows derived stage conclusions from structured assistant notes', () => {
+    const html = renderToStaticMarkup(
+      <DreamDetailView
+        entry={entry({
+          status: 'running',
+          workflow_events: [
+            {
+              id: 1,
+              diary_id: 1,
+              event_type: 'phase_started',
+              payload: { phase: 'diagnose', label: 'Read-only diagnosis' },
+              created_at: '2024-01-01T00:00:00Z',
+            },
+            {
+              id: 2,
+              diary_id: 1,
+              event_type: 'assistant_note',
+              payload: {
+                phase: 'diagnose',
+                message: JSON.stringify({
+                  recommended_next_phase_focus: 'tree_maintenance',
+                  high_confidence_next_candidates: ['更新 workflow review 节点', '更新 diary prompt 节点'],
+                }),
+              },
+              created_at: '2024-01-01T00:00:03Z',
+            },
+            {
+              id: 3,
+              diary_id: 1,
+              event_type: 'phase_completed',
+              payload: { phase: 'diagnose', label: 'Read-only diagnosis', summary: { turns: 1, tool_calls: 1 } },
+              created_at: '2024-01-01T00:00:04Z',
+            },
+          ],
+        })}
+        loading={false}
+        canRollback={false}
+        rollingBack={false}
+        onBack={() => undefined}
+        onRollback={() => undefined}
+        t={(key) => key}
+      />,
+    );
+
+    expect(html).toContain('tree_maintenance');
+    expect(html).toContain('更新 workflow review 节点');
+    expect(html).toContain('calls 1');
+  });
 });

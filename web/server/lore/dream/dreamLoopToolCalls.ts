@@ -17,7 +17,7 @@ interface DreamLoopToolCallLogEntry {
 
 interface ProcessDreamToolCallsOptions {
   turn: number;
-  content: string;
+  content: ProviderMessage['content'];
   rawToolCalls: ProviderToolCall[];
   messages: ProviderMessage[];
   toolCalls: DreamLoopToolCallLogEntry[];
