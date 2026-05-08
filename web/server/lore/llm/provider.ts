@@ -40,6 +40,10 @@ export interface ProviderToolResponse {
   raw: unknown;
 }
 
+interface BuildProviderPromptOptions {
+  preserveUnsignedThinking?: boolean;
+}
+
 function getJsonHeaders(apiKey: string, apiVersion = ''): HeadersInit {
   const headers: Record<string, string> = {
     Accept: 'application/json',
@@ -54,7 +58,43 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return Boolean(value && typeof value === 'object' && !Array.isArray(value));
 }
 
-function normalizeAssistantContent(contentValue: ProviderMessage['content']): Array<Record<string, unknown>> {
+function hasAnthropicReasoningMetadata(block: Record<string, unknown>): boolean {
+  const providerOptions = isRecord(block.providerOptions) ? block.providerOptions : undefined;
+  const providerMetadata = isRecord(block.providerMetadata) ? block.providerMetadata : undefined;
+  const anthropic = isRecord(providerOptions?.anthropic)
+    ? providerOptions.anthropic
+    : isRecord(providerMetadata?.anthropic)
+      ? providerMetadata.anthropic
+      : undefined;
+  return anthropic !== undefined
+    && (typeof anthropic.signature === 'string' || typeof anthropic.redactedData === 'string');
+}
+
+function withUnsignedThinkingMetadata(
+  block: Record<string, unknown>,
+  options: BuildProviderPromptOptions,
+): Record<string, unknown> {
+  if (!options.preserveUnsignedThinking || hasAnthropicReasoningMetadata(block)) {
+    return block;
+  }
+  return {
+    ...block,
+    providerOptions: {
+      ...(isRecord(block.providerOptions) ? block.providerOptions : {}),
+      anthropic: {
+        ...(isRecord((block.providerOptions as Record<string, unknown> | undefined)?.anthropic)
+          ? (block.providerOptions as Record<string, Record<string, unknown>>).anthropic
+          : {}),
+        signature: '',
+      },
+    },
+  };
+}
+
+function normalizeAssistantContent(
+  contentValue: ProviderMessage['content'],
+  options: BuildProviderPromptOptions = {},
+): Array<Record<string, unknown>> {
   if (!Array.isArray(contentValue)) {
     return contentValue ? [{ type: 'text', text: contentValue }] : [];
   }
@@ -70,11 +110,11 @@ function normalizeAssistantContent(contentValue: ProviderMessage['content']): Ar
       const thinkingText = typeof block.thinking === 'string' ? block.thinking : typeof block.text === 'string' ? block.text : '';
       if (thinkingText.trim()) {
         const signature = typeof block.signature === 'string' ? block.signature : undefined;
-        content.push({
+        content.push(withUnsignedThinkingMetadata({
           type: 'reasoning',
           text: thinkingText,
-          ...(signature ? { providerOptions: { anthropic: { signature } } } : {}),
-        });
+          ...(signature !== undefined ? { providerOptions: { anthropic: { signature } } } : {}),
+        }, options));
       }
       continue;
     }
@@ -86,16 +126,42 @@ function normalizeAssistantContent(contentValue: ProviderMessage['content']): Ar
     if (type === 'reasoning') {
       const reasoningText = typeof block.text === 'string' ? block.text : '';
       if (reasoningText.trim() || block.providerOptions || block.providerMetadata) {
-        content.push({
+        content.push(withUnsignedThinkingMetadata({
           type: 'reasoning',
           text: reasoningText,
           ...(isRecord(block.providerOptions) ? { providerOptions: block.providerOptions } : {}),
           ...(isRecord(block.providerMetadata) && !isRecord(block.providerOptions) ? { providerOptions: block.providerMetadata } : {}),
-        });
+        }, options));
       }
     }
   }
   return content;
+}
+
+function isNonSigningAnthropicEndpoint(config: ResolvedViewLlmConfig): boolean {
+  if (config.provider !== 'anthropic') return false;
+  const model = String(config.model || '').toLowerCase();
+  if (model.includes('deepseek') || model.includes('zai') || model.includes('z.ai') || model.includes('glm-')) {
+    return true;
+  }
+  const baseUrl = String(config.base_url || '').trim();
+  if (!baseUrl) return false;
+  try {
+    const hostname = new URL(baseUrl).hostname.toLowerCase();
+    return hostname === 'api.deepseek.com'
+      || hostname.endsWith('.deepseek.com')
+      || hostname === 'api.z.ai'
+      || hostname.endsWith('.z.ai')
+      || hostname === 'open.bigmodel.cn'
+      || hostname.endsWith('.bigmodel.cn');
+  } catch {
+    const lower = baseUrl.toLowerCase();
+    return lower.includes('deepseek') || lower.includes('z.ai') || lower.includes('bigmodel');
+  }
+}
+
+function buildProviderPromptOptions(config: ResolvedViewLlmConfig): BuildProviderPromptOptions {
+  return { preserveUnsignedThinking: isNonSigningAnthropicEndpoint(config) };
 }
 
 function toProviderAssistantContent(responseMessages: unknown): ProviderMessage['content'] | undefined {
@@ -126,7 +192,11 @@ function toProviderAssistantContent(responseMessages: unknown): ProviderMessage[
   return preserved.length > 0 ? preserved : undefined;
 }
 
-export function buildProviderPrompt(messages: ProviderMessage[], toolResults: ProviderToolResultMessage[] = []): {
+export function buildProviderPrompt(
+  messages: ProviderMessage[],
+  toolResults: ProviderToolResultMessage[] = [],
+  options: BuildProviderPromptOptions = {},
+): {
   system: string | undefined;
   messages: ModelMessage[];
 } {
@@ -143,7 +213,7 @@ export function buildProviderPrompt(messages: ProviderMessage[], toolResults: Pr
     if (message.role === 'system') continue;
 
     if (message.role === 'assistant') {
-      const content = normalizeAssistantContent(message.content);
+      const content = normalizeAssistantContent(message.content, options);
       for (const call of message.tool_calls || []) {
         let input: Record<string, unknown> = {};
         try {
@@ -223,7 +293,7 @@ export async function generateText(
   config: ResolvedViewLlmConfig,
   messages: ProviderMessage[],
 ): Promise<ProviderTextResponse> {
-  const prompt = buildProviderPrompt(messages);
+  const prompt = buildProviderPrompt(messages, [], buildProviderPromptOptions(config));
   const result = await generateSdkText({
     model: createLanguageModel(config),
     system: prompt.system,
@@ -256,7 +326,7 @@ export async function generateTextWithTools(
     throw new Error(`Configured provider does not support tools: ${config.provider}`);
   }
 
-  const prompt = buildProviderPrompt(messages, toolResults);
+  const prompt = buildProviderPrompt(messages, toolResults, buildProviderPromptOptions(config));
   const result = await generateSdkText({
     model: createLanguageModel(config),
     system: prompt.system,

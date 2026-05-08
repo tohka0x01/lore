@@ -39,4 +39,39 @@ describe('buildProviderPrompt', () => {
     expect(JSON.stringify(prompt.messages)).toContain('calling tool');
     expect(JSON.stringify(prompt.messages)).toContain('tool-result');
   });
+
+  it('keeps unsigned thinking blocks replayable for non-signing Anthropic-compatible endpoints', () => {
+    const messages: ProviderMessage[] = [
+      { role: 'user', content: 'start' },
+      {
+        role: 'assistant',
+        content: [
+          { type: 'thinking', thinking: 'unsigned thinking from DeepSeek' },
+          { type: 'reasoning', text: 'unsigned reasoning from SDK response' },
+          { type: 'text', text: 'calling tool' },
+        ],
+        tool_calls: [{ id: 'call-1', function: { name: 'list_domains', arguments: '{}' } }],
+      },
+    ];
+
+    const prompt = buildProviderPrompt(messages, [], { preserveUnsignedThinking: true });
+
+    expect(prompt.messages[1]).toMatchObject({
+      role: 'assistant',
+      content: [
+        {
+          type: 'reasoning',
+          text: 'unsigned thinking from DeepSeek',
+          providerOptions: { anthropic: { signature: '' } },
+        },
+        {
+          type: 'reasoning',
+          text: 'unsigned reasoning from SDK response',
+          providerOptions: { anthropic: { signature: '' } },
+        },
+        { type: 'text', text: 'calling tool' },
+        { type: 'tool-call', toolCallId: 'call-1' },
+      ],
+    });
+  });
 });
