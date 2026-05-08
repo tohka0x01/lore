@@ -363,6 +363,41 @@ describe('browse route contracts', () => {
     }
   });
 
+  it('returns both truncation and timeout notices when an overlong recall times out', async () => {
+    vi.useFakeTimers();
+    try {
+      mockRecallMemories.mockImplementationOnce(() => new Promise(() => {}) as any);
+
+      const request = new Request('http://localhost/api/browse/recall', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ query: 'x'.repeat(250) }),
+      }) as any;
+      request.nextUrl = new URL(request.url);
+
+      const responsePromise = recallRoute.POST(request);
+      await vi.advanceTimersByTimeAsync(2001);
+      const response = await responsePromise;
+      const body = await response.json();
+
+      expect(response.status).toBe(200);
+      expect(body.items.map((item: Record<string, unknown>) => item.uri)).toEqual([
+        'notice://recall/query_truncated',
+        'notice://recall/timeout',
+      ]);
+      expect(body.items[0].cues[0]).toContain('first 200 characters');
+      expect(body.items[1].cues[0]).toContain('Recall took longer than 2 seconds');
+      expect(body.retrieval_meta).toMatchObject({
+        query_truncated: true,
+        query_char_limit: 200,
+        recall_timed_out: true,
+        timeout_ms: 2000,
+      });
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it('uses configured recall timeout from settings', async () => {
     vi.useFakeTimers();
     try {

@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { normalizeClientType, requireBearerAuth } from '../../../../server/auth';
 import { jsonContractError } from '../../../../server/lore/contracts';
 import { loadRecallSafetyConfig, recallMemories } from '../../../../server/lore/recall/recall';
+import { limitRecallQuery, resolveRecallQuery } from '../../../../server/lore/recall/recallQuery';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -51,7 +52,18 @@ function withRecallNotices(payload: Record<string, unknown>): Record<string, unk
   };
 }
 
-function timeoutPayload(timeoutMs: number): Record<string, unknown> {
+function timeoutPayload(timeoutMs: number, body: Record<string, unknown>, maxQueryChars: number): Record<string, unknown> {
+  const limitedQuery = limitRecallQuery(resolveRecallQuery(String(body?.query || '')), maxQueryChars);
+  const retrievalMeta: Record<string, unknown> = {
+    recall_timed_out: true,
+    timeout_ms: timeoutMs,
+  };
+  if (limitedQuery.truncated) {
+    retrievalMeta.query_chars = limitedQuery.queryChars;
+    retrievalMeta.original_query_chars = limitedQuery.originalQueryChars;
+    retrievalMeta.query_truncated = true;
+    retrievalMeta.query_char_limit = limitedQuery.limit;
+  }
   return {
     query: '',
     candidates: [],
@@ -59,21 +71,23 @@ function timeoutPayload(timeoutMs: number): Record<string, unknown> {
     suppressed: { boot: 0, read: 0, score: 0 },
     boot_uris: [],
     read_node_display_mode: 'soft',
-    retrieval_meta: {
-      recall_timed_out: true,
-      timeout_ms: timeoutMs,
-    },
+    retrieval_meta: retrievalMeta,
     event_log: { enabled: false },
   };
 }
 
-async function withTimeout<T>(promise: Promise<T>, timeoutMs: number): Promise<T | Record<string, unknown>> {
+async function withTimeout<T>(
+  promise: Promise<T>,
+  timeoutMs: number,
+  body: Record<string, unknown>,
+  maxQueryChars: number,
+): Promise<T | Record<string, unknown>> {
   let timeout: ReturnType<typeof setTimeout> | null = null;
   try {
     return await Promise.race([
       promise,
       new Promise<Record<string, unknown>>((resolve) => {
-        timeout = setTimeout(() => resolve(timeoutPayload(timeoutMs)), timeoutMs);
+        timeout = setTimeout(() => resolve(timeoutPayload(timeoutMs, body, maxQueryChars)), timeoutMs);
       }),
     ]);
   } finally {
@@ -88,7 +102,12 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     const body = await request.json();
     const clientType = normalizeClientType(new URL(request.url).searchParams.get('client_type'));
     const safetyConfig = await loadRecallSafetyConfig();
-    const payload = await withTimeout(recallMemories(body, { clientType }), safetyConfig.timeout_ms);
+    const payload = await withTimeout(
+      recallMemories(body, { clientType }),
+      safetyConfig.timeout_ms,
+      body,
+      safetyConfig.max_query_chars,
+    );
     return NextResponse.json(withRecallNotices(payload as Record<string, unknown>));
   } catch (error) {
     return jsonContractError(error, 'Recall failed');

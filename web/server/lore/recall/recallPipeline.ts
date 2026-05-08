@@ -28,6 +28,7 @@ import { getSessionReadUris } from './recallSessionReads';
 
 export interface RecallPipelineResult {
   query: string;
+  retrieval_query: string;
   session_id: string | null;
   resolved_embedding: EmbeddingConfig;
   index: Record<string, unknown>;
@@ -95,23 +96,24 @@ export async function runRecallPipeline(
 ): Promise<RecallPipelineResult> {
   const rawQuery = body.query || '';
   const safetyConfig = await loadRecallSafetyConfig();
-  const limitedQuery = limitRecallQuery(resolveRecallQuery(rawQuery), safetyConfig.max_query_chars);
-  body.query = limitedQuery.query;
+  const resolvedQuery = String(resolveRecallQuery(rawQuery) || '').trim();
+  const limitedQuery = limitRecallQuery(resolvedQuery, safetyConfig.max_query_chars);
+  const retrievalQuery = limitedQuery.query;
 
   const resolvedEmbedding = await resolveEmbeddingConfig(body?.embedding || null);
   const index = await ensureMemoryViewsReady();
   const scoringConfig = await loadRecallScoringConfig();
   const displayConfig = await loadRecallDisplayConfig();
 
-  scoringConfig.query_tokens = await countQueryTokens(body.query);
+  scoringConfig.query_tokens = await countQueryTokens(retrievalQuery);
 
-  const [queryVector] = await embedTexts(resolvedEmbedding, [body.query]);
+  const [queryVector] = await embedTexts(resolvedEmbedding, [retrievalQuery]);
   const maxDisplayItems = Number(body.max_display_items ?? displayConfig.max_display_items);
   const candidateLimit = Math.max(body.limit || 12, maxDisplayItems, 1) * 8;
 
   const [exactRows, glossarySemanticRows, denseRows, lexicalRows] = await Promise.all([
     fetchExactMemoryRows({
-      query: body.query,
+      query: retrievalQuery,
       limit: candidateLimit,
       domain: body.domain || null,
     }),
@@ -128,7 +130,7 @@ export async function runRecallPipeline(
       domain: body.domain || null,
     }),
     fetchLexicalMemoryViewRows({
-      query: body.query,
+      query: retrievalQuery,
       limit: candidateLimit,
       domain: body.domain || null,
     }),
@@ -158,7 +160,8 @@ export async function runRecallPipeline(
   });
 
   return {
-    query: body.query,
+    query: resolvedQuery,
+    retrieval_query: retrievalQuery,
     session_id: body.session_id || null,
     resolved_embedding: resolvedEmbedding,
     index: index as Record<string, unknown>,

@@ -250,18 +250,21 @@ describe('runRecallPipeline', () => {
     });
   });
 
-  it('limits overlong recall query text to 200 characters for retrieval', async () => {
+  it('limits overlong recall query text to 200 characters only for retrieval', async () => {
     const aggregateCandidates = vi.fn().mockReturnValue(aggregated);
     const longQuery = 'a'.repeat(250);
+    const body = { query: longQuery };
 
-    const result = await runRecallPipeline({ query: longQuery }, { aggregateCandidates });
+    const result = await runRecallPipeline(body, { aggregateCandidates });
 
     const truncatedQuery = 'a'.repeat(200);
     expect(mockCountQueryTokens).toHaveBeenCalledWith(truncatedQuery);
     expect(mockEmbedTexts).toHaveBeenCalledWith(resolvedEmbedding, [truncatedQuery]);
     expect(mockFetchExactMemoryRows).toHaveBeenCalledWith(expect.objectContaining({ query: truncatedQuery }));
     expect(mockFetchLexicalMemoryViewRows).toHaveBeenCalledWith(expect.objectContaining({ query: truncatedQuery }));
-    expect(result.query).toBe(truncatedQuery);
+    expect(body.query).toBe(longQuery);
+    expect(result.query).toBe(longQuery);
+    expect(result.retrieval_query).toBe(truncatedQuery);
     expect(result.retrieval_meta).toMatchObject({
       query_chars: 200,
       original_query_chars: 250,
@@ -282,7 +285,8 @@ describe('runRecallPipeline', () => {
     expect(mockEmbedTexts).toHaveBeenCalledWith(resolvedEmbedding, [truncatedQuery]);
     expect(mockFetchExactMemoryRows).toHaveBeenCalledWith(expect.objectContaining({ query: truncatedQuery }));
     expect(mockFetchLexicalMemoryViewRows).toHaveBeenCalledWith(expect.objectContaining({ query: truncatedQuery }));
-    expect(result.query).toBe(truncatedQuery);
+    expect(result.query).toBe(longQuery);
+    expect(result.retrieval_query).toBe(truncatedQuery);
     expect(result.retrieval_meta).toMatchObject({
       query_chars: 80,
       original_query_chars: 120,
