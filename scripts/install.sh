@@ -193,8 +193,8 @@ download_artifact() {
 multi_select() {
   local channels=("claudecode" "codex" "pi" "openclaw" "hermes")
   local labels=(
-    "Claude Code  (MCP + boot/recall hooks + guidance rules)"
-    "Codex        (local marketplace + MCP + hooks)"
+    "Claude Code  (MCP + boot/recall hooks + CLAUDE.md guidance)"
+    "Codex        (local marketplace + MCP + hooks + AGENTS.md)"
     "Pi           (extension + tools + startup hooks)"
     "OpenClaw     (runtime plugin + boot/recall + tools)"
     "Hermes       (MemoryProvider plugin + tools + recall)"
@@ -202,73 +202,59 @@ multi_select() {
   local cmds=("claude" "codex" "pi" "openclaw" "python3")
   local n=${#channels[@]}
 
-  local detected=()
+  # Build label list with detection marks
+  local opts=()
   for i in $(seq 0 $((n - 1))); do
-    if have_command "${cmds[$i]}"; then detected+=("1"); else detected+=("0"); fi
+    local mark=""
+    if have_command "${cmds[$i]}"; then mark=" (detected)"; else mark=" (not found)"; fi
+    opts+=("${channels[$i]}: ${labels[$i]}${mark}")
   done
 
-  local selected=()
-  for i in $(seq 0 $((n - 1))); do selected+=("0"); done
-  local cursor=0
-
-  local old_tty
-  old_tty=$(stty -g 2>/dev/null || true)
-  stty -echo -icanon min 0 time 0 2>/dev/null || true
-  trap 'stty "$old_tty" 2>/dev/null || true' EXIT
-
-  draw_menu() {
-    if [[ ${_menu_drawn:-0} -gt 0 ]]; then printf '\033[%dA' "$((_menu_lines))"; fi
-    _menu_lines=$((n + 4))
+  local selected
+  if have_command gum; then
     echo ""
     echo -e "${BOLD}Select channels (Space=toggle, Enter=confirm):${NC}"
     echo ""
+    selected=$(printf '%s\n' "${opts[@]}" | gum choose --no-limit --height=8 \
+      --selected-prefix=' ◉ ' --unselected-prefix=' ○ ' \
+      --cursor-prefix='> ' \
+      2>/dev/null) || {
+      err "gum failed. Try: brew install gum or set LORE_INSTALL_CHANNELS=..."
+      exit 1
+    }
+  else
+    echo ""
+    echo -e "${BOLD}Available channels:${NC}"
+    echo ""
     for i in $(seq 0 $((n - 1))); do
-      local label="${labels[$i]}" sel="${selected[$i]}" prefix="○"
-      if [[ "$sel" == "1" ]]; then prefix="◉"; fi
-      if [[ "$i" == "$cursor" ]]; then
-        if [[ "$sel" == "1" ]]; then
-          echo -e "  ${GREEN}${BOLD}> ${prefix} ${label}${NC}"
-        else
-          echo -e "  ${BOLD}> ${prefix} ${label}${NC}"
-        fi
-      else
-        if [[ "$sel" == "1" ]]; then
-          echo -e "  ${GREEN}  ${prefix} ${label}${NC}"
-        else
-          echo -e "    ${prefix} ${label}"
-        fi
-      fi
-      printf '\033[1A'; printf '\033[60C'
-      if [[ "${detected[$i]}" == "1" ]]; then
-        echo -e "${GREEN}(detected)${NC}"
-      else
-        echo -e "${YELLOW}(not found)${NC}"
+      echo "  [$((i+1))] ${opts[$i]}"
+    done
+    echo "  [a] All channels"
+    echo ""
+    echo -e "${YELLOW}Tip: brew install gum for interactive multi-select${NC}"
+    read -r -p "Enter comma-separated numbers or 'a': " input
+    if [[ "$input" =~ ^[Aa]$ ]]; then
+      CHANNELS=("${channels[@]}")
+      echo ""; return
+    fi
+    CHANNELS=()
+    IFS=',' read -ra nums <<< "$input"
+    for num in "${nums[@]}"; do
+      num=$(echo "$num" | xargs)
+      if [[ "$num" =~ ^[1-5]$ ]]; then
+        CHANNELS+=("${channels[$((num-1))]}")
       fi
     done
-    _menu_drawn=1
-  }
-
-  while true; do
-    draw_menu
-    local key; key=$(dd bs=3 count=1 2>/dev/null | xxd -p)
-    case "$key" in
-      6a|1b5b42) cursor=$(( (cursor + 1) % n ));;
-      6b|1b5b41) cursor=$(( (cursor - 1 + n) % n ));;
-      20)
-        if [[ "${selected[$cursor]}" == "1" ]]; then selected[$cursor]="0"
-        else selected[$cursor]="1"; fi;;
-      0a|0d) echo ""; echo ""; break;;
-      61) for i in $(seq 0 $((n - 1))); do selected[$i]="1"; done;;
-      71) stty "$old_tty" 2>/dev/null || true; echo ""; err "Aborted."; exit 1;;
-    esac
-  done
-
-  stty "$old_tty" 2>/dev/null || true; trap - EXIT
+    if [[ ${#CHANNELS[@]} -eq 0 ]]; then err "No channels selected."; exit 1; fi
+    echo ""; return
+  fi
 
   CHANNELS=()
-  for i in $(seq 0 $((n - 1))); do
-    if [[ "${selected[$i]}" == "1" ]]; then CHANNELS+=("${channels[$i]}"); fi
-  done
+  while IFS= read -r line; do
+    local ch="${line%%:*}"
+    CHANNELS+=("$ch")
+  done <<< "$selected"
+
   if [[ ${#CHANNELS[@]} -eq 0 ]]; then err "No channels selected."; exit 1; fi
 
   echo -ne "Channels: "
