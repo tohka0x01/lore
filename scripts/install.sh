@@ -195,17 +195,21 @@ EOF
   BASE_URL="$DEFAULT_BASE_URL"
 
   # Wait for health
-  info "Waiting for Lore to be ready..."
+  info "Waiting for Lore to be ready (this may take a minute)..."
   local attempts=0
-  while [[ $attempts -lt 30 ]]; do
+  while [[ $attempts -lt 60 ]]; do
     if curl -fsS "${BASE_URL}/api/health" >/dev/null 2>&1; then
       ok "Lore server is healthy."
       return
     fi
-    sleep 2
+    sleep 3
     attempts=$((attempts + 1))
+    # Show progress every 30 seconds
+    if [[ $((attempts % 10)) -eq 0 ]]; then
+      info "Still waiting... (${attempts}0s)"
+    fi
   done
-  warn "Lore health check timed out. Check: docker compose -f $LORE_DOCKER_DIR/docker-compose.yml logs"
+  warn "Lore health check timed out (3 min). Check: docker compose -f $LORE_DOCKER_DIR/docker-compose.yml logs"
 }
 
 # ---- Release / version ----
