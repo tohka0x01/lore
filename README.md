@@ -177,19 +177,47 @@ docker compose up -d --build
 curl -fsSL https://raw.githubusercontent.com/FFatTiger/lore/main/scripts/install.sh | bash
 ```
 
-The install script interactively asks which agent runtimes to set up and lets you
-configure the Lore server URL. After installing, restart each agent runtime.
+The install script sets up any agent runtimes you choose and configures them to
+connect to your Lore server. After installing, restart each agent runtime.
 
-> **Environment variables take highest priority.** Set `LORE_BASE_URL` and
-> `LORE_API_TOKEN` in your environment before running the script to skip the
-> interactive prompts. The script writes them to a config file
-> (`~/.config/lore/env`) and, for Claude Code, to `~/.claude/settings.json`.
+### CLI options
+
+```bash
+# Stable (default)
+curl -fsSL https://raw.githubusercontent.com/FFatTiger/lore/main/scripts/install.sh | bash
+
+# Pre-release channel
+curl -fsSL https://raw.githubusercontent.com/FFatTiger/lore/main/scripts/install.sh | bash -s -- --pre
+
+# Dev channel
+curl -fsSL https://raw.githubusercontent.com/FFatTiger/lore/main/scripts/install.sh | bash -s -- --dev
+
+# External server (skip local Docker)
+curl -fsSL https://raw.githubusercontent.com/FFatTiger/lore/main/scripts/install.sh | bash -s -- --base-url http://192.168.1.100:18901 --api-token my-token
+
+# Specific channels only
+curl -fsSL https://raw.githubusercontent.com/FFatTiger/lore/main/scripts/install.sh | bash -s -- --channels claudecode,codex
+```
+
+Full options:
+
+| Flag | Description |
+|---|---|
+| `--base-url URL` | Lore server base URL (auto-starts Docker if omitted) |
+| `--api-token TOKEN` | Lore API token |
+| `--channels CH,...` | Comma-separated: `claudecode`, `codex`, `pi`, `openclaw`, `hermes`. Default: all 5 |
+| `--dev` | Use dev channel (`dev-latest` Docker tag) |
+| `--pre` | Use pre-release channel (`pre-latest` Docker tag) |
+| `--skip-docker` | Don't start or update Docker containers |
+| `--force` | Force reinstall even if version unchanged |
+
+Re-run the install script anytime to update. If Docker was auto-started on first install, it will be updated automatically.
 
 ### What each runtime gets
 
 | Runtime | Integration |
 |---|---|
-| **Claude Code** | Marketplace plugin, MCP tools, SessionStart boot injection, per-prompt recall, `@import` guidance in CLAUDE.md |
+| **Claude Code** | Marketplace plugin, MCP tools, SessionStart boot injection, per-prompt recall, guidance via CLAUDE.md `@~/.claude/lore-guidance.md` |
 | **Codex** | Local marketplace plugin, MCP config, boot/recall hooks |
 | **Pi** | Extension tools, startup boot + recall context |
 | **OpenClaw** | Runtime plugin with boot, recall, and Lore tools |
@@ -200,19 +228,6 @@ configure the Lore server URL. After installing, restart each agent runtime.
 > install script does not disable it — if you want Lore as your only memory
 > system, set `CLAUDE_CODE_DISABLE_AUTO_MEMORY=1` or `"autoMemoryEnabled": false`
 > in `~/.claude/settings.json`.
-
-### Non-interactive install
-
-```bash
-# Install specific channels only
-export LORE_BASE_URL=http://192.168.1.100:18901
-export LORE_INSTALL_CHANNELS=claudecode,codex
-curl -fsSL https://raw.githubusercontent.com/FFatTiger/lore/main/scripts/install.sh | bash
-
-# Skip all prompts
-export LORE_INSTALL_NO_INTERACTIVE=1
-curl -fsSL https://raw.githubusercontent.com/FFatTiger/lore/main/scripts/install.sh | bash
-```
 
 ---
 

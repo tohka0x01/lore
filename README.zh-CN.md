@@ -177,17 +177,46 @@ docker compose up -d --build
 curl -fsSL https://raw.githubusercontent.com/FFatTiger/lore/main/scripts/install.sh | bash
 ```
 
-安装脚本会交互式询问要接入哪些 agent 运行时，以及 Lore 服务器地址。安装完成后重启各 agent 运行时。
+安装脚本会接入你选择的 agent 运行时并配置连接 Lore 服务器。安装完成后重启各 agent 运行时。
 
-> **环境变量优先级最高。** 在运行脚本前设置 `LORE_BASE_URL` 和
-> `LORE_API_TOKEN` 可跳过交互式提示。脚本会将其写入配置文件
-> (`~/.config/lore/env`)，Claude Code 还会写入 `~/.claude/settings.json`。
+### CLI 选项
+
+```bash
+# 稳定版（默认）
+curl -fsSL https://raw.githubusercontent.com/FFatTiger/lore/main/scripts/install.sh | bash
+
+# 尝鲜版
+curl -fsSL https://raw.githubusercontent.com/FFatTiger/lore/main/scripts/install.sh | bash -s -- --pre
+
+# 开发版
+curl -fsSL https://raw.githubusercontent.com/FFatTiger/lore/main/scripts/install.sh | bash -s -- --dev
+
+# 外部服务器（跳过本地 Docker）
+curl -fsSL https://raw.githubusercontent.com/FFatTiger/lore/main/scripts/install.sh | bash -s -- --base-url http://192.168.1.100:18901 --api-token my-token
+
+# 只安装指定 channel
+curl -fsSL https://raw.githubusercontent.com/FFatTiger/lore/main/scripts/install.sh | bash -s -- --channels claudecode,codex
+```
+
+完整选项：
+
+| 参数 | 说明 |
+|---|---|
+| `--base-url URL` | Lore 服务器地址（不指定则自动启动 Docker） |
+| `--api-token TOKEN` | Lore API token |
+| `--channels CH,...` | 逗号分隔：`claudecode`、`codex`、`pi`、`openclaw`、`hermes`。默认全部 5 个 |
+| `--dev` | 使用 dev 通道（`dev-latest` Docker tag） |
+| `--pre` | 使用 pre-release 通道（`pre-latest` Docker tag） |
+| `--skip-docker` | 不启动或更新 Docker 容器 |
+| `--force` | 强制重装（即使版本已是最新） |
+
+随时重新运行安装脚本即可更新。首次安装时由脚本自动启动的 Docker 会在更新时自动拉取最新镜像。
 
 ### 各运行时接入内容
 
 | Runtime | 接入方式 |
 |---|---|
-| **Claude Code** | Marketplace 插件、MCP tools、SessionStart boot 注入、每轮 recall、CLAUDE.md `@import` 使用规则 |
+| **Claude Code** | Marketplace 插件、MCP tools、SessionStart boot 注入、每轮 recall、CLAUDE.md `@~/.claude/lore-guidance.md` 规则导入 |
 | **Codex** | 本地 marketplace 插件、MCP 配置、boot/recall hooks |
 | **Pi** | Extension tools、启动 boot + recall 上下文 |
 | **OpenClaw** | Runtime plugin，提供 boot、recall 和 Lore tools |
@@ -197,19 +226,6 @@ curl -fsSL https://raw.githubusercontent.com/FFatTiger/lore/main/scripts/install
 > **Claude Code 注意：** Claude Code 自带 auto-memory 功能，安装脚本不会关闭它。
 > 如果希望 Lore 作为唯一记忆系统，请设置 `CLAUDE_CODE_DISABLE_AUTO_MEMORY=1`
 > 或在 `~/.claude/settings.json` 中设置 `"autoMemoryEnabled": false`。
-
-### 非交互式安装
-
-```bash
-# 只安装指定 channel
-export LORE_BASE_URL=http://192.168.1.100:18901
-export LORE_INSTALL_CHANNELS=claudecode,codex
-curl -fsSL https://raw.githubusercontent.com/FFatTiger/lore/main/scripts/install.sh | bash
-
-# 跳过所有提示
-export LORE_INSTALL_NO_INTERACTIVE=1
-curl -fsSL https://raw.githubusercontent.com/FFatTiger/lore/main/scripts/install.sh | bash
-```
 
 ---
 
