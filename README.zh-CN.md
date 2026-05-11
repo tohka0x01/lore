@@ -160,185 +160,43 @@ docker compose up -d --build
 
 ## 4. 接入 agent
 
-插件统一使用 Lore 服务器地址：
-
 ```bash
-export LORE_BASE_URL=http://127.0.0.1:18901
-export LORE_API_TOKEN=replace-this-if-you-set-API_TOKEN
+curl -fsSL https://raw.githubusercontent.com/FFatTiger/lore/main/scripts/install.sh | bash
 ```
 
-<details>
-<summary><b>Claude Code</b></summary>
+安装脚本会交互式询问要接入哪些 agent 运行时，以及 Lore 服务器地址。安装完成后重启各 agent 运行时。
 
-Lore 提供 Claude Code plugin，发布在 `plugin` branch。
+> **环境变量优先级最高。** 在运行脚本前设置 `LORE_BASE_URL` 和
+> `LORE_API_TOKEN` 可跳过交互式提示。脚本会将其写入配置文件
+> (`~/.config/lore/env`)，Claude Code 还会写入 `~/.claude/settings.json`。
 
-```bash
-export LORE_BASE_URL=http://127.0.0.1:18901
-claude plugins marketplace add FFatTiger/lore#plugin
-claude plugins install lore@lore
-```
+### 各运行时接入内容
 
-安装后重启 Claude Code。
+| Runtime | 接入方式 |
+|---|---|
+| **Claude Code** | Marketplace 插件、MCP tools、SessionStart boot 注入、每轮 recall、CLAUDE.md `@import` 使用规则 |
+| **Codex** | 本地 marketplace 插件、MCP 配置、boot/recall hooks |
+| **Pi** | Extension tools、启动 boot + recall 上下文 |
+| **OpenClaw** | Runtime plugin，提供 boot、recall 和 Lore tools |
+| **Hermes** | MemoryProvider 插件、tools、recall 支持 |
+| **通用 MCP** | `http://your-host:18901/api/mcp?client_type=mcp` |
 
-> **注意：** Claude Code 自带 auto-memory 功能，会写入 `~/.claude/memory/`。建议关闭以避免两套记忆系统竞争，使用 Lore 效果更好：
-> ```bash
-> export CLAUDE_CODE_DISABLE_AUTO_MEMORY=1
-> ```
+> **Claude Code 注意：** Claude Code 自带 auto-memory 功能，安装脚本不会关闭它。
+> 如果希望 Lore 作为唯一记忆系统，请设置 `CLAUDE_CODE_DISABLE_AUTO_MEMORY=1`
 > 或在 `~/.claude/settings.json` 中设置 `"autoMemoryEnabled": false`。
 
-它会加入：
-
-- MCP tools：`${LORE_BASE_URL}/api/mcp?client_type=claudecode`
-- session-start boot 注入
-- 每轮 prompt 前 recall 注入
-- Lore 使用规则
-
-</details>
-
-<details>
-<summary><b>Codex</b></summary>
+### 非交互式安装
 
 ```bash
-export LORE_BASE_URL=http://127.0.0.1:18901
-cd codex-plugin
-./scripts/install.sh
+# 只安装指定 channel
+export LORE_BASE_URL=http://192.168.1.100:18901
+export LORE_INSTALL_CHANNELS=claudecode,codex
+curl -fsSL https://raw.githubusercontent.com/FFatTiger/lore/main/scripts/install.sh | bash
+
+# 跳过所有提示
+export LORE_INSTALL_NO_INTERACTIVE=1
+curl -fsSL https://raw.githubusercontent.com/FFatTiger/lore/main/scripts/install.sh | bash
 ```
-
-服务器启用 `API_TOKEN` 时：
-
-```bash
-export LORE_API_TOKEN=replace-this
-./scripts/install.sh
-```
-
-安装后重启 Codex。
-
-它会加入：
-
-- 本地 Codex marketplace 插件 `lore@lore`
-- MCP server：`${LORE_BASE_URL}/api/mcp?client_type=codex`
-- boot / recall injection hooks
-
-</details>
-
-<details>
-<summary><b>Pi</b></summary>
-
-```bash
-export LORE_BASE_URL=http://127.0.0.1:18901
-./pi-extension/scripts/install-local.sh
-```
-
-然后在 Pi 里运行 `/reload`，或重启 Pi。
-
-它会加入：
-
-- 通过 `pi.registerTool` 注册 Lore tools
-- 通过 Pi startup hooks 注入 boot 和 recall context
-- API 活动带 `client_type=pi` 归因
-
-</details>
-
-<details>
-<summary><b>OpenClaw</b></summary>
-
-安装：
-
-```bash
-cd openclaw-plugin
-npm install
-npm run build
-openclaw plugins install . --force --dangerously-force-unsafe-install
-openclaw plugins enable lore
-```
-
-修改 `~/.openclaw/openclaw.json`：
-
-```jsonc
-{
-  "plugins": {
-    "allow": ["lore"],
-    "entries": {
-      "lore": {
-        "enabled": true,
-        "config": {
-          "baseUrl": "http://127.0.0.1:18901",
-          "apiToken": "replace-this-if-needed",
-          "recallEnabled": true,
-          "startupHealthcheck": true,
-          "injectPromptGuidance": true
-        }
-      }
-    }
-  }
-}
-```
-
-如果配置了 `tools.allow`，也把 Lore tools 加进去：
-
-```jsonc
-{
-  "tools": {
-    "allow": [
-      "group:openclaw",
-      "group:runtime",
-      "group:fs",
-      "lore_status",
-      "lore_boot",
-      "lore_get_node",
-      "lore_search",
-      "lore_list_domains",
-      "lore_create_node",
-      "lore_update_node",
-      "lore_delete_node",
-      "lore_move_node",
-      "lore_list_session_reads",
-      "lore_clear_session_reads"
-    ]
-  }
-}
-```
-
-重启 OpenClaw：
-
-```bash
-openclaw gateway restart
-```
-
-</details>
-
-<details>
-<summary><b>Hermes</b></summary>
-
-安装 Hermes memory provider plugin，并设置环境变量：
-
-```bash
-export LORE_BASE_URL=http://127.0.0.1:18901
-export LORE_API_TOKEN=replace-this-if-needed
-```
-
-把 `hermes-plugin/lore_memory` symlink 或复制到你的 Hermes plugin path。Hermes 会把 Lore 作为 MemoryProvider 加载，并向 agent 暴露 Lore 记忆工具。
-
-</details>
-
-<details>
-<summary><b>通用 MCP client</b></summary>
-
-Lore 暴露 Streamable HTTP MCP endpoint：
-
-```text
-http://127.0.0.1:18901/api/mcp
-```
-
-建议带上 client type：
-
-```text
-http://127.0.0.1:18901/api/mcp?client_type=mcp
-```
-
-启用 `API_TOKEN` 时，以 bearer token 传入。
-
-</details>
 
 ---
 

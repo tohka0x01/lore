@@ -160,185 +160,46 @@ docker compose up -d --build
 
 ## 4. Connect agents
 
-Set the Lore server URL for plugins:
+```bash
+curl -fsSL https://raw.githubusercontent.com/FFatTiger/lore/main/scripts/install.sh | bash
+```
+
+The install script interactively asks which agent runtimes to set up and lets you
+configure the Lore server URL. After installing, restart each agent runtime.
+
+> **Environment variables take highest priority.** Set `LORE_BASE_URL` and
+> `LORE_API_TOKEN` in your environment before running the script to skip the
+> interactive prompts. The script writes them to a config file
+> (`~/.config/lore/env`) and, for Claude Code, to `~/.claude/settings.json`.
+
+### What each runtime gets
+
+| Runtime | Integration |
+|---|---|
+| **Claude Code** | Marketplace plugin, MCP tools, SessionStart boot injection, per-prompt recall, `@import` guidance in CLAUDE.md |
+| **Codex** | Local marketplace plugin, MCP config, boot/recall hooks |
+| **Pi** | Extension tools, startup boot + recall context |
+| **OpenClaw** | Runtime plugin with boot, recall, and Lore tools |
+| **Hermes** | MemoryProvider plugin, tools, recall support |
+| **Generic MCP** | `http://your-host:18901/api/mcp?client_type=mcp` |
+
+> **Claude Code note:** Claude Code has a built-in auto-memory feature. The
+> install script does not disable it — if you want Lore as your only memory
+> system, set `CLAUDE_CODE_DISABLE_AUTO_MEMORY=1` or `"autoMemoryEnabled": false`
+> in `~/.claude/settings.json`.
+
+### Non-interactive install
 
 ```bash
-export LORE_BASE_URL=http://127.0.0.1:18901
-export LORE_API_TOKEN=replace-this-if-you-set-API_TOKEN
+# Install specific channels only
+export LORE_BASE_URL=http://192.168.1.100:18901
+export LORE_INSTALL_CHANNELS=claudecode,codex
+curl -fsSL https://raw.githubusercontent.com/FFatTiger/lore/main/scripts/install.sh | bash
+
+# Skip all prompts
+export LORE_INSTALL_NO_INTERACTIVE=1
+curl -fsSL https://raw.githubusercontent.com/FFatTiger/lore/main/scripts/install.sh | bash
 ```
-
-<details>
-<summary><b>Claude Code</b></summary>
-
-Lore ships as a Claude Code plugin on the `plugin` branch.
-
-```bash
-export LORE_BASE_URL=http://127.0.0.1:18901
-claude plugins marketplace add FFatTiger/lore#plugin
-claude plugins install lore@lore
-```
-
-Restart Claude Code after installing.
-
-> **Note:** Claude Code has a built-in auto-memory feature that writes to `~/.claude/memory/`. For best results, disable it so the two memory systems don't compete:
-> ```bash
-> export CLAUDE_CODE_DISABLE_AUTO_MEMORY=1
-> ```
-> Or set `"autoMemoryEnabled": false` in `~/.claude/settings.json`.
-
-What it adds:
-
-- MCP tools at `${LORE_BASE_URL}/api/mcp?client_type=claudecode`
-- session-start boot injection
-- per-prompt recall injection
-- Lore guidance rules
-
-</details>
-
-<details>
-<summary><b>Codex</b></summary>
-
-```bash
-export LORE_BASE_URL=http://127.0.0.1:18901
-cd codex-plugin
-./scripts/install.sh
-```
-
-If the server uses `API_TOKEN`:
-
-```bash
-export LORE_API_TOKEN=replace-this
-./scripts/install.sh
-```
-
-Restart Codex after installing.
-
-What it adds:
-
-- local Codex marketplace entry `lore@lore`
-- MCP server at `${LORE_BASE_URL}/api/mcp?client_type=codex`
-- optional hooks for boot and recall injection
-
-</details>
-
-<details>
-<summary><b>Pi</b></summary>
-
-```bash
-export LORE_BASE_URL=http://127.0.0.1:18901
-./pi-extension/scripts/install-local.sh
-```
-
-Then run `/reload` in Pi or restart Pi.
-
-What it adds:
-
-- Lore tools registered with `pi.registerTool`
-- boot and recall context through Pi startup hooks
-- API attribution with `client_type=pi`
-
-</details>
-
-<details>
-<summary><b>OpenClaw</b></summary>
-
-Install:
-
-```bash
-cd openclaw-plugin
-npm install
-npm run build
-openclaw plugins install . --force --dangerously-force-unsafe-install
-openclaw plugins enable lore
-```
-
-Edit `~/.openclaw/openclaw.json`:
-
-```jsonc
-{
-  "plugins": {
-    "allow": ["lore"],
-    "entries": {
-      "lore": {
-        "enabled": true,
-        "config": {
-          "baseUrl": "http://127.0.0.1:18901",
-          "apiToken": "replace-this-if-needed",
-          "recallEnabled": true,
-          "startupHealthcheck": true,
-          "injectPromptGuidance": true
-        }
-      }
-    }
-  }
-}
-```
-
-If `tools.allow` is configured, add the Lore tools too:
-
-```jsonc
-{
-  "tools": {
-    "allow": [
-      "group:openclaw",
-      "group:runtime",
-      "group:fs",
-      "lore_status",
-      "lore_boot",
-      "lore_get_node",
-      "lore_search",
-      "lore_list_domains",
-      "lore_create_node",
-      "lore_update_node",
-      "lore_delete_node",
-      "lore_move_node",
-      "lore_list_session_reads",
-      "lore_clear_session_reads"
-    ]
-  }
-}
-```
-
-Restart OpenClaw:
-
-```bash
-openclaw gateway restart
-```
-
-</details>
-
-<details>
-<summary><b>Hermes</b></summary>
-
-Install the Hermes memory provider plugin and set environment variables:
-
-```bash
-export LORE_BASE_URL=http://127.0.0.1:18901
-export LORE_API_TOKEN=replace-this-if-needed
-```
-
-Symlink or copy `hermes-plugin/lore_memory` into the Hermes plugin path configured on your machine. Hermes loads Lore as a MemoryProvider and exposes Lore memory tools to the agent.
-
-</details>
-
-<details>
-<summary><b>Generic MCP client</b></summary>
-
-Lore exposes a Streamable HTTP MCP endpoint:
-
-```text
-http://127.0.0.1:18901/api/mcp
-```
-
-Use a client-specific query parameter when possible:
-
-```text
-http://127.0.0.1:18901/api/mcp?client_type=mcp
-```
-
-If `API_TOKEN` is configured, pass it as a bearer token.
-
-</details>
 
 ---
 
