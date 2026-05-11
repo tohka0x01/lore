@@ -170,6 +170,7 @@ start_docker() {
     local pg_pass
     pg_pass=$(python3 -c "import secrets; print(secrets.token_hex(16))" 2>/dev/null || echo "lore-$(date +%s)")
     cat > "$LORE_DOCKER_DIR/.env" <<EOF
+TZ=Asia/Shanghai
 POSTGRES_DB=lore
 POSTGRES_USER=lore
 POSTGRES_PASSWORD=${pg_pass}
@@ -177,6 +178,7 @@ POSTGRES_PORT=55439
 WEB_PORT=18901
 POSTGRES_DATA_DIR=${LORE_DOCKER_DIR}/data/postgres
 SNAPSHOT_DATA_DIR=${LORE_DOCKER_DIR}/data/snapshots
+DATABASE_URL=postgresql://lore:${pg_pass}@postgres:5432/lore
 EOF
     ok "Docker .env written → $LORE_DOCKER_DIR/.env"
   fi

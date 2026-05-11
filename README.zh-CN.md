@@ -47,7 +47,19 @@ Lore 面向需要跨会话、跨工具、跨运行时连续性的 agent。
 
 ### 1. 启动服务器
 
-创建一个 `docker-compose.yml`：
+创建 `.env` 文件：
+
+```bash
+POSTGRES_PASSWORD=your-secure-password
+```
+
+创建 `docker-compose.yml` — 或直接运行安装脚本一站式搞定：
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/FFatTiger/lore/main/scripts/install.sh | bash -s -- --pre
+```
+
+手动创建 `docker-compose.yml`：
 
 ```yaml
 services:
@@ -55,9 +67,10 @@ services:
     image: fffattiger/pgvector-zhparser:pg16
     restart: unless-stopped
     environment:
+      TZ: ${TZ:-Asia/Shanghai}
       POSTGRES_DB: ${POSTGRES_DB:-lore}
       POSTGRES_USER: ${POSTGRES_USER:-lore}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in stack.env}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-change-me}
     ports:
       - "${POSTGRES_PORT:-55439}:5432"
     volumes:
@@ -76,13 +89,13 @@ services:
       postgres:
         condition: service_healthy
     environment:
+      TZ: ${TZ:-Asia/Shanghai}
       DATABASE_URL: postgresql://${POSTGRES_USER:-lore}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-lore}
       API_TOKEN: ${API_TOKEN:-}
-      CORE_MEMORY_URIS: ${CORE_MEMORY_URIS:-core://soul,preferences://user,core://agent}
     ports:
       - "${WEB_PORT:-18901}:18901"
     volumes:
-      - ${SNAPSHOT_DATA_DIR:-./data/web/snapshots}:/app/snapshots
+      - ${SNAPSHOT_DATA_DIR:-./data/snapshots}:/app/snapshots
 ```
 
 启动 Lore：

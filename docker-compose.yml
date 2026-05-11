@@ -1,18 +1,17 @@
 services:
   postgres:
     image: ${LORE_POSTGRES_IMAGE:-fffattiger/pgvector-zhparser:pg16}
-    build:
-      context: ./postgres
-    container_name: ${LORE_POSTGRES_CONTAINER:-lore-postgres}
+    container_name: lore-postgres
     restart: unless-stopped
     environment:
+      TZ: ${TZ:-Asia/Shanghai}
       POSTGRES_DB: ${POSTGRES_DB:-lore}
       POSTGRES_USER: ${POSTGRES_USER:-lore}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-change-me}
     ports:
-      - "${POSTGRES_PORT:-5432}:5432"
+      - "${POSTGRES_PORT:-55439}:5432"
     volumes:
-      - lore_postgres_data:/var/lib/postgresql/data
+      - ${POSTGRES_DATA_DIR:-./data/postgres}:/var/lib/postgresql/data
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-lore} -d ${POSTGRES_DB:-lore}"]
       interval: 10s
@@ -21,32 +20,25 @@ services:
 
   web:
     image: ${LORE_FRONTEND_IMAGE:-fffattiger/lore:latest}
-    build:
-      context: ./web
+    container_name: lore-web
     restart: unless-stopped
+    pull_policy: always
     depends_on:
       postgres:
         condition: service_healthy
     environment:
+      TZ: ${TZ:-Asia/Shanghai}
       DATABASE_URL: ${DATABASE_URL:-postgresql://lore:change-me@postgres:5432/lore}
       API_TOKEN: ${API_TOKEN:-}
-      # Boot is fixed server-side to core://agent, core://soul, preferences://user
       LORE_EMBEDDING_PROVIDER: ${LORE_EMBEDDING_PROVIDER:-openai_compatible}
       LORE_EMBEDDING_BASE_URL: ${LORE_EMBEDDING_BASE_URL:-http://127.0.0.1:8090/v1}
-      LORE_EMBEDDING_API_KEY: ${LORE_EMBEDDING_API_KEY:-change-me}
+      LORE_EMBEDDING_API_KEY: ${LORE_EMBEDDING_API_KEY:-}
       LORE_EMBEDDING_MODEL: ${LORE_EMBEDDING_MODEL:-text-embedding-3-small}
       LORE_VIEW_LLM_PROVIDER: ${LORE_VIEW_LLM_PROVIDER:-openai_compatible}
       LORE_VIEW_LLM_BASE_URL: ${LORE_VIEW_LLM_BASE_URL:-http://127.0.0.1:8090/v1}
-      LORE_VIEW_LLM_API_KEY: ${LORE_VIEW_LLM_API_KEY:-change-me}
+      LORE_VIEW_LLM_API_KEY: ${LORE_VIEW_LLM_API_KEY:-}
       LORE_VIEW_LLM_MODEL: ${LORE_VIEW_LLM_MODEL:-deepseek-v4-flash}
-      LORE_VIEW_LLM_TIMEOUT_MS: ${LORE_VIEW_LLM_TIMEOUT_MS:-30000}
-      LORE_VIEW_LLM_API_VERSION: ${LORE_VIEW_LLM_API_VERSION:-}
-      LORE_VIEW_LLM_MAX_DOCS_PER_RUN: ${LORE_VIEW_LLM_MAX_DOCS_PER_RUN:-4}
     ports:
       - "${WEB_PORT:-18901}:18901"
     volumes:
-      - lore_frontend_snapshots:/app/snapshots
-
-volumes:
-  lore_postgres_data:
-  lore_frontend_snapshots:
+      - ${SNAPSHOT_DATA_DIR:-./data/snapshots}:/app/snapshots
