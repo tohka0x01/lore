@@ -23,13 +23,15 @@ LORE_HOME="${LORE_HOME:-$HOME/.lore}"
 LORE_CONFIG_FILE="$LORE_HOME/config.json"
 
 # Channel → artifact name on release
-declare -A CHANNEL_ARTIFACT=(
-  [claudecode]="lore-claudecode.zip"
-  [codex]="lore-codex.zip"
-  [pi]="lore-pi.zip"
-  [openclaw]="lore-openclaw.zip"
-  [hermes]="lore-hermes.zip"
-)
+artifact_for() {
+  case "$1" in
+    claudecode) echo "lore-claudecode.zip";;
+    codex)      echo "lore-codex.zip";;
+    pi)         echo "lore-pi.zip";;
+    openclaw)   echo "lore-openclaw.zip";;
+    hermes)     echo "lore-hermes.zip";;
+  esac
+}
 
 # ---- Colors ----
 
@@ -151,8 +153,7 @@ except: pass
 
 download_artifact() {
   local channel="$1" dest="$2"
-  local artifact="${CHANNEL_ARTIFACT[$channel]:-}"
-
+  local artifact; artifact=$(artifact_for "$channel")
   if [[ -z "$artifact" ]]; then
     warn "No artifact mapping for channel: $channel"
     return 1
