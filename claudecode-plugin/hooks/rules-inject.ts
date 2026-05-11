@@ -36,7 +36,7 @@ function loadConfig() {
   const config = readLoreConfig();
   return {
     baseUrl: (config.base_url || DEFAULT_BASE_URL).replace(/\/$/, ""),
-    apiToken: process.env.LORE_API_TOKEN || config.api_token || process.env.API_TOKEN || "",
+    apiToken: config.api_token || "",
   };
 }
 
