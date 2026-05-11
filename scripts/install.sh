@@ -196,22 +196,10 @@ EOF
 
   (
     cd "$LORE_DOCKER_DIR"
-
-    # Bypass osxkeychain credential helper that blocks public pulls.
-    # Use a temp empty Docker config so the install never touches user config.
-    local dc_tmp; dc_tmp=$(mktemp -d)
-    echo '{}' > "$dc_tmp/config.json"
-    if ! DOCKER_CONFIG="$dc_tmp" $compose_cmd up -d 2>&1 | tee /tmp/lore-docker-install.log; then
-      rm -rf "$dc_tmp"
-      if grep -qi "keychain\|osxkeychain\|credsStore" /tmp/lore-docker-install.log 2>/dev/null; then
-        warn "Docker keychain blocked the pull. Fix with:"
-        echo "  python3 -c \"import json; d=json.load(open('$HOME/.docker/config.json')); d.pop('credsStore',None); json.dump(d,open('$HOME/.docker/config.json','w'),indent=2)\""
-      else
-        warn "$compose_cmd up failed. Check $LORE_DOCKER_DIR/docker-compose.yml"
-      fi
+    $compose_cmd up -d || {
+      warn "$compose_cmd up failed. Check $LORE_DOCKER_DIR/docker-compose.yml"
       exit 1
-    fi
-    rm -rf "$dc_tmp"
+    }
   ) || return
 
   ok "Lore server starting at http://127.0.0.1:18901"
