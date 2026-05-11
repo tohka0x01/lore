@@ -1,4 +1,4 @@
-name: Build & Push Dev Image
+name: Dev Build
 
 on:
   workflow_dispatch:
@@ -10,20 +10,20 @@ on:
       - '.github/workflows/docker-build.yml'
 
 jobs:
-  metadata:
+  tags:
     runs-on: ubuntu-latest
     outputs:
-      date_tag: ${{ steps.tags.outputs.date_tag }}
+      date_tag: ${{ steps.meta.outputs.date_tag }}
     steps:
       - name: Generate image tags
-        id: tags
+        id: meta
         run: |
           DATE=$(date -u +'%Y%m%d-%H%M')
           echo "date_tag=${DATE}" >> "$GITHUB_OUTPUT"
 
-  web-amd64:
+  build-amd64:
     runs-on: ubuntu-latest
-    needs: metadata
+    needs: tags
     steps:
       - uses: actions/checkout@v4
 
@@ -36,7 +36,7 @@ jobs:
           username: ${{ secrets.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_TOKEN }}
 
-      - name: Build and push web
+      - name: Build and push (amd64)
         uses: docker/build-push-action@v6
         with:
           context: ./web
@@ -44,13 +44,13 @@ jobs:
           push: true
           tags: |
             fffattiger/lore:dev-latest-amd64
-            fffattiger/lore:dev-${{ needs.metadata.outputs.date_tag }}-amd64
+            fffattiger/lore:dev-${{ needs.tags.outputs.date_tag }}-amd64
           cache-from: type=gha,scope=web-amd64
           cache-to: type=gha,scope=web-amd64,mode=min
 
-  web-arm64:
+  build-arm64:
     runs-on: ubuntu-latest
-    needs: metadata
+    needs: tags
     steps:
       - uses: actions/checkout@v4
 
@@ -66,7 +66,7 @@ jobs:
           username: ${{ secrets.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_TOKEN }}
 
-      - name: Build and push web arm64
+      - name: Build and push (arm64)
         uses: docker/build-push-action@v6
         with:
           context: ./web
@@ -74,13 +74,13 @@ jobs:
           push: true
           tags: |
             fffattiger/lore:dev-latest-arm64
-            fffattiger/lore:dev-${{ needs.metadata.outputs.date_tag }}-arm64
+            fffattiger/lore:dev-${{ needs.tags.outputs.date_tag }}-arm64
           cache-from: type=gha,scope=web-arm64
           cache-to: type=gha,scope=web-arm64,mode=min
 
-  manifest:
+  merge-manifest:
     runs-on: ubuntu-latest
-    needs: [metadata, web-amd64, web-arm64]
+    needs: [tags, build-amd64, build-arm64]
     steps:
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
@@ -91,14 +91,14 @@ jobs:
           username: ${{ secrets.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_TOKEN }}
 
-      - name: Publish multi-arch tags
+      - name: Publish multi-arch manifest
         run: |
           docker buildx imagetools create \
             -t fffattiger/lore:dev-latest \
             fffattiger/lore:dev-latest-amd64 \
             fffattiger/lore:dev-latest-arm64
           docker buildx imagetools create \
-            -t fffattiger/lore:dev-${{ needs.metadata.outputs.date_tag }} \
-            fffattiger/lore:dev-${{ needs.metadata.outputs.date_tag }}-amd64 \
-            fffattiger/lore:dev-${{ needs.metadata.outputs.date_tag }}-arm64
+            -t fffattiger/lore:dev-${{ needs.tags.outputs.date_tag }} \
+            fffattiger/lore:dev-${{ needs.tags.outputs.date_tag }}-amd64 \
+            fffattiger/lore:dev-${{ needs.tags.outputs.date_tag }}-arm64
           docker buildx imagetools inspect fffattiger/lore:dev-latest

@@ -15,7 +15,8 @@ set -euo pipefail
 #                        Default: all 5
 #   --skip-docker        Don't run docker compose up
 #   --force              Force reinstall even if version unchanged
-#   --pre                Include pre-releases when checking latest version
+#   --pre                Use pre-release channel (pre-latest tag)
+#   --dev                Use dev channel (dev-latest tag)
 
 # ---- Args ----
 
@@ -25,6 +26,7 @@ CHANNELS_RAW=""
 SKIP_DOCKER=0
 FORCE=0
 CHECK_PRE=0
+CHECK_DEV=0
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
@@ -34,6 +36,7 @@ while [[ $# -gt 0 ]]; do
     --skip-docker) SKIP_DOCKER=1; shift;;
     --force)       FORCE=1; shift;;
     --pre)         CHECK_PRE=1; shift;;
+    --dev)         CHECK_DEV=1; shift;;
     *) shift;;
   esac
 done
@@ -191,6 +194,11 @@ POSTGRES_DATA_DIR=${LORE_DOCKER_DIR}/data/postgres
 SNAPSHOT_DATA_DIR=${LORE_DOCKER_DIR}/data/snapshots
 DATABASE_URL=postgresql://lore:${pg_pass}@postgres:5432/lore
 EOF
+    if [[ "$CHECK_DEV" == "1" ]]; then
+      echo "LORE_FRONTEND_IMAGE=fffattiger/lore:dev-latest" >> "$LORE_DOCKER_DIR/.env"
+    elif [[ "$CHECK_PRE" == "1" ]]; then
+      echo "LORE_FRONTEND_IMAGE=fffattiger/lore:pre-latest" >> "$LORE_DOCKER_DIR/.env"
+    fi
     ok "Docker .env written → $LORE_DOCKER_DIR/.env"
   fi
 
@@ -230,6 +238,13 @@ NEED_INSTALL=0
 
 check_release() {
   info "Checking latest release..."
+
+  if [[ "$CHECK_DEV" == "1" ]]; then
+    info "Dev channel — using dev-latest, skipping release check."
+    RELEASE_VERSION="dev"
+    NEED_INSTALL=0
+    return
+  fi
 
   local api_url
   if [[ "$CHECK_PRE" == "1" ]]; then
@@ -618,7 +633,10 @@ main() {
   echo ""
   echo -e "  Base URL:  ${GREEN}${BASE_URL}${NC}"
   echo -e "  Channels:  ${GREEN}$(IFS=,; echo "${CHANNELS[*]}")${NC}"
-  echo -e "  Pre-releases: ${GREEN}$([[ "$CHECK_PRE" == "1" ]] && echo yes || echo no)${NC}"
+  local channel_label="stable"
+  [[ "$CHECK_DEV" == "1" ]] && channel_label="dev"
+  [[ "$CHECK_PRE" == "1" ]] && channel_label="pre-release"
+  echo -e "  Release:   ${GREEN}${channel_label}${NC}"
   echo ""
 
   check_release || true
