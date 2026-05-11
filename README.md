@@ -43,78 +43,25 @@ Lore is built for agents that need continuity across sessions, tools, and runtim
 
 ---
 
-## 3. Quick start
+## 3. Quick Start
 
-### 1. Start the server
-
-Create a `.env` file:
+### 1. Run the install script
 
 ```bash
-POSTGRES_PASSWORD=your-secure-password
+curl -fsSL https://raw.githubusercontent.com/FFatTiger/lore/main/scripts/install.sh | bash
 ```
 
-Create a `docker-compose.yml` — or just run the install script which does everything:
+This single command starts the Lore server (Docker Compose), connects all 5 agent runtimes,
+and creates `~/.lore/config.json`. Re-run anytime to update.
 
-```bash
-curl -fsSL https://raw.githubusercontent.com/FFatTiger/lore/main/scripts/install.sh | bash -s -- --pre
-```
-
-Or manually create `docker-compose.yml`:
-
-```yaml
-services:
-  postgres:
-    image: fffattiger/pgvector-zhparser:pg16
-    restart: unless-stopped
-    environment:
-      TZ: ${TZ:-Asia/Shanghai}
-      POSTGRES_DB: ${POSTGRES_DB:-lore}
-      POSTGRES_USER: ${POSTGRES_USER:-lore}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-change-me}
-    ports:
-      - "${POSTGRES_PORT:-55439}:5432"
-    volumes:
-      - ${POSTGRES_DATA_DIR:-./data/postgres}:/var/lib/postgresql/data
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-lore} -d ${POSTGRES_DB:-lore}"]
-      interval: 10s
-      timeout: 5s
-      retries: 10
-
-  web:
-    image: fffattiger/lore:latest
-    restart: unless-stopped
-    pull_policy: always
-    depends_on:
-      postgres:
-        condition: service_healthy
-    environment:
-      TZ: ${TZ:-Asia/Shanghai}
-      DATABASE_URL: postgresql://${POSTGRES_USER:-lore}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-lore}
-      API_TOKEN: ${API_TOKEN:-}
-    ports:
-      - "${WEB_PORT:-18901}:18901"
-    volumes:
-      - ${SNAPSHOT_DATA_DIR:-./data/snapshots}:/app/snapshots
-```
-
-Start Lore:
-
-```bash
-docker compose up -d
-```
-
-Check health:
-
-```bash
-curl http://127.0.0.1:18901/api/health
-```
-
-Open the UI:
-
-```text
-http://127.0.0.1:18901
-```
+| Flag | Description |
+|---|---|
+| `--pre` | Pre-release channel (`pre-latest` Docker tag) |
+| `--dev` | Dev channel (`dev-latest` Docker tag) |
+| `--channels CH,...` | Specific runtimes: `claudecode`, `codex`, `pi`, `openclaw`, `hermes` |
+| `--base-url URL` | External server URL (skips local Docker) |
+| `--skip-docker` | Don't start or manage Docker |
+| `--force` | Force reinstall even if version unchanged |
 
 ### 2. Complete first-run setup
 
@@ -159,9 +106,57 @@ Open `/settings` after setup for:
 
 Embedding is required for semantic recall and index rebuilds. View LLM is required during setup so Dream and view refinement are ready when you enable them.
 
-#### Source build
+---
 
-For local development or custom builds:
+## 4. Manual Setup
+
+### Docker Compose
+
+Create a `docker-compose.yml`:
+
+```yaml
+services:
+  postgres:
+    image: fffattiger/pgvector-zhparser:pg16
+    restart: unless-stopped
+    environment:
+      TZ: ${TZ:-Asia/Shanghai}
+      POSTGRES_DB: ${POSTGRES_DB:-lore}
+      POSTGRES_USER: ${POSTGRES_USER:-lore}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-change-me}
+    ports:
+      - "${POSTGRES_PORT:-55439}:5432"
+    volumes:
+      - ${POSTGRES_DATA_DIR:-./data/postgres}:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-lore} -d ${POSTGRES_DB:-lore}"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  web:
+    image: fffattiger/lore:latest
+    restart: unless-stopped
+    pull_policy: always
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      TZ: ${TZ:-Asia/Shanghai}
+      DATABASE_URL: postgresql://${POSTGRES_USER:-lore}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-lore}
+      API_TOKEN: ${API_TOKEN:-}
+    ports:
+      - "${WEB_PORT:-18901}:18901"
+    volumes:
+      - ${SNAPSHOT_DATA_DIR:-./data/snapshots}:/app/snapshots
+```
+
+```bash
+docker compose up -d
+curl http://127.0.0.1:18901/api/health
+```
+
+### Source build
 
 ```bash
 git clone https://github.com/FFatTiger/lore.git
@@ -171,14 +166,10 @@ docker compose up -d --build
 
 ---
 
-## 4. Connect agents
+## 5. Connect agents
 
-```bash
-curl -fsSL https://raw.githubusercontent.com/FFatTiger/lore/main/scripts/install.sh | bash
-```
-
-The install script sets up any agent runtimes you choose and configures them to
-connect to your Lore server. After installing, restart each agent runtime.
+The [Quick Start](#3-quick-start) install script handles this automatically. To connect
+agents to an external server, use `--base-url`. After installing, restart each agent runtime.
 
 ### CLI options
 
@@ -231,7 +222,7 @@ Re-run the install script anytime to update. If Docker was auto-started on first
 
 ---
 
-## 5. Daily use
+## 6. Daily use
 
 Once connected, the agent workflow is:
 
@@ -250,7 +241,7 @@ Useful UI pages:
 
 ---
 
-## 6. Development
+## 7. Development
 
 ```bash
 cd web

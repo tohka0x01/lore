@@ -27,7 +27,7 @@ SKIP_DOCKER=0
 FORCE=0
 CHECK_PRE=0
 CHECK_DEV=0
-DOCKER_MANAGED=0
+DOCKER_MANAGED=""
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
@@ -128,6 +128,8 @@ elif 'api_token' in data: del data['api_token']
 if version: data['installed_version'] = version
 if docker_managed == "1":
     data['docker_managed'] = True
+elif docker_managed == "0":
+    data['docker_managed'] = False
 elif 'docker_managed' not in data:
     data['docker_managed'] = False
 
@@ -213,6 +215,7 @@ start_docker() {
   # Only skip docker if user explicitly passed --base-url
   if [[ -n "${_EXPLICIT_BASE_URL:-}" ]]; then
     info "Using external Lore server: $BASE_URL — skipping Docker."
+    DOCKER_MANAGED=0
     return
   fi
 
@@ -382,8 +385,8 @@ b = parse('$RELEASE_VERSION')
 
 # pre-release < stable at same version
 if a[:3] == b[:3]:
-    if a[4] and not b[4]: print('newer_installed')  # installed is pre, release is stable
-    elif not a[4] and b[4]: print('downgrade')
+    if a[4] and not b[4]: print('older')  # installed pre, release stable → upgrade
+    elif not a[4] and b[4]: print('downgrade')  # installed stable, release pre → skip
     elif a == b: print('same')
     else: print('newer' if a > b else 'older')
 else:
@@ -392,9 +395,6 @@ else:
 
     if [[ "$cmp" == "same" ]]; then
       ok "Already at latest version: $RELEASE_VERSION"
-      NEED_INSTALL=2
-    elif [[ "$cmp" == "newer_installed" ]]; then
-      ok "Installed $installed (newer than latest stable $RELEASE_VERSION). Use --pre to check pre-releases."
       NEED_INSTALL=2
     elif [[ "$cmp" == "newer" ]]; then
       ok "Installed $installed (newer than $RELEASE_VERSION). Use --pre to check pre-releases."

@@ -45,76 +45,23 @@ Lore 面向需要跨会话、跨工具、跨运行时连续性的 agent。
 
 ## 3. Quick Start
 
-### 1. 启动服务器
-
-创建 `.env` 文件：
+### 1. 运行安装脚本
 
 ```bash
-POSTGRES_PASSWORD=your-secure-password
+curl -fsSL https://raw.githubusercontent.com/FFatTiger/lore/main/scripts/install.sh | bash
 ```
 
-创建 `docker-compose.yml` — 或直接运行安装脚本一站式搞定：
+一条命令完成：启动 Lore 服务器（Docker Compose）、接入全部 5 个 agent 运行时、
+创建 `~/.lore/config.json`。随时重新运行即可更新。
 
-```bash
-curl -fsSL https://raw.githubusercontent.com/FFatTiger/lore/main/scripts/install.sh | bash -s -- --pre
-```
-
-手动创建 `docker-compose.yml`：
-
-```yaml
-services:
-  postgres:
-    image: fffattiger/pgvector-zhparser:pg16
-    restart: unless-stopped
-    environment:
-      TZ: ${TZ:-Asia/Shanghai}
-      POSTGRES_DB: ${POSTGRES_DB:-lore}
-      POSTGRES_USER: ${POSTGRES_USER:-lore}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-change-me}
-    ports:
-      - "${POSTGRES_PORT:-55439}:5432"
-    volumes:
-      - ${POSTGRES_DATA_DIR:-./data/postgres}:/var/lib/postgresql/data
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-lore} -d ${POSTGRES_DB:-lore}"]
-      interval: 10s
-      timeout: 5s
-      retries: 10
-
-  web:
-    image: fffattiger/lore:latest
-    restart: unless-stopped
-    pull_policy: always
-    depends_on:
-      postgres:
-        condition: service_healthy
-    environment:
-      TZ: ${TZ:-Asia/Shanghai}
-      DATABASE_URL: postgresql://${POSTGRES_USER:-lore}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-lore}
-      API_TOKEN: ${API_TOKEN:-}
-    ports:
-      - "${WEB_PORT:-18901}:18901"
-    volumes:
-      - ${SNAPSHOT_DATA_DIR:-./data/snapshots}:/app/snapshots
-```
-
-启动 Lore：
-
-```bash
-docker compose up -d
-```
-
-检查健康状态：
-
-```bash
-curl http://127.0.0.1:18901/api/health
-```
-
-打开 Web UI：
-
-```text
-http://127.0.0.1:18901
-```
+| 参数 | 说明 |
+|---|---|
+| `--pre` | 尝鲜版（`pre-latest` Docker tag） |
+| `--dev` | 开发版（`dev-latest` Docker tag） |
+| `--channels CH,...` | 指定运行时：`claudecode`、`codex`、`pi`、`openclaw`、`hermes` |
+| `--base-url URL` | 外部服务器地址（跳过本地 Docker） |
+| `--skip-docker` | 不启动或管理 Docker |
+| `--force` | 强制重装（即使版本已是最新） |
 
 ### 2. 完成首次初始化
 
@@ -159,9 +106,57 @@ http://127.0.0.1:18901/setup
 
 语义 recall 和索引重建需要 Embedding。初始化阶段要求配置 View LLM，让 Dream 和 view refinement 在启用时直接可用。
 
-#### 源码构建
+---
 
-本地开发或自定义构建使用源码方式：
+## 4. 手动安装
+
+### Docker Compose
+
+创建 `docker-compose.yml`：
+
+```yaml
+services:
+  postgres:
+    image: fffattiger/pgvector-zhparser:pg16
+    restart: unless-stopped
+    environment:
+      TZ: ${TZ:-Asia/Shanghai}
+      POSTGRES_DB: ${POSTGRES_DB:-lore}
+      POSTGRES_USER: ${POSTGRES_USER:-lore}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-change-me}
+    ports:
+      - "${POSTGRES_PORT:-55439}:5432"
+    volumes:
+      - ${POSTGRES_DATA_DIR:-./data/postgres}:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-lore} -d ${POSTGRES_DB:-lore}"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  web:
+    image: fffattiger/lore:latest
+    restart: unless-stopped
+    pull_policy: always
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      TZ: ${TZ:-Asia/Shanghai}
+      DATABASE_URL: postgresql://${POSTGRES_USER:-lore}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-lore}
+      API_TOKEN: ${API_TOKEN:-}
+    ports:
+      - "${WEB_PORT:-18901}:18901"
+    volumes:
+      - ${SNAPSHOT_DATA_DIR:-./data/snapshots}:/app/snapshots
+```
+
+```bash
+docker compose up -d
+curl http://127.0.0.1:18901/api/health
+```
+
+### 源码构建
 
 ```bash
 git clone https://github.com/FFatTiger/lore.git
@@ -171,13 +166,10 @@ docker compose up -d --build
 
 ---
 
-## 4. 接入 agent
+## 5. 接入 agent
 
-```bash
-curl -fsSL https://raw.githubusercontent.com/FFatTiger/lore/main/scripts/install.sh | bash
-```
-
-安装脚本会接入你选择的 agent 运行时并配置连接 Lore 服务器。安装完成后重启各 agent 运行时。
+[Quick Start](#3-quick-start) 中的安装脚本会自动完成接入。如需连接外部服务器，
+使用 `--base-url`。安装完成后重启各 agent 运行时。
 
 ### CLI 选项
 
@@ -229,7 +221,7 @@ curl -fsSL https://raw.githubusercontent.com/FFatTiger/lore/main/scripts/install
 
 ---
 
-## 5. 日常使用
+## 6. 日常使用
 
 agent 接入后，工作流是：
 
@@ -248,7 +240,7 @@ agent 接入后，工作流是：
 
 ---
 
-## 6. 开发
+## 7. 开发
 
 ```bash
 cd web
