@@ -2,6 +2,8 @@
 
 [中文 README](./README.zh-CN.md)
 
+[Quick Start](#3-quick-start) · [Manual Setup](#4-manual-setup) · [Connect Agents](#5-connect-agents) · [CLI Options](#cli-options) · [Daily Use](#6-daily-use) · [Development](#7-development)
+
 ## 1. Screenshots
 
 <p align="center">
