@@ -161,7 +161,7 @@ function makeInitialContext(overrides: Partial<DreamInitialContext> = {}): Dream
     ],
     guidance: '# MCP Guidance\npreloaded boot baseline\npreloaded guidance\nget_node is useful',
     recallStats: { summary: {}, by_path: [], noisy_nodes: [], recent_queries: { items: [], total: 0, limit: 20, offset: 0, has_more: false } },
-    recallReview: { date: '2026-05-07', timezone: 'Asia/Shanghai', summary: {}, queries: [] },
+    recallReview: { date: '2026-05-07', summary: {}, queries: [] },
     writeActivity: { summary: {}, hot_nodes: [], recent_events: [] },
     recentDiaries: [],
     ...overrides,
@@ -382,8 +382,8 @@ describe('executeDreamTool', () => {
 
   it('dispatches get_today_recall_metadata to raw recall metadata helper', async () => {
     mockGetDreamRecallReview.mockResolvedValue({ queries: [] } as any);
-    await executeDreamTool('get_today_recall_metadata', { date: '2026-05-07', timezone: 'Asia/Shanghai', limit: 100, offset: 10 });
-    expect(mockGetDreamRecallReview).toHaveBeenCalledWith({ date: '2026-05-07', timezone: 'Asia/Shanghai', limit: 100, offset: 10 });
+    await executeDreamTool('get_today_recall_metadata', { date: '2026-05-07', limit: 100, offset: 10 });
+    expect(mockGetDreamRecallReview).toHaveBeenCalledWith({ date: '2026-05-07', limit: 100, offset: 10 });
   });
 
   it('dispatches get_query_recall_detail to dream-focused query detail', async () => {
@@ -420,14 +420,12 @@ describe('executeDreamTool', () => {
     mockGetDreamMemoryEventSummary.mockResolvedValue({ events: [] } as any);
     await executeDreamTool('get_memory_event_summary', {
       date: '2026-05-04',
-      timezone: 'Asia/Shanghai',
       event_type: 'update',
       node_uri: 'core://test',
       limit: 12,
     });
     expect(mockGetDreamMemoryEventSummary).toHaveBeenCalledWith({
       date: '2026-05-04',
-      timezone: 'Asia/Shanghai',
       eventType: 'update',
       nodeUri: 'core://test',
       limit: 12,
@@ -1193,7 +1191,6 @@ describe('buildDreamSystemPrompt', () => {
     const prompt = buildDreamSystemPrompt(makeInitialContext({
       recallReview: {
         date: '2026-05-07',
-        timezone: 'Asia/Shanghai',
         summary: { returned_queries: 1, total_merged: 3, total_shown: 2, total_used: 1, truncated: false },
         queries: [{ query_id: 'q-1', content: 'long query text', merged_count: 3, shown_count: 2, used_count: 1, client_type: 'codex', session_id: 's1', created_at: '2026-05-07T00:00:00.000Z' }],
       } as any,

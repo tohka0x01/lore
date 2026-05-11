@@ -61,9 +61,7 @@ function registerTestJob(
       type: 'cron',
       enabledKey: `${id}.enabled`,
       cronKey: `${id}.cron`,
-      timezoneKey: `${id}.timezone`,
       defaultCron: '0 3 * * *',
-      defaultTimezone: 'Asia/Shanghai',
     },
     run,
   });
@@ -91,7 +89,6 @@ describe('job registry', () => {
     mockGetSetting.mockResolvedValueOnce(true);
     mockGetSettings.mockResolvedValueOnce({
       'dream.cron': '0 3 * * *',
-      'dream.timezone': 'Asia/Shanghai',
     });
     mockShouldRunCronSchedule.mockReturnValueOnce({ due: true, slotKey: 'cron:2026-04-26T03:10', date: '2026-04-26', hour: 3, minute: 10 });
     mockClaimScheduledJobRun.mockResolvedValueOnce({ claimed: true, runId: 11 });
@@ -99,8 +96,8 @@ describe('job registry', () => {
     await runDueJobsForTest(now);
 
     expect(mockGetSetting).toHaveBeenCalledWith('dream.enabled');
-    expect(mockGetSettings).toHaveBeenCalledWith(['dream.cron', 'dream.timezone']);
-    expect(mockShouldRunCronSchedule).toHaveBeenCalledWith(now, 'Asia/Shanghai', '0 3 * * *');
+    expect(mockGetSettings).toHaveBeenCalledWith(['dream.cron']);
+    expect(mockShouldRunCronSchedule).toHaveBeenCalledWith(now, '0 3 * * *');
     expect(mockClaimScheduledJobRun).toHaveBeenCalledWith('dream', 'cron:2026-04-26T03:10', { date: '2026-04-26', hour: 3, minute: 10 });
     expect(mockMarkJobRunRunning).toHaveBeenCalledWith(11);
     expect(run).toHaveBeenCalledWith({ job_id: 'dream', trigger: 'scheduled', run_id: 11, slot_key: 'cron:2026-04-26T03:10' });
@@ -110,7 +107,7 @@ describe('job registry', () => {
   it('does not run a scheduled job when the slot claim fails', async () => {
     const run = registerTestJob();
     mockGetSetting.mockResolvedValueOnce(true);
-    mockGetSettings.mockResolvedValueOnce({ 'dream.cron': '0 3 * * *', 'dream.timezone': 'Asia/Shanghai' });
+    mockGetSettings.mockResolvedValueOnce({ 'dream.cron': '0 3 * * *' });
     mockShouldRunCronSchedule.mockReturnValueOnce({ due: true, slotKey: 'cron:2026-04-26T03:10', date: '2026-04-26', hour: 3, minute: 10 });
     mockClaimScheduledJobRun.mockResolvedValueOnce({ claimed: false, runId: null });
 
@@ -130,7 +127,7 @@ describe('job registry', () => {
     expect(mockGetSettings).not.toHaveBeenCalled();
 
     mockGetSetting.mockResolvedValueOnce(true);
-    mockGetSettings.mockResolvedValueOnce({ 'dream.cron': '0 3 * * *', 'dream.timezone': 'Asia/Shanghai' });
+    mockGetSettings.mockResolvedValueOnce({ 'dream.cron': '0 3 * * *' });
     mockShouldRunCronSchedule.mockReturnValueOnce({ due: false, slotKey: 'cron:2026-04-26T02:10', date: '2026-04-26', hour: 2, minute: 10 });
 
     await runDueJobsForTest(new Date('2026-04-25T18:10:00.000Z'));
@@ -148,7 +145,7 @@ describe('job registry', () => {
     mockGetSetting.mockResolvedValue(true);
     mockGetSettings
       .mockRejectedValueOnce(new Error('settings unavailable'))
-      .mockResolvedValueOnce({ 'backup.cron': '0 3 * * *', 'backup.timezone': 'Asia/Shanghai' });
+      .mockResolvedValueOnce({ 'backup.cron': '0 3 * * *' });
     mockShouldRunCronSchedule.mockReturnValueOnce({ due: true, slotKey: 'cron:backup', date: '2026-04-26', hour: 3, minute: 10 });
     mockClaimScheduledJobRun.mockResolvedValueOnce({ claimed: true, runId: 12 });
 
@@ -169,8 +166,8 @@ describe('job registry', () => {
 
     mockGetSetting.mockResolvedValue(true);
     mockGetSettings
-      .mockResolvedValueOnce({ 'dream.cron': '0 3 * * *', 'dream.timezone': 'Asia/Shanghai' })
-      .mockResolvedValueOnce({ 'backup.cron': '0 3 * * *', 'backup.timezone': 'Asia/Shanghai' });
+      .mockResolvedValueOnce({ 'dream.cron': '0 3 * * *' })
+      .mockResolvedValueOnce({ 'backup.cron': '0 3 * * *' });
     mockShouldRunCronSchedule
       .mockReturnValueOnce({ due: true, slotKey: 'cron:dream', date: '2026-04-26', hour: 3, minute: 10 })
       .mockReturnValueOnce({ due: true, slotKey: 'cron:backup', date: '2026-04-26', hour: 3, minute: 10 });

@@ -76,7 +76,6 @@ export async function dispatchDreamTool(
     case 'get_today_recall_metadata':
       return await getDreamRecallReview({
         date: (args.date as string) || '',
-        timezone: (args.timezone as string) || 'Asia/Shanghai',
         limit: (args.limit as number) || 100,
         offset: (args.offset as number) || 0,
       });
@@ -116,7 +115,6 @@ export async function dispatchDreamTool(
     case 'get_memory_event_summary':
       return await getDreamMemoryEventSummary({
         date: (args.date as string) || '',
-        timezone: (args.timezone as string) || 'Asia/Shanghai',
         eventType: (args.event_type as string) || '',
         nodeUri: (args.node_uri as string) || '',
         limit: (args.limit as number) || 40,

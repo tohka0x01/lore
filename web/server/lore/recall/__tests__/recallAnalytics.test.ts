@@ -289,11 +289,10 @@ describe('getDreamRecallReview', () => {
       },
     ]));
 
-    const review = await getDreamRecallReview({ date: '2026-04-18', timezone: 'Asia/Shanghai', limit: 100 });
+    const review = await getDreamRecallReview({ date: '2026-04-18', limit: 100 });
 
     expect(review).toEqual({
       date: '2026-04-18',
-      timezone: 'Asia/Shanghai',
       limit: 100,
       offset: 0,
       summary: {
@@ -342,7 +341,7 @@ describe('getDreamRecallReview', () => {
       },
     ]));
 
-    const review = await getDreamRecallReview({ date: '2026-04-18', timezone: 'Asia/Shanghai', limit: 1, offset: 0 });
+    const review = await getDreamRecallReview({ date: '2026-04-18', limit: 1, offset: 0 });
 
     expect(review.summary).toEqual({
       returned_queries: 1,

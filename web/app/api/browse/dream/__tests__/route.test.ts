@@ -186,7 +186,7 @@ describe('/api/browse/dream route', () => {
   });
 
   it('returns config payload from config GET', async () => {
-    mockGetDreamConfig.mockResolvedValueOnce({ enabled: true, schedule_hour: 3, timezone: 'UTC', last_run_date: null } as any);
+    mockGetDreamConfig.mockResolvedValueOnce({ enabled: true, schedule_hour: 3, last_run_date: null } as any);
 
     const response = await GET(new Request('http://localhost/api/browse/dream?action=config') as any);
     const body = await response.json();
@@ -197,7 +197,7 @@ describe('/api/browse/dream route', () => {
   });
 
   it('updates config from config POST', async () => {
-    mockUpdateDreamConfig.mockResolvedValueOnce({ enabled: false, schedule_hour: 5, timezone: 'UTC', last_run_date: null } as any);
+    mockUpdateDreamConfig.mockResolvedValueOnce({ enabled: false, schedule_hour: 5, last_run_date: null } as any);
 
     const response = await POST(new Request('http://localhost/api/browse/dream', {
       method: 'POST',

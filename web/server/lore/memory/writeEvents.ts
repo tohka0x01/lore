@@ -61,7 +61,6 @@ export interface NodeWriteHistoryOptions {
 
 export interface DreamMemoryEventSummaryOptions {
   date?: string;
-  timezone?: string;
   limit?: number;
   eventType?: string;
   nodeUri?: string;
@@ -122,7 +121,6 @@ export interface DreamMemoryEventSummaryItem {
 
 export interface DreamMemoryEventSummary {
   date: string;
-  timezone: string;
   filters: { event_type: string | null; node_uri: string | null } | null;
   summary: {
     total_events: number;
@@ -174,9 +172,8 @@ function keywordDiff(before: string[], after: string[]): { added: string[]; remo
   };
 }
 
-function dateInTimezone(date: Date, timezone: string): string {
+function dateString(date: Date): string {
   const parts = new Intl.DateTimeFormat('en-CA', {
-    timeZone: timezone,
     year: 'numeric',
     month: '2-digit',
     day: '2-digit',
@@ -185,23 +182,18 @@ function dateInTimezone(date: Date, timezone: string): string {
   return `${get('year')}-${get('month')}-${get('day')}`;
 }
 
-function sanitizeDate(value: unknown, timezone: string): string {
+function sanitizeDate(value: unknown): string {
   const text = sanitizeFilter(value, 20);
   if (/^\d{4}-\d{2}-\d{2}$/.test(text)) return text;
-  return dateInTimezone(new Date(), timezone);
+  return dateString(new Date());
 }
 
-function sanitizeTimezone(value: unknown): string {
-  const text = sanitizeFilter(value, 80);
-  if (/^[A-Za-z0-9_+\-]+(?:\/[A-Za-z0-9_+\-]+)*$/.test(text)) {
-    try {
-      new Intl.DateTimeFormat('en-US', { timeZone: text }).format(new Date());
-      return text;
-    } catch {
-      return 'Asia/Shanghai';
-    }
+function systemTimezone(): string {
+  try {
+    return Intl.DateTimeFormat().resolvedOptions().timeZone;
+  } catch {
+    return 'UTC';
   }
-  return 'Asia/Shanghai';
 }
 
 // ---------------------------------------------------------------------------
@@ -483,13 +475,12 @@ function compactMemoryEventRow(row: Record<string, unknown>): DreamMemoryEventSu
 
 export async function getDreamMemoryEventSummary({
   date = '',
-  timezone = 'Asia/Shanghai',
   limit = 40,
   eventType = '',
   nodeUri = '',
 }: DreamMemoryEventSummaryOptions = {}): Promise<DreamMemoryEventSummary> {
-  const safeTimezone = sanitizeTimezone(timezone);
-  const safeDate = sanitizeDate(date, safeTimezone);
+  const tz = systemTimezone();
+  const safeDate = sanitizeDate(date);
   const safeEventType = sanitizeFilter(eventType, 60);
   const safeNodeUri = sanitizeFilter(nodeUri, 240);
   const safeLimit = clampLimit(limit, 1, 100, 40);
@@ -498,7 +489,7 @@ export async function getDreamMemoryEventSummary({
     `created_at >= (($1::date)::timestamp AT TIME ZONE $2)`,
     `created_at < ((($1::date + 1)::timestamp) AT TIME ZONE $2)`,
   ];
-  const params: unknown[] = [safeDate, safeTimezone];
+  const params: unknown[] = [safeDate, tz];
 
   if (safeEventType) {
     params.push(safeEventType);
@@ -526,7 +517,6 @@ export async function getDreamMemoryEventSummary({
 
   return {
     date: safeDate,
-    timezone: safeTimezone,
     filters: safeEventType || safeNodeUri ? { event_type: safeEventType || null, node_uri: safeNodeUri || null } : null,
     summary: {
       total_events: events.length,

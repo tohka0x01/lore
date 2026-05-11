@@ -5,9 +5,7 @@ export interface CronJobSchedule {
   type: 'cron';
   enabledKey: string;
   cronKey: string;
-  timezoneKey: string;
   defaultCron: string;
-  defaultTimezone?: string;
 }
 
 export interface JobRunContext {

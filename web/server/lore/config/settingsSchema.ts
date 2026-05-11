@@ -342,14 +342,6 @@ export const SETTINGS_SCHEMA: SettingDef[] = [
     type: 'string', default: '0 3 * * *',
     description: '定时做梦的 5 段 cron 表达式（分 时 日 月 周，按时区设置）',
   },
-  {
-    key: 'dream.timezone',
-    section: 'dream',
-    label: '时区',
-    type: 'string', default: 'Asia/Shanghai',
-    description: '做梦调度的时区（IANA 格式，如 Asia/Shanghai、America/New_York）',
-  },
-
   // -- Backup schedule ------------------------------------------------------
   {
     key: 'backup.enabled',
@@ -364,13 +356,6 @@ export const SETTINGS_SCHEMA: SettingDef[] = [
     label: '备份 Cron',
     type: 'string', default: '0 4 * * *',
     description: '定时备份的 5 段 cron 表达式（分 时 日 月 周；每小时可填 0 * * * *）',
-  },
-  {
-    key: 'backup.timezone',
-    section: 'backup',
-    label: '时区',
-    type: 'string', default: 'Asia/Shanghai',
-    description: '备份调度的时区（IANA 格式）',
   },
   {
     key: 'backup.retention_count',

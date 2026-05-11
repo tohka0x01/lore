@@ -361,11 +361,10 @@ describe('getDreamMemoryEventSummary', () => {
       },
     ]));
 
-    const result = await getDreamMemoryEventSummary({ date: '2026-05-04', timezone: 'Asia/Shanghai', limit: 20 });
+    const result = await getDreamMemoryEventSummary({ date: '2026-05-04', limit: 20 });
 
     expect(result).toMatchObject({
       date: '2026-05-04',
-      timezone: 'Asia/Shanghai',
       summary: {
         total_events: 2,
         creates: 1,
@@ -411,6 +410,8 @@ describe('getDreamMemoryEventSummary', () => {
     const params = mockSql.mock.calls[0][1] as unknown[];
     expect(query).toContain('created_at >=');
     expect(query).toContain('AT TIME ZONE');
-    expect(params).toEqual(['2026-05-04', 'Asia/Shanghai', 20]);
+    expect(params[0]).toBe('2026-05-04');
+    expect(typeof params[1]).toBe('string');
+    expect(params[2]).toBe(20);
   });
 });

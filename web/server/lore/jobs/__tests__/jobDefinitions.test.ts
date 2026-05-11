@@ -61,9 +61,7 @@ describe('built-in job definitions', () => {
           type: 'cron',
           enabledKey: 'dream.enabled',
           cronKey: 'dream.cron',
-          timezoneKey: 'dream.timezone',
           defaultCron: '0 3 * * *',
-          defaultTimezone: 'Asia/Shanghai',
         },
       },
       {
@@ -73,9 +71,7 @@ describe('built-in job definitions', () => {
           type: 'cron',
           enabledKey: 'backup.enabled',
           cronKey: 'backup.cron',
-          timezoneKey: 'backup.timezone',
           defaultCron: '0 4 * * *',
-          defaultTimezone: 'Asia/Shanghai',
         },
       },
     ]);

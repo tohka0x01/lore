@@ -48,7 +48,6 @@ interface DiaryEntry {
 interface DreamConfig {
   enabled: boolean;
   schedule_hour: number;
-  timezone: string;
   last_run_date: string | null;
 }
 
@@ -91,12 +90,10 @@ export async function runDream(): Promise<DreamResult> {
     currentPhase = 'data_collection';
     console.log('[dream] step 1: data collection');
     await appendDreamWorkflowEvent(diaryId, 'phase_started', { phase: 'data_collection', label: 'Data collection' });
-    const dreamSettings = await getSettingsBatch(['dream.timezone']).catch(() => ({} as Record<string, unknown>)) || {};
-    const dreamTimezone = String(dreamSettings['dream.timezone'] || 'Asia/Shanghai');
     const [boot, recallStats, recallReview, writeStats] = await Promise.all([
       bootView({ client_type: 'admin' }),
       getRecallStats({ days: 1, limit: 20 }),
-      getDreamRecallReview({ limit: 100, timezone: dreamTimezone }),
+      getDreamRecallReview({ limit: 100 }),
       getWriteEventStats({ days: 1, limit: 20 }),
     ]);
     const recallReviewRecord = recallReview as unknown as Record<string, unknown>;
@@ -521,7 +518,7 @@ export async function rollbackDream(id: number | string): Promise<{
 // ---------------------------------------------------------------------------
 
 export async function getDreamConfig(): Promise<DreamConfig> {
-  const s = await getSettingsBatch(['dream.enabled', 'dream.cron', 'dream.timezone']);
+  const s = await getSettingsBatch(['dream.enabled', 'dream.cron']);
   let lastRunDate: string | null = null;
   try {
     const r = await sql(`SELECT value FROM app_settings WHERE key = 'dream.last_run_date'`);
@@ -530,20 +527,17 @@ export async function getDreamConfig(): Promise<DreamConfig> {
   return {
     enabled: s['dream.enabled'] !== false,
     schedule_hour: Number(String(s['dream.cron'] || '0 3 * * *').trim().split(/\s+/)[1] ?? 3),
-    timezone: String(s['dream.timezone'] || 'Asia/Shanghai'),
     last_run_date: lastRunDate,
   };
 }
 
-export async function updateDreamConfig({ enabled, schedule_hour, timezone }: {
+export async function updateDreamConfig({ enabled, schedule_hour }: {
   enabled?: boolean;
   schedule_hour?: number;
-  timezone?: string;
 } = {}): Promise<DreamConfig> {
   const patch: Record<string, unknown> = {};
   if (enabled !== undefined) patch['dream.enabled'] = enabled;
   if (schedule_hour !== undefined) patch['dream.cron'] = `0 ${Number(schedule_hour)} * * *`;
-  if (timezone !== undefined) patch['dream.timezone'] = String(timezone);
   if (Object.keys(patch).length > 0) await updateSettings(patch);
   return getDreamConfig();
 }

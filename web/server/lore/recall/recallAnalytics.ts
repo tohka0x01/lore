@@ -486,7 +486,6 @@ interface DreamRecallMetadataQuery {
 
 interface DreamRecallReviewResult {
   date: string;
-  timezone: string;
   limit: number;
   offset: number;
   summary: {
@@ -828,29 +827,31 @@ export async function getDreamQueryEventSamples({
   };
 }
 
-function localDateString(timezone: string): string {
+function localDateString(): string {
+  return new Date().toLocaleDateString('en-CA');
+}
+
+function systemTimezone(): string {
   try {
-    return new Date().toLocaleDateString('en-CA', { timeZone: timezone });
+    return Intl.DateTimeFormat().resolvedOptions().timeZone;
   } catch {
-    return new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Shanghai' });
+    return 'UTC';
   }
 }
 
 export async function getDreamRecallReview({
   date = '',
-  timezone = 'Asia/Shanghai',
   limit = 100,
   offset = 0,
 }: {
   date?: string;
-  timezone?: string;
   limit?: number;
   offset?: number;
 } = {}): Promise<DreamRecallReviewResult> {
-  const safeTimezone = String(timezone || 'Asia/Shanghai').trim() || 'Asia/Shanghai';
-  const safeDate = sanitizeFilter(date, 20) || localDateString(safeTimezone);
+  const safeDate = sanitizeFilter(date, 20) || localDateString();
   const safeLimit = clampLimit(limit, 1, 100, 100);
   const safeOffset = Math.max(0, Number(offset) || 0);
+  const tz = systemTimezone();
 
   const result = await sql(
     `
@@ -875,7 +876,7 @@ export async function getDreamRecallReview({
       LIMIT $3
       OFFSET $4
     `,
-    [safeDate, safeTimezone, safeLimit, safeOffset],
+    [safeDate, tz, safeLimit, safeOffset],
   );
 
   const queries = result.rows.map((row: Record<string, unknown>) => {
@@ -895,7 +896,6 @@ export async function getDreamRecallReview({
 
   return {
     date: safeDate,
-    timezone: safeTimezone,
     limit: safeLimit,
     offset: safeOffset,
     summary: {

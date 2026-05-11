@@ -205,7 +205,6 @@ export interface DreamConfig {
   enabled: boolean;
   schedule_hour: number;
   schedule_minute: number;
-  timezone: string;
   model: string;
   max_turns: number;
 }

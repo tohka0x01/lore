@@ -350,11 +350,9 @@ describe('runDream', () => {
       .mockResolvedValueOnce(makeResult([{ event_type: 'move', total: 2 }]))
       .mockResolvedValueOnce(makeResult());
 
-    mockGetSettings.mockResolvedValue({ 'dream.timezone': 'Asia/Shanghai' });
     const recallStats = { summary: { merged_count: 4, query_count: 2 }, recent_queries: { items: [{ query_id: 'q-1', query_text: 'q1', merged_count: 3, shown_count: 1, used_count: 0 }], total: 1, limit: 20, offset: 0, has_more: false } };
     const recallReview = {
       date: '2026-05-07',
-      timezone: 'Asia/Shanghai',
       limit: 100,
       offset: 0,
       summary: {
@@ -402,7 +400,7 @@ describe('runDream', () => {
         eventContext: { source: 'dream:auto', session_id: 'dream:1' },
       }),
     );
-    expect(vi.mocked(recallAnalytics.getDreamRecallReview)).toHaveBeenCalledWith({ limit: 100, timezone: 'Asia/Shanghai' });
+    expect(vi.mocked(recallAnalytics.getDreamRecallReview)).toHaveBeenCalledWith({ limit: 100 });
 
     const updateCall = mockSql.mock.calls.find((call) => String(call[0]).includes('UPDATE dream_diary SET status = \'completed\''));
     expect(updateCall).toBeTruthy();
@@ -469,7 +467,7 @@ describe('runDream', () => {
       .mockResolvedValueOnce(makeResult([]))
       .mockResolvedValueOnce(makeResult([]))
       .mockResolvedValueOnce(makeResult());
-    mockGetSettings.mockResolvedValue({ 'dream.timezone': 'Asia/Shanghai' });
+    mockGetSettings.mockResolvedValue({});
     mockRewriteDreamNarrative.mockRejectedValueOnce(new Error('rewrite down'));
     const recallAnalytics = await import('../../recall/recallAnalytics');
     const writeEvents = await import('../../memory/writeEvents');
@@ -492,7 +490,7 @@ describe('runDream', () => {
       .mockResolvedValueOnce(makeResult([{ id: 3 }]))
       .mockResolvedValueOnce(makeResult([]))
       .mockResolvedValueOnce(makeResult());
-    mockGetSettings.mockResolvedValue({ 'dream.timezone': 'Asia/Shanghai' });
+    mockGetSettings.mockResolvedValue({});
     mockRunDreamAgentLoop.mockRejectedValueOnce(new Error('agent down'));
     const recallAnalytics = await import('../../recall/recallAnalytics');
     const writeEvents = await import('../../memory/writeEvents');
@@ -524,16 +522,14 @@ describe('getDreamConfig', () => {
     const config = await getDreamConfig();
     expect(config.enabled).toBe(true);
     expect(config.schedule_hour).toBe(3);
-    expect(config.timezone).toBe('Asia/Shanghai');
     expect(config.last_run_date).toBeNull();
   });
 
   it('reads last_run_date from app_settings', async () => {
-    mockGetSettings.mockResolvedValue({ 'dream.enabled': true, 'dream.cron': '0 4 * * *', 'dream.timezone': 'UTC' });
+    mockGetSettings.mockResolvedValue({ 'dream.enabled': true, 'dream.cron': '0 4 * * *' });
     mockSql.mockResolvedValueOnce(makeResult([{ value: { value: '2024-01-15' } }]));
     const config = await getDreamConfig();
     expect(config.schedule_hour).toBe(4);
-    expect(config.timezone).toBe('UTC');
     expect(config.last_run_date).toBe('2024-01-15');
   });
 });

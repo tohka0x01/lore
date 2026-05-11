@@ -57,10 +57,9 @@ export async function runDueJobsForTest(now: Date = new Date()): Promise<void> {
       const enabled = await getSetting(job.schedule.enabledKey);
       if (enabled === false || enabled === 'false') continue;
 
-      const settings = await getSettings([job.schedule.cronKey, job.schedule.timezoneKey]);
+      const settings = await getSettings([job.schedule.cronKey]);
       const cron = String(settings[job.schedule.cronKey] || job.schedule.defaultCron);
-      const timeZone = String(settings[job.schedule.timezoneKey] || job.schedule.defaultTimezone || 'UTC');
-      const schedule = shouldRunCronSchedule(now, timeZone, cron);
+      const schedule = shouldRunCronSchedule(now, cron);
       if (!schedule.due) continue;
 
       const claim = await claimScheduledJobRun(job.id, schedule.slotKey, { date: schedule.date, hour: schedule.hour, minute: schedule.minute });

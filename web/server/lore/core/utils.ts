@@ -34,3 +34,11 @@ export function truncate(value: unknown, maxChars: number): string {
 export function clampLimit(val: unknown, min: number, max: number, fallback: number): number {
   return Math.max(min, Math.min(max, Number(val) || fallback));
 }
+
+export function systemTimezone(): string {
+  try {
+    return Intl.DateTimeFormat().resolvedOptions().timeZone;
+  } catch {
+    return 'UTC';
+  }
+}

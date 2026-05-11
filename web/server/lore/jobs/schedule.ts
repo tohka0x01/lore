@@ -1,4 +1,4 @@
-function getTimeZonePart(parts: Intl.DateTimeFormatPart[], type: string): string {
+function getPart(parts: Intl.DateTimeFormatPart[], type: string): string {
   return parts.find((part) => part.type === type)?.value || '';
 }
 
@@ -37,9 +37,8 @@ function parseCronField(field: string, min: number, max: number): Set<number> | 
   return values;
 }
 
-export function getCronScheduleSlot(now: Date, timeZone: string): CronSlot {
+export function getCronScheduleSlot(now: Date): CronSlot {
   const parts = new Intl.DateTimeFormat('en-CA', {
-    timeZone,
     year: 'numeric',
     month: '2-digit',
     day: '2-digit',
@@ -47,21 +46,20 @@ export function getCronScheduleSlot(now: Date, timeZone: string): CronSlot {
     minute: '2-digit',
     hour12: false,
   }).formatToParts(now);
-  const year = getTimeZonePart(parts, 'year');
-  const month = getTimeZonePart(parts, 'month');
-  const day = getTimeZonePart(parts, 'day');
-  const hour = Number(getTimeZonePart(parts, 'hour'));
-  const minute = Number(getTimeZonePart(parts, 'minute'));
+  const year = getPart(parts, 'year');
+  const month = getPart(parts, 'month');
+  const day = getPart(parts, 'day');
+  const hour = Number(getPart(parts, 'hour'));
+  const minute = Number(getPart(parts, 'minute'));
   const date = `${year}-${month}-${day}`;
   return { slotKey: `cron:${date}T${String(hour).padStart(2, '0')}:${String(minute).padStart(2, '0')}`, date, hour, minute };
 }
 
 export function shouldRunCronSchedule(
   now: Date,
-  timeZone: string,
   cron: string,
 ): { due: boolean; slotKey: string; date: string; hour: number; minute: number } {
-  const slot = getCronScheduleSlot(now, timeZone);
+  const slot = getCronScheduleSlot(now);
   const fields = cron.trim().split(/\s+/);
   if (fields.length !== 5) return { ...slot, due: false };
 

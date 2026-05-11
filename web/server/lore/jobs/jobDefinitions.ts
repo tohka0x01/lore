@@ -38,9 +38,7 @@ export function registerBuiltInJobs(): void {
       type: 'cron',
       enabledKey: 'dream.enabled',
       cronKey: 'dream.cron',
-      timezoneKey: 'dream.timezone',
       defaultCron: '0 3 * * *',
-      defaultTimezone: 'Asia/Shanghai',
     },
     run: async (context) => {
       const result = await runDream();
@@ -56,9 +54,7 @@ export function registerBuiltInJobs(): void {
       type: 'cron',
       enabledKey: 'backup.enabled',
       cronKey: 'backup.cron',
-      timezoneKey: 'backup.timezone',
       defaultCron: '0 4 * * *',
-      defaultTimezone: 'Asia/Shanghai',
     },
     run: async (context) => {
       const settings = await getSettings([
