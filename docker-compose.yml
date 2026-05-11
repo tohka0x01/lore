@@ -30,14 +30,6 @@ services:
       TZ: ${TZ:-Asia/Shanghai}
       DATABASE_URL: ${DATABASE_URL:-postgresql://lore:change-me@postgres:5432/lore}
       API_TOKEN: ${API_TOKEN:-}
-      LORE_EMBEDDING_PROVIDER: ${LORE_EMBEDDING_PROVIDER:-openai_compatible}
-      LORE_EMBEDDING_BASE_URL: ${LORE_EMBEDDING_BASE_URL:-http://127.0.0.1:8090/v1}
-      LORE_EMBEDDING_API_KEY: ${LORE_EMBEDDING_API_KEY:-}
-      LORE_EMBEDDING_MODEL: ${LORE_EMBEDDING_MODEL:-text-embedding-3-small}
-      LORE_VIEW_LLM_PROVIDER: ${LORE_VIEW_LLM_PROVIDER:-openai_compatible}
-      LORE_VIEW_LLM_BASE_URL: ${LORE_VIEW_LLM_BASE_URL:-http://127.0.0.1:8090/v1}
-      LORE_VIEW_LLM_API_KEY: ${LORE_VIEW_LLM_API_KEY:-}
-      LORE_VIEW_LLM_MODEL: ${LORE_VIEW_LLM_MODEL:-deepseek-v4-flash}
     ports:
       - "${WEB_PORT:-18901}:18901"
     volumes:
