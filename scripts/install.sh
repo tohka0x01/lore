@@ -155,6 +155,26 @@ start_docker() {
     return
   fi
 
+  # Fix common macOS keychain issue that blocks public pulls
+  local docker_config="$HOME/.docker/config.json"
+  if [[ -f "$docker_config" ]]; then
+    if python3 -c "
+import json
+with open('$docker_config') as f:
+    d = json.load(f)
+if d.get('credsStore') == 'osxkeychain':
+    print('keychain')
+" 2>/dev/null | grep -q keychain; then
+      info "Removing osxkeychain credsStore from Docker config (blocks public pulls)..."
+      python3 -c "
+import json
+with open('$docker_config') as f: d = json.load(f)
+d.pop('credsStore', None)
+with open('$docker_config', 'w') as f: json.dump(d, f, indent=2, ensure_ascii=False)
+" && ok "Docker config fixed."
+    fi
+  fi
+
   info "Starting Lore via Docker Compose..."
   mkdir -p "$LORE_DOCKER_DIR"
 
@@ -187,9 +207,9 @@ EOF
     cd "$LORE_DOCKER_DIR"
     docker compose up -d || {
       warn "docker compose up failed. Check $LORE_DOCKER_DIR/docker-compose.yml"
-      return
+      exit 1
     }
-  )
+  ) || return
 
   ok "Lore server starting at http://127.0.0.1:18901"
   BASE_URL="$DEFAULT_BASE_URL"
