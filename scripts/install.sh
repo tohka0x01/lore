@@ -361,7 +361,7 @@ download_artifact() {
   local url="https://github.com/${REPO}/releases/download/${RELEASE_VERSION}/${artifact}"
 
   info "Downloading ${artifact}..."
-  rm -rf "$dest" "$dest.tmp"
+  rm -rf "$dest.tmp"
   mkdir -p "$dest.tmp"
 
   curl -fsSL "$url" -o "$dest.tmp/${artifact}" 2>/dev/null || {
@@ -409,6 +409,7 @@ install_claudecode() {
   local plugin_dir="$LORE_HOME/claudecode"
   download_or_skip "claudecode" "$plugin_dir" || return
 
+  rm -rf "$HOME/.claude/plugins/cache/lore"
   claude plugin marketplace add "$plugin_dir" 2>/dev/null || true
 
   if ! claude plugin list 2>/dev/null | grep -q "lore@lore"; then
@@ -446,7 +447,7 @@ PY
   fi
 
   local cmd="$HOME/.claude/CLAUDE.md"
-  local iline="@import ~/.claude/lore-guidance.md"
+  local iline="@~/.claude/lore-guidance.md"
   if [[ -f "$cmd" ]] && grep -qF "$iline" "$cmd" 2>/dev/null; then
     ok "CLAUDE.md already has lore-guidance import."
   else
@@ -473,6 +474,7 @@ install_codex() {
   local market_dir="$LORE_HOME/codex"
   download_or_skip "codex" "$market_dir" || return
 
+  rm -rf "$HOME/.codex/plugins/cache/lore"
   codex plugin marketplace add "$market_dir" 2>/dev/null || true
 
   # Enable in config.toml
@@ -514,23 +516,6 @@ PY
   fi
   ok "MCP configured."
 
-  # AGENTS.md guidance (Codex has no @import)
-  local gsrc="$market_dir/plugins/lore/rules/lore-guidance.md"
-  local gdst="${CODEX_HOME:-$HOME/.codex}/AGENTS.md"
-  if [[ -f "$gsrc" ]]; then
-    if ! grep -qF "Lore 使用规则" "$gdst" 2>/dev/null; then
-      if [[ -f "$gdst" ]]; then
-        cat "$gsrc" "$gdst" > "${gdst}.tmp.$$"
-        mv "${gdst}.tmp.$$" "$gdst"
-      else
-        cp "$gsrc" "$gdst"
-      fi
-      ok "Lore guidance added to AGENTS.md"
-    else
-      ok "AGENTS.md already has Lore guidance."
-    fi
-  fi
-
   # Hooks
   if [[ -x "$market_dir/plugins/lore/scripts/install-hooks.sh" ]]; then
     LORE_CODEX_PLUGIN_ROOT="$market_dir/plugins/lore" \
@@ -569,6 +554,7 @@ install_openclaw() {
   local oc_dir="$LORE_HOME/openclaw"
   download_or_skip "openclaw" "$oc_dir" || return
 
+  rm -rf "$HOME/.openclaw/extensions/lore"
   (
     cd "$oc_dir"
     npm install --silent 2>/dev/null || npm install
