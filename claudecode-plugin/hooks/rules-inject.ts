@@ -14,36 +14,29 @@ import * as path from "node:path";
 import * as os from "node:os";
 import { execSync } from "node:child_process";
 
+const LORE_CONFIG_FILE = path.join(os.homedir(), ".lore", "config.json");
 const DEFAULT_BASE_URL = "http://127.0.0.1:18901";
 const BOOT_TIMEOUT_MS = 8000;
 const CLIENT_BOOT_URI = "core://agent/claudecode";
 
-function readConfigFile(): Record<string, string> {
-  const files = [
-    path.join(os.homedir(), ".config", "lore", "env"),
-  ];
-  for (const f of files) {
-    try {
-      const text = fs.readFileSync(f, "utf-8");
-      const result: Record<string, string> = {};
-      for (const line of text.split("\n")) {
-        const trimmed = line.trim();
-        if (!trimmed || trimmed.startsWith("#")) continue;
-        const eqIdx = trimmed.indexOf("=");
-        if (eqIdx === -1) continue;
-        result[trimmed.slice(0, eqIdx).trim()] = trimmed.slice(eqIdx + 1).trim();
-      }
-      return result;
-    } catch {}
+interface LoreConfig {
+  base_url?: string;
+  api_token?: string;
+}
+
+function readLoreConfig(): LoreConfig {
+  try {
+    return JSON.parse(fs.readFileSync(LORE_CONFIG_FILE, "utf-8"));
+  } catch {
+    return {};
   }
-  return {};
 }
 
 function loadConfig() {
-  const fileConfig = readConfigFile();
+  const config = readLoreConfig();
   return {
-    baseUrl: (process.env.LORE_BASE_URL || fileConfig.LORE_BASE_URL || DEFAULT_BASE_URL).replace(/\/$/, ""),
-    apiToken: process.env.LORE_API_TOKEN || fileConfig.LORE_API_TOKEN || process.env.API_TOKEN || "",
+    baseUrl: (config.base_url || DEFAULT_BASE_URL).replace(/\/$/, ""),
+    apiToken: process.env.LORE_API_TOKEN || config.api_token || process.env.API_TOKEN || "",
   };
 }
 

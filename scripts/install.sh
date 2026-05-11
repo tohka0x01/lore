@@ -22,8 +22,7 @@ REPO_RAW="https://raw.githubusercontent.com/FFatTiger/lore/main"
 DEFAULT_BASE_URL="http://127.0.0.1:18901"
 LORE_HOME="${LORE_HOME:-$HOME/.lore}"
 LORE_REPO_DIR="$LORE_HOME/repo"
-LORE_CONFIG_DIR="${LORE_CONFIG_DIR:-$HOME/.config/lore}"
-LORE_ENV_FILE="$LORE_CONFIG_DIR/env"
+LORE_CONFIG_FILE="$LORE_HOME/config.json"
 CODEX_MARKETPLACE_DIR="$LORE_HOME/codex-marketplace"
 
 # ---- Colors ----
@@ -49,21 +48,33 @@ err()   { echo -e "${RED}✗${NC} $1"; }
 
 have_command() { command -v "$1" >/dev/null 2>&1; }
 
-# Write key=value to $LORE_ENV_FILE, deduplicating existing keys
+# Write config.json
 write_config() {
-  local key="$1" value="$2"
-  mkdir -p "$LORE_CONFIG_DIR"
-  touch "$LORE_ENV_FILE"
-  if grep -q "^${key}=" "$LORE_ENV_FILE" 2>/dev/null; then
-    if [[ "$OSTYPE" == "darwin"* ]]; then
-      sed -i '' "s|^${key}=.*|${key}=${value}|" "$LORE_ENV_FILE"
-    else
-      sed -i "s|^${key}=.*|${key}=${value}|" "$LORE_ENV_FILE"
-    fi
+  mkdir -p "$LORE_HOME"
+  local data
+  if [[ -f "$LORE_CONFIG_FILE" ]]; then
+    data=$(python3 -c "
+import sys, json
+try:
+  with open('$LORE_CONFIG_FILE', 'r') as f:
+    d = json.load(f)
+except: d = {}
+print(json.dumps(d))
+" 2>/dev/null) || data="{}"
   else
-    echo "${key}=${value}" >> "$LORE_ENV_FILE"
+    data="{}"
   fi
-  ok "Wrote ${key}=${value} → $LORE_ENV_FILE"
+
+  data=$(echo "$data" | python3 -c "
+import sys, json
+d = json.loads(sys.stdin.read())
+d['base_url'] = '$BASE_URL'
+if '${API_TOKEN:-}':
+    d['api_token'] = '${API_TOKEN}'
+print(json.dumps(d, indent=2, ensure_ascii=False))
+")
+  echo "$data" > "$LORE_CONFIG_FILE"
+  ok "Wrote config → $LORE_CONFIG_FILE"
 }
 
 # ---- Interactive UI ----
@@ -329,8 +340,7 @@ PY
     ok "Added '@import ~/.claude/lore-guidance.md' to CLAUDE.md"
   fi
 
-  write_config "LORE_BASE_URL" "$BASE_URL"
-  [[ -n "$API_TOKEN" ]] && write_config "LORE_API_TOKEN" "$API_TOKEN"
+  write_config
 
   ok "Claude Code setup complete. Restart Claude Code to take effect."
 }
@@ -444,8 +454,7 @@ PY
     ok "Hooks installed."
   fi
 
-  write_config "LORE_BASE_URL" "$BASE_URL"
-  [[ -n "$API_TOKEN" ]] && write_config "LORE_API_TOKEN" "$API_TOKEN"
+  write_config
 
   ok "Codex setup complete. Restart Codex to take effect."
 }
@@ -470,8 +479,7 @@ install_pi() {
   else
     warn "Pi install script not found."
   fi
-  write_config "LORE_BASE_URL" "$BASE_URL"
-  [[ -n "$API_TOKEN" ]] && write_config "LORE_API_TOKEN" "$API_TOKEN"
+  write_config
 }
 
 # ---- Channel: OpenClaw ----
@@ -521,8 +529,7 @@ PY
   else
     warn "OpenClaw plugin source not found."
   fi
-  write_config "LORE_BASE_URL" "$BASE_URL"
-  [[ -n "$API_TOKEN" ]] && write_config "LORE_API_TOKEN" "$API_TOKEN"
+  write_config
 }
 
 # ---- Channel: Hermes ----
@@ -538,8 +545,7 @@ install_hermes() {
     warn "Hermes plugin source not found. Skipping."; return
   fi
 
-  write_config "LORE_BASE_URL" "$BASE_URL"
-  [[ -n "$API_TOKEN" ]] && write_config "LORE_API_TOKEN" "$API_TOKEN"
+  write_config
 
   echo ""
   echo -e "  ${BOLD}Hermes requires manual setup:${NC}"
@@ -559,7 +565,7 @@ summary() {
   echo -e "${GREEN}${BOLD}  Lore install complete!${NC}"
   echo ""
   echo -e "  Base URL: ${GREEN}${BASE_URL}${NC}"
-  echo -e "  Config:   ${BLUE}${LORE_ENV_FILE}${NC}"
+  echo -e "  Config:   ${BLUE}${LORE_CONFIG_FILE}${NC}"
   echo -e "  Repo:     ${BLUE}${LORE_REPO_DIR}${NC}"
   echo ""
   echo "  Installed channels:"
