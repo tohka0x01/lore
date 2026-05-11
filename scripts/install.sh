@@ -9,8 +9,8 @@ set -euo pipefail
 #   curl -fsSL https://raw.githubusercontent.com/FFatTiger/lore/main/scripts/install.sh | bash -s -- [OPTIONS]
 #
 # Options:
-#   --base-url URL       Lore server base URL (env: LORE_BASE_URL)
-#   --api-token TOKEN    Lore API token (env: LORE_API_TOKEN)
+#   --base-url URL       Lore server base URL
+#   --api-token TOKEN    Lore API token
 #   --channels CH,...    Comma-separated: claudecode,codex,pi,openclaw,hermes
 #                        Default: all 5
 #   --skip-docker        Don't run docker compose up
@@ -19,8 +19,8 @@ set -euo pipefail
 
 # ---- Args ----
 
-BASE_URL="${LORE_BASE_URL:-}"
-API_TOKEN="${LORE_API_TOKEN:-}"
+BASE_URL=""
+API_TOKEN=""
 CHANNELS_RAW=""
 SKIP_DOCKER=0
 FORCE=0
@@ -28,7 +28,7 @@ CHECK_PRE=0
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
-    --base-url)   BASE_URL="$2"; shift 2;;
+    --base-url)   BASE_URL="$2"; _EXPLICIT_BASE_URL=1; shift 2;;
     --api-token)  API_TOKEN="$2"; shift 2;;
     --channels)   CHANNELS_RAW="$2"; shift 2;;
     --skip-docker) SKIP_DOCKER=1; shift;;
@@ -136,16 +136,16 @@ start_docker() {
     return
   fi
 
-  # If user explicitly set --base-url to non-default, assume external server
-  if [[ -n "${LORE_BASE_URL:-}" && "$BASE_URL" != "$DEFAULT_BASE_URL" ]]; then
+  # Only skip docker if user explicitly passed --base-url
+  if [[ -n "${_EXPLICIT_BASE_URL:-}" ]]; then
     info "Using external Lore server: $BASE_URL — skipping Docker."
     return
   fi
 
-  # If config.json already has a non-default base_url, skip docker (updating)
+  # If config.json already has a saved base_url, skip docker (updating existing install)
   local saved; saved=$(read_config)
-  if [[ -n "$saved" && "$saved" != "$DEFAULT_BASE_URL" ]]; then
-    info "Config has external server: $saved — skipping Docker."
+  if [[ -n "$saved" ]]; then
+    info "Config has saved server: $saved — skipping Docker."
     BASE_URL="$saved"
     return
   fi
