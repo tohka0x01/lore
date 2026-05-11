@@ -27,6 +27,7 @@ SKIP_DOCKER=0
 FORCE=0
 CHECK_PRE=0
 CHECK_DEV=0
+DOCKER_MANAGED=0
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
@@ -87,6 +88,18 @@ except: pass
   fi
 }
 
+read_config_docker_managed() {
+  if [[ -f "$LORE_CONFIG_FILE" ]]; then
+    python3 -c "
+import sys, json
+try:
+  with open('$LORE_CONFIG_FILE') as f: d = json.load(f)
+  print(d.get('docker_managed', False))
+except: pass
+" 2>/dev/null
+  fi
+}
+
 write_config() {
   mkdir -p "$LORE_HOME"
   local new_ver=""
@@ -95,12 +108,13 @@ write_config() {
     new_ver="${RELEASE_VERSION:-}"
   fi
 
-  python3 - "$LORE_CONFIG_FILE" "$BASE_URL" "$API_TOKEN" "$new_ver" <<'PY'
+  python3 - "$LORE_CONFIG_FILE" "$BASE_URL" "$API_TOKEN" "$new_ver" "$DOCKER_MANAGED" <<'PY'
 import sys, json, os
 path = sys.argv[1]
 base_url = sys.argv[2]
 api_token = sys.argv[3]
 version = sys.argv[4]
+docker_managed = sys.argv[5]
 
 data = {}
 if os.path.exists(path):
@@ -112,6 +126,10 @@ data['base_url'] = base_url
 if api_token: data['api_token'] = api_token
 elif 'api_token' in data: del data['api_token']
 if version: data['installed_version'] = version
+if docker_managed == "1":
+    data['docker_managed'] = True
+elif 'docker_managed' not in data:
+    data['docker_managed'] = False
 
 with open(path, 'w') as f:
     json.dump(data, f, indent=2, ensure_ascii=False)
@@ -133,6 +151,59 @@ resolve_channels() {
 
 # ---- Docker ----
 
+update_docker() {
+  if ! have_command docker; then
+    warn "Docker not found. Cannot update."
+    return
+  fi
+
+  local compose_cmd
+  if docker compose version >/dev/null 2>&1; then
+    compose_cmd="docker compose"
+  elif have_command docker-compose; then
+    compose_cmd="docker-compose"
+  else
+    warn "docker compose not found. Cannot update."
+    return
+  fi
+
+  info "Updating Lore Docker containers..."
+
+  # Download latest docker-compose.yml
+  local compose_url="${REPO_RAW}/docker-compose.yml"
+  curl -fsSL "$compose_url" -o "$LORE_DOCKER_DIR/docker-compose.yml" || {
+    warn "Failed to download docker-compose.yml"
+    return
+  }
+
+  # Update .env tag if --dev/--pre changed
+  if [[ -f "$LORE_DOCKER_DIR/.env" ]]; then
+    local tag="latest"
+    [[ "$CHECK_DEV" == "1" ]] && tag="dev-latest"
+    [[ "$CHECK_PRE" == "1" ]] && tag="pre-latest"
+    python3 - "$LORE_DOCKER_DIR/.env" "$tag" <<'PY'
+import sys
+path, tag = sys.argv[1], sys.argv[2]
+with open(path) as f: lines = f.readlines()
+out = []; found = False
+for line in lines:
+    if line.startswith('LORE_FRONTEND_IMAGE='):
+        out.append(f'LORE_FRONTEND_IMAGE=fffattiger/lore:{tag}\n'); found = True
+    else: out.append(line)
+if not found: out.append(f'LORE_FRONTEND_IMAGE=fffattiger/lore:{tag}\n')
+with open(path, 'w') as f: f.writelines(out)
+PY
+  fi
+
+  (
+    cd "$LORE_DOCKER_DIR"
+    $compose_cmd pull || { warn "docker compose pull failed."; return; }
+    $compose_cmd up -d || { warn "docker compose up -d failed."; return; }
+  )
+
+  ok "Docker containers updated."
+}
+
 start_docker() {
   if [[ "$SKIP_DOCKER" == "1" ]]; then
     info "Skipping Docker (--skip-docker)."
@@ -145,11 +216,16 @@ start_docker() {
     return
   fi
 
-  # If config.json already has a saved base_url, skip docker (updating existing install)
+  # If config.json already has a saved base_url, this is an update
   local saved; saved=$(read_config)
   if [[ -n "$saved" ]]; then
-    info "Config has saved server: $saved — skipping Docker."
     BASE_URL="$saved"
+    local managed; managed=$(read_config_docker_managed)
+    if [[ "$managed" == "True" ]]; then
+      update_docker
+    else
+      info "Config has saved server: $saved — skipping Docker."
+    fi
     return
   fi
 
@@ -210,6 +286,7 @@ EOF
     }
   ) || return
 
+  DOCKER_MANAGED=1
   ok "Lore server starting at http://127.0.0.1:18901"
   BASE_URL="$DEFAULT_BASE_URL"
 
