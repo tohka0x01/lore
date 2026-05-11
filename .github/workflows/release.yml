@@ -95,3 +95,52 @@ jobs:
             fffattiger/lore:${{ needs.metadata.outputs.version_tag }}-amd64 \
             fffattiger/lore:${{ needs.metadata.outputs.version_tag }}-arm64
           docker buildx imagetools inspect fffattiger/lore:latest
+
+  plugins:
+    runs-on: ubuntu-latest
+    needs: metadata
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build Claude Code artifact
+        run: |
+          mkdir -p dist
+          cd claudecode-plugin
+          zip -r ../dist/lore-claudecode.zip \
+            .claude-plugin .mcp.json hooks rules
+
+      - name: Build Codex artifact
+        run: |
+          mkdir -p dist/codex-marketplace/plugins/lore
+          cp -a codex-plugin/.agents dist/codex-marketplace/
+          cp -a codex-plugin/.codex-plugin dist/codex-marketplace/plugins/lore/
+          cp -a codex-plugin/.mcp.json dist/codex-marketplace/plugins/lore/
+          for d in README.md skills hooks rules scripts assets; do
+            if [ -e "codex-plugin/$d" ]; then
+              cp -a "codex-plugin/$d" "dist/codex-marketplace/plugins/lore/$d"
+            fi
+          done
+          cd dist/codex-marketplace
+          zip -r ../../lore-codex.zip .
+
+      - name: Build OpenClaw artifact
+        run: |
+          cd openclaw-plugin
+          zip -r ../dist/lore-openclaw.zip . -x 'node_modules/*'
+
+      - name: Build Pi artifact
+        run: |
+          cd pi-extension
+          zip -r ../dist/lore-pi.zip . -x 'node_modules/*' '__pycache__/*'
+
+      - name: Upload artifacts to release
+        env:
+          GH_REPO: ${{ github.repository }}
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          TAG="${{ needs.metadata.outputs.version_tag }}"
+          for f in dist/lore-*.zip; do
+            gh release upload "v${TAG}" "$f" --clobber
+          done
