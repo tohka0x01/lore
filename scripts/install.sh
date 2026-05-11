@@ -11,26 +11,25 @@ set -euo pipefail
 # Env vars (highest priority, skip interactive prompts):
 #   LORE_BASE_URL          — Lore server base URL
 #   LORE_API_TOKEN         — Lore API token (if server requires auth)
-#   LORE_INSTALL_CHANNELS  — comma-separated list: claudecode,codex,pi,openclaw,hermes
-#   LORE_INSTALL_NO_INTERACTIVE=1 — non-interactive mode
+#   LORE_INSTALL_CHANNELS  — comma-separated: claudecode,codex,pi,openclaw,hermes
+#   LORE_INSTALL_NO_INTERACTIVE=1 — non-interactive mode, install all channels
+#   LORE_FORCE_REINSTALL=1 — force reinstall even if same version
 
 # ---- Constants ----
 
 REPO_URL="https://github.com/FFatTiger/lore.git"
 REPO_RAW="https://raw.githubusercontent.com/FFatTiger/lore/main"
 DEFAULT_BASE_URL="http://127.0.0.1:18901"
+LORE_HOME="${LORE_HOME:-$HOME/.lore}"
+LORE_REPO_DIR="$LORE_HOME/repo"
 LORE_CONFIG_DIR="${LORE_CONFIG_DIR:-$HOME/.config/lore}"
 LORE_ENV_FILE="$LORE_CONFIG_DIR/env"
-LORE_CLONE_DIR="${LORE_CLONE_DIR:-$HOME/.lore/repo}"
+CODEX_MARKETPLACE_DIR="$LORE_HOME/codex-marketplace"
 
 # ---- Colors ----
 
-RED='\033[0;31m'
-GREEN='\033[0;32m'
-YELLOW='\033[1;33m'
-BLUE='\033[0;34m'
-BOLD='\033[1m'
-NC='\033[0m'
+RED='\033[0;31m'; GREEN='\033[0;32m'; YELLOW='\033[1;33m'
+BLUE='\033[0;34m'; BOLD='\033[1m'; NC='\033[0m'
 
 banner() {
   echo ""
@@ -48,18 +47,7 @@ ok()    { echo -e "${GREEN}✓${NC} $1"; }
 warn()  { echo -e "${YELLOW}!${NC} $1"; }
 err()   { echo -e "${RED}✗${NC} $1"; }
 
-# ---- Helpers ----
-
-require_command() {
-  if ! command -v "$1" >/dev/null 2>&1; then
-    err "Missing required command: $1"
-    return 1
-  fi
-}
-
-have_command() {
-  command -v "$1" >/dev/null 2>&1
-}
+have_command() { command -v "$1" >/dev/null 2>&1; }
 
 # Write key=value to $LORE_ENV_FILE, deduplicating existing keys
 write_config() {
@@ -67,7 +55,6 @@ write_config() {
   mkdir -p "$LORE_CONFIG_DIR"
   touch "$LORE_ENV_FILE"
   if grep -q "^${key}=" "$LORE_ENV_FILE" 2>/dev/null; then
-    # macOS sed in-place wants '' extension; GNU sed works either way
     if [[ "$OSTYPE" == "darwin"* ]]; then
       sed -i '' "s|^${key}=.*|${key}=${value}|" "$LORE_ENV_FILE"
     else
@@ -81,7 +68,6 @@ write_config() {
 
 # ---- Interactive UI ----
 
-# Multi-select menu: Space to toggle, Enter to confirm, j/k or arrows to move
 multi_select() {
   local channels=("claudecode" "codex" "pi" "openclaw" "hermes")
   local labels=(
@@ -94,58 +80,32 @@ multi_select() {
   local cmds=("claude" "codex" "pi" "openclaw" "python3")
   local n=${#channels[@]}
 
-  # Build availability markers
   local detected=()
   for i in $(seq 0 $((n - 1))); do
-    if have_command "${cmds[$i]}"; then
-      detected+=("1")
-    else
-      detected+=("0")
-    fi
+    if have_command "${cmds[$i]}"; then detected+=("1"); else detected+=("0"); fi
   done
 
-  # Selected state (all default off)
   local selected=()
-  for i in $(seq 0 $((n - 1))); do
-    selected+=("0")
-  done
-
+  for i in $(seq 0 $((n - 1))); do selected+=("0"); done
   local cursor=0
 
-  # Save terminal settings, switch to raw mode
   local old_tty
   old_tty=$(stty -g 2>/dev/null || true)
   stty -echo -icanon min 0 time 0 2>/dev/null || true
   trap 'stty "$old_tty" 2>/dev/null || true' EXIT
 
   draw_menu() {
-    # Move cursor up N+3 lines from previous render
-    if [[ $_menu_drawn -gt 0 ]]; then
-      printf '\033[%dA' "$((_menu_lines))"
-    fi
+    if [[ $_menu_drawn -gt 0 ]]; then printf '\033[%dA' "$((_menu_lines))"; fi
     _menu_lines=$((n + 4))
-
     echo ""
     echo -e "${BOLD}Select channels (Space=toggle, Enter=confirm):${NC}"
     echo ""
-
     for i in $(seq 0 $((n - 1))); do
-      local ch="${channels[$i]}"
       local label="${labels[$i]}"
-      local det="${detected[$i]}"
       local sel="${selected[$i]}"
-      local prefix=" "
-      local style=""
-      local suffix=""
-
-      if [[ "$sel" == "1" ]]; then
-        prefix="◉"
-      else
-        prefix="○"
-      fi
-
+      local prefix="○"
+      if [[ "$sel" == "1" ]]; then prefix="◉"; fi
       if [[ "$i" == "$cursor" ]]; then
-        # Highlighted row
         if [[ "$sel" == "1" ]]; then
           echo -e "  ${GREEN}${BOLD}> ${prefix} ${label}${NC}"
         else
@@ -158,14 +118,10 @@ multi_select() {
           echo -e "    ${prefix} ${label}"
         fi
       fi
-      if [[ "$det" == "1" ]]; then
-        # Move up one line and append detected tag
-        printf '\033[1A'
-        printf '\033[60C'
+      printf '\033[1A'; printf '\033[60C'
+      if [[ "${detected[$i]}" == "1" ]]; then
         echo -e "${GREEN}(detected)${NC}"
       else
-        printf '\033[1A'
-        printf '\033[60C'
         echo -e "${YELLOW}(not found)${NC}"
       fi
     done
@@ -177,83 +133,41 @@ multi_select() {
     local key
     key=$(dd bs=3 count=1 2>/dev/null | xxd -p)
     case "$key" in
-      # j or down arrow
-      6a|1b5b42)
-        cursor=$(( (cursor + 1) % n ))
-        ;;
-      # k or up arrow
-      6b|1b5b41)
-        cursor=$(( (cursor - 1 + n) % n ))
-        ;;
-      # Space
+      6a|1b5b42) cursor=$(( (cursor + 1) % n ));;
+      6b|1b5b41) cursor=$(( (cursor - 1 + n) % n ));;
       20)
-        if [[ "${selected[$cursor]}" == "1" ]]; then
-          selected[$cursor]="0"
-        else
-          selected[$cursor]="1"
-        fi
-        ;;
-      # Enter
-      0a|0d)
-        echo ""
-        echo ""
-        break
-        ;;
-      # a = select all
-      61)
-        for i in $(seq 0 $((n - 1))); do
-          selected[$i]="1"
-        done
-        ;;
-      # q = quit
-      71)
-        stty "$old_tty" 2>/dev/null || true
-        echo ""
-        err "Aborted."
-        exit 1
-        ;;
+        if [[ "${selected[$cursor]}" == "1" ]]; then selected[$cursor]="0"
+        else selected[$cursor]="1"; fi;;
+      0a|0d) echo ""; echo ""; break;;
+      61) for i in $(seq 0 $((n - 1))); do selected[$i]="1"; done;;
+      71) stty "$old_tty" 2>/dev/null || true; echo ""; err "Aborted."; exit 1;;
     esac
   done
 
-  # Restore terminal
-  stty "$old_tty" 2>/dev/null || true
-  trap - EXIT
+  stty "$old_tty" 2>/dev/null || true; trap - EXIT
 
   CHANNELS=()
   for i in $(seq 0 $((n - 1))); do
-    if [[ "${selected[$i]}" == "1" ]]; then
-      CHANNELS+=("${channels[$i]}")
-    fi
+    if [[ "${selected[$i]}" == "1" ]]; then CHANNELS+=("${channels[$i]}"); fi
   done
-
-  if [[ ${#CHANNELS[@]} -eq 0 ]]; then
-    err "No channels selected."
-    exit 1
-  fi
+  if [[ ${#CHANNELS[@]} -eq 0 ]]; then err "No channels selected."; exit 1; fi
 
   echo -ne "Channels: "
   for ch in "${CHANNELS[@]}"; do echo -ne "${GREEN}${ch}${NC} "; done
-  echo ""
-  echo ""
+  echo ""; echo ""
 }
-
-# ---- Channel selection ----
 
 select_channels() {
   if [[ -n "${LORE_INSTALL_CHANNELS:-}" ]]; then
     IFS=',' read -ra CHANNELS <<< "$LORE_INSTALL_CHANNELS"
-    echo -e "Using LORE_INSTALL_CHANNELS: ${LORE_INSTALL_CHANNELS}"
-    echo ""
+    echo -e "Using LORE_INSTALL_CHANNELS: ${LORE_INSTALL_CHANNELS}"; echo ""
     return
   fi
-
   if [[ "${LORE_INSTALL_NO_INTERACTIVE:-0}" == "1" ]]; then
     CHANNELS=("claudecode" "codex" "pi" "openclaw" "hermes")
-    echo "Non-interactive mode, installing all channels."
-    echo ""
+    echo "Non-interactive mode, installing all channels."; echo ""
     return
   fi
-
   multi_select
 }
 
@@ -286,43 +200,79 @@ prompt_config() {
 
   if [[ "${LORE_INSTALL_NO_INTERACTIVE:-0}" != "1" ]]; then
     read -r -p "Continue with these settings? [Y/n]: " confirm
-    if [[ "$confirm" =~ ^[Nn] ]]; then
-      err "Aborted."
-      exit 1
-    fi
+    if [[ "$confirm" =~ ^[Nn] ]]; then err "Aborted."; exit 1; fi
   fi
+}
+
+# ---- Clone / update repo ----
+
+REPO_CLONED=false
+
+clone_repo() {
+  if [[ -d "$LORE_REPO_DIR/.git" ]]; then
+    info "Repo exists at $LORE_REPO_DIR, checking for updates..."
+    (cd "$LORE_REPO_DIR" && git fetch origin main 2>/dev/null) || true
+    local local_sha remote_sha
+    local_sha=$(cd "$LORE_REPO_DIR" && git rev-parse HEAD 2>/dev/null || echo "")
+    remote_sha=$(cd "$LORE_REPO_DIR" && git rev-parse origin/main 2>/dev/null || echo "")
+    if [[ "$local_sha" != "$remote_sha" && -n "$remote_sha" ]]; then
+      info "Updating repo..."
+      (cd "$LORE_REPO_DIR" && git pull --ff-only origin main 2>/dev/null) || warn "git pull failed"
+    else
+      ok "Repo is up to date."
+    fi
+  else
+    info "Cloning Lore repo to $LORE_REPO_DIR ..."
+    mkdir -p "$(dirname "$LORE_REPO_DIR")"
+    git clone --depth 1 "$REPO_URL" "$LORE_REPO_DIR" 2>/dev/null || {
+      err "Failed to clone repo. Check network and try again."
+      exit 1
+    }
+  fi
+  REPO_CLONED=true
 }
 
 # ---- Channel: Claude Code ----
 
 install_claudecode() {
   echo ""
-  echo -e "${BOLD}── Claude Code ────────────────────────────────${NC}"
-  echo ""
+  echo -e "${BOLD}── Claude Code ────────────────────────────────${NC}"; echo ""
 
-  require_command claude || {
-    warn "claude CLI not found. Skipping marketplace install."
-    warn "After installing Claude Code, run:"
-    echo "  claude plugins marketplace add FFatTiger/lore#plugin"
-    echo "  claude plugins install lore@lore"
-    return
+  $REPO_CLONED || clone_repo
+
+  local plugin_dir="$LORE_REPO_DIR/claudecode-plugin"
+
+  if [[ ! -f "$plugin_dir/.claude-plugin/marketplace.json" ]]; then
+    err "Claude Code plugin not found at $plugin_dir"; return
+  fi
+
+  require_command() {
+    if ! have_command "$1"; then
+      warn "$1 CLI not found. Skipping."
+      warn "Install $1 first, then re-run this script."
+      return 1
+    fi
   }
+  require_command claude || return
 
-  # Register marketplace and install plugin
-  info "Registering Lore marketplace..."
-  claude plugins marketplace add FFatTiger/lore#plugin 2>/dev/null || \
-    info "Marketplace already registered (or add skipped)."
+  # Register local marketplace
+  info "Adding local marketplace: $plugin_dir"
+  if claude plugin marketplace add "$plugin_dir" 2>/dev/null; then
+    ok "Marketplace registered."
+  else
+    info "Marketplace may already be registered."
+  fi
 
+  # Install plugin
   info "Installing lore@lore plugin..."
-  if claude plugins install lore@lore 2>/dev/null; then
+  if claude plugin install lore@lore 2>/dev/null; then
     ok "Plugin lore@lore installed."
   else
-    # Plugin might already be installed — check
-    if claude plugins list 2>/dev/null | grep -q "lore@lore"; then
+    if claude plugin list 2>/dev/null | grep -q "lore@lore"; then
       ok "Plugin lore@lore already installed."
     else
-      warn "Plugin install via CLI returned non-zero."
-      warn "You can install manually in Claude Code with: /plugin install lore@lore"
+      warn "Plugin install returned non-zero."
+      warn "Try manually in Claude Code: /plugin install lore@lore"
     fi
   fi
 
@@ -332,148 +282,215 @@ install_claudecode() {
   if have_command python3; then
     python3 - "$settings_file" "$BASE_URL" "$API_TOKEN" <<'PY'
 import sys, json, os
-
 path, base_url, api_token = sys.argv[1], sys.argv[2], sys.argv[3]
 data = {}
 if os.path.exists(path):
     try:
-        with open(path, 'r') as f:
-            data = json.load(f)
-    except (json.JSONDecodeError, IOError):
-        data = {}
-
-if not isinstance(data, dict):
-    data = {}
-
+        with open(path, 'r') as f: data = json.load(f)
+    except (json.JSONDecode, IOError): data = {}
+if not isinstance(data, dict): data = {}
 data.setdefault("env", {})
 data["env"]["LORE_BASE_URL"] = base_url
-if api_token:
-    data["env"]["LORE_API_TOKEN"] = api_token
-elif "LORE_API_TOKEN" in data.get("env", {}):
-    pass  # keep existing
-
-with open(path, 'w') as f:
-    json.dump(data, f, indent=2, ensure_ascii=False)
-print("ok")
+if api_token: data["env"]["LORE_API_TOKEN"] = api_token
+with open(path, 'w') as f: json.dump(data, f, indent=2, ensure_ascii=False)
 PY
     ok "Claude Code settings updated."
   else
     warn "python3 not found — skipping settings.json update."
-    warn "Add to ~/.claude/settings.json manually:"
-    echo "  \"env\": { \"LORE_BASE_URL\": \"${BASE_URL}\" }"
+    warn "Add manually: \"env\": { \"LORE_BASE_URL\": \"${BASE_URL}\" }"
   fi
 
   # Write lore-guidance.md to ~/.claude/
-  local guidance_src="$LORE_CLONE_DIR/claudecode-plugin/rules/lore-guidance.md"
+  local guidance_src="$plugin_dir/rules/lore-guidance.md"
   local guidance_dst="$HOME/.claude/lore-guidance.md"
-
   if [[ -f "$guidance_src" ]]; then
     cp "$guidance_src" "$guidance_dst"
     ok "lore-guidance.md → $guidance_dst"
   else
-    # Download from raw URL as fallback
-    info "Downloading lore-guidance.md from GitHub..."
     curl -fsSL "${REPO_RAW}/claudecode-plugin/rules/lore-guidance.md" -o "$guidance_dst" || {
-      warn "Failed to download lore-guidance.md. You can copy it manually later."
-      return
+      warn "Failed to download lore-guidance.md."
     }
-    ok "lore-guidance.md downloaded → $guidance_dst"
   fi
 
   # Prepend @import to ~/.claude/CLAUDE.md
   local claude_md="$HOME/.claude/CLAUDE.md"
   local import_line="@import ~/.claude/lore-guidance.md"
-
   if [[ -f "$claude_md" ]] && grep -qF "$import_line" "$claude_md" 2>/dev/null; then
     ok "CLAUDE.md already has lore-guidance import."
   else
     info "Adding import to CLAUDE.md..."
     if [[ -f "$claude_md" ]]; then
-      # File exists — prepend
       local tmp_md="${claude_md}.tmp.$$"
       printf '%s\n\n%s\n' "$import_line" "$(cat "$claude_md")" > "$tmp_md"
       mv "$tmp_md" "$claude_md"
     else
-      # File doesn't exist — create
       printf '%s\n' "$import_line" > "$claude_md"
     fi
     ok "Added '@import ~/.claude/lore-guidance.md' to CLAUDE.md"
   fi
 
-  # Write config
   write_config "LORE_BASE_URL" "$BASE_URL"
-  if [[ -n "$API_TOKEN" ]]; then
-    write_config "LORE_API_TOKEN" "$API_TOKEN"
-  fi
+  [[ -n "$API_TOKEN" ]] && write_config "LORE_API_TOKEN" "$API_TOKEN"
 
-  ok "Claude Code setup complete."
-  echo "  Restart Claude Code for changes to take effect."
+  ok "Claude Code setup complete. Restart Claude Code to take effect."
 }
 
 # ---- Channel: Codex ----
 
 install_codex() {
   echo ""
-  echo -e "${BOLD}── Codex ───────────────────────────────────────${NC}"
-  echo ""
+  echo -e "${BOLD}── Codex ───────────────────────────────────────${NC}"; echo ""
 
-  require_command codex || {
-    warn "codex CLI not found. Skipping Codex install."
-    return
-  }
+  $REPO_CLONED || clone_repo
 
-  local codex_plugin_dir="$LORE_CLONE_DIR/codex-plugin"
-  if [[ -d "$codex_plugin_dir" ]]; then
-    info "Running Codex plugin install from $codex_plugin_dir ..."
-    (
-      cd "$codex_plugin_dir"
-      LORE_BASE_URL="${BASE_URL}" LORE_API_TOKEN="${API_TOKEN:-}" bash scripts/install.sh
-    )
-    ok "Codex install complete."
-  else
-    warn "Codex plugin source not found in clone. Skipping."
+  local source_dir="$LORE_REPO_DIR/codex-plugin"
+  local market_dir="$CODEX_MARKETPLACE_DIR"
+
+  if [[ ! -d "$source_dir" ]]; then
+    err "Codex plugin source not found at $source_dir"; return
   fi
+
+  require_command() {
+    if ! have_command "$1"; then
+      warn "$1 CLI not found. Skipping."
+      return 1
+    fi
+  }
+  require_command codex || return
+
+  # Build marketplace structure: codex requires plugin in subdirectory
+  # marketplace.json says source.path = "./plugins/lore"
+  info "Building Codex marketplace at $market_dir ..."
+  rm -rf "$market_dir"
+  mkdir -p "$market_dir/plugins/lore"
+
+  # Marketplace manifest
+  cp -a "$source_dir/.agents" "$market_dir/.agents"
+
+  # Plugin files under plugins/lore/
+  cp -a "$source_dir/.codex-plugin" "$market_dir/plugins/lore/.codex-plugin"
+  cp -a "$source_dir/.mcp.json"      "$market_dir/plugins/lore/.mcp.json"
+  for entry in README.md skills hooks rules scripts assets; do
+    if [[ -e "$source_dir/$entry" ]]; then
+      cp -a "$source_dir/$entry" "$market_dir/plugins/lore/$entry"
+    fi
+  done
+  ok "Marketplace built at $market_dir"
+
+  # Register marketplace
+  info "Registering local marketplace..."
+  codex plugin marketplace add "$market_dir" 2>/dev/null || \
+    info "Marketplace may already be registered."
+
+  # Enable plugin in config.toml via python3
+  local codex_config="${CODEX_HOME:-$HOME/.codex}/config.toml"
+  if have_command python3 && [[ -f "$codex_config" ]]; then
+    python3 - "$codex_config" "$market_dir" "$BASE_URL" "$API_TOKEN" <<'PY'
+import sys, os, copy
+config_path, market_dir, base_url, api_token = sys.argv[1], sys.argv[2], sys.argv[3], sys.argv[4]
+
+# Read config
+with open(config_path, 'r') as f:
+    lines = f.readlines()
+
+# Enable plugin
+plugin_id = 'lore@lore'
+section = f'[plugins."{plugin_id}"]'
+out = []; idx = 0; found = False; enabled_written = False
+while idx < len(lines):
+    line = lines[idx]
+    if line.strip() == section:
+        found = True; out.append(line); idx += 1
+        while idx < len(lines) and not lines[idx].lstrip().startswith('['):
+            if lines[idx].strip().startswith('enabled'):
+                out.append('enabled = true\n'); enabled_written = True
+            else:
+                out.append(lines[idx])
+            idx += 1
+        if not enabled_written: out.append('enabled = true\n')
+        continue
+    out.append(line); idx += 1
+if not found:
+    if out and out[-1] != '\n': out.append('\n')
+    out.extend([section + '\n', 'enabled = true\n'])
+
+with open(config_path, 'w') as f: f.writelines(out)
+PY
+    ok "Codex plugin enabled in config.toml"
+  else
+    warn "Add to ~/.codex/config.toml: [plugins.\"lore@lore\"] → enabled = true"
+  fi
+
+  # Configure MCP
+  local mcp_url="${BASE_URL}/api/mcp?client_type=codex"
+  info "Configuring MCP server..."
+  codex mcp remove lore >/dev/null 2>&1 || true
+  if [[ -n "$API_TOKEN" ]]; then
+    codex mcp add lore --url "$mcp_url" --bearer-token-env-var LORE_API_TOKEN 2>/dev/null || \
+      warn "MCP add returned non-zero."
+  else
+    codex mcp add lore --url "$mcp_url" 2>/dev/null || \
+      warn "MCP add returned non-zero."
+  fi
+  ok "MCP configured."
+
+  # Install hooks
+  if [[ -x "$market_dir/plugins/lore/scripts/install-hooks.sh" ]]; then
+    info "Installing hooks..."
+    LORE_CODEX_PLUGIN_ROOT="$market_dir/plugins/lore" \
+      LORE_BASE_URL="${BASE_URL}" \
+      bash "$market_dir/plugins/lore/scripts/install-hooks.sh" 2>/dev/null || \
+      warn "Hook install returned non-zero."
+    ok "Hooks installed."
+  fi
+
+  write_config "LORE_BASE_URL" "$BASE_URL"
+  [[ -n "$API_TOKEN" ]] && write_config "LORE_API_TOKEN" "$API_TOKEN"
+
+  ok "Codex setup complete. Restart Codex to take effect."
 }
 
 # ---- Channel: Pi ----
 
 install_pi() {
   echo ""
-  echo -e "${BOLD}── Pi ──────────────────────────────────────────${NC}"
-  echo ""
+  echo -e "${BOLD}── Pi ──────────────────────────────────────────${NC}"; echo ""
 
-  require_command pi || {
-    warn "pi CLI not found. Skipping Pi install."
-    return
-  }
+  $REPO_CLONED || clone_repo
 
-  local pi_install_script="$LORE_CLONE_DIR/pi-extension/scripts/install-local.sh"
-  if [[ -f "$pi_install_script" ]]; then
+  if ! have_command pi; then
+    warn "pi CLI not found. Skipping."; return
+  fi
+
+  local pi_script="$LORE_REPO_DIR/pi-extension/scripts/install-local.sh"
+  if [[ -f "$pi_script" ]]; then
     info "Running Pi extension install..."
-    LORE_BASE_URL="${BASE_URL}" LORE_API_TOKEN="${API_TOKEN:-}" bash "$pi_install_script"
+    LORE_BASE_URL="${BASE_URL}" LORE_API_TOKEN="${API_TOKEN:-}" bash "$pi_script"
     ok "Pi install complete."
   else
-    warn "Pi install script not found in clone. Skipping."
+    warn "Pi install script not found."
   fi
+  write_config "LORE_BASE_URL" "$BASE_URL"
+  [[ -n "$API_TOKEN" ]] && write_config "LORE_API_TOKEN" "$API_TOKEN"
 }
 
 # ---- Channel: OpenClaw ----
 
 install_openclaw() {
   echo ""
-  echo -e "${BOLD}── OpenClaw ────────────────────────────────────${NC}"
-  echo ""
+  echo -e "${BOLD}── OpenClaw ────────────────────────────────────${NC}"; echo ""
 
-  require_command openclaw || {
-    warn "openclaw CLI not found. Skipping OpenClaw install."
-    return
-  }
+  $REPO_CLONED || clone_repo
 
-  local oc_plugin_dir="$LORE_CLONE_DIR/openclaw-plugin"
-  if [[ -d "$oc_plugin_dir" ]]; then
+  if ! have_command openclaw; then
+    warn "openclaw CLI not found. Skipping."; return
+  fi
+
+  local oc_dir="$LORE_REPO_DIR/openclaw-plugin"
+  if [[ -d "$oc_dir" ]]; then
     info "Building and installing OpenClaw plugin..."
     (
-      cd "$oc_plugin_dir"
+      cd "$oc_dir"
       npm install --silent 2>/dev/null || npm install
       npm run build 2>/dev/null || true
       openclaw plugins install . --force --dangerously-force-unsafe-install 2>/dev/null || \
@@ -482,102 +499,56 @@ install_openclaw() {
         warn "openclaw plugins enable returned non-zero."
     )
 
-    # Update openclaw.json config
     local oc_config="$HOME/.openclaw/openclaw.json"
     if [[ -f "$oc_config" ]] && have_command python3; then
       python3 - "$oc_config" "$BASE_URL" "$API_TOKEN" <<'PY'
-import sys, json, os
-
+import sys, json
 path, base_url, api_token = sys.argv[1], sys.argv[2], sys.argv[3]
 try:
-    with open(path, 'r') as f:
-        data = json.load(f)
-except (json.JSONDecode, IOError):
-    data = {}
-
+    with open(path, 'r') as f: data = json.load(f)
+except (json.JSONDecode, IOError): data = {}
 data.setdefault("plugins", {}).setdefault("entries", {}).setdefault("lore", {})
 lore = data["plugins"]["entries"]["lore"]
 lore.setdefault("config", {})
 lore["config"]["baseUrl"] = base_url
-if api_token:
-    lore["config"]["apiToken"] = api_token
+if api_token: lore["config"]["apiToken"] = api_token
 lore.setdefault("enabled", True)
-
-with open(path, 'w') as f:
-    json.dump(data, f, indent=2, ensure_ascii=False)
-print("ok")
+with open(path, 'w') as f: json.dump(data, f, indent=2, ensure_ascii=False)
 PY
       ok "OpenClaw config updated."
     fi
     ok "OpenClaw install complete."
   else
-    warn "OpenClaw plugin source not found in clone. Skipping."
+    warn "OpenClaw plugin source not found."
   fi
+  write_config "LORE_BASE_URL" "$BASE_URL"
+  [[ -n "$API_TOKEN" ]] && write_config "LORE_API_TOKEN" "$API_TOKEN"
 }
 
 # ---- Channel: Hermes ----
 
 install_hermes() {
   echo ""
-  echo -e "${BOLD}── Hermes ──────────────────────────────────────${NC}"
-  echo ""
+  echo -e "${BOLD}── Hermes ──────────────────────────────────────${NC}"; echo ""
 
-  local hermes_plugin="$LORE_CLONE_DIR/hermes-plugin/lore_memory"
+  $REPO_CLONED || clone_repo
 
-  if [[ ! -d "$hermes_plugin" ]]; then
-    warn "Hermes plugin source not found in clone. Skipping."
-    return
+  local hermes_src="$LORE_REPO_DIR/hermes-plugin/lore_memory"
+  if [[ ! -d "$hermes_src" ]]; then
+    warn "Hermes plugin source not found. Skipping."; return
   fi
 
   write_config "LORE_BASE_URL" "$BASE_URL"
-  if [[ -n "$API_TOKEN" ]]; then
-    write_config "LORE_API_TOKEN" "$API_TOKEN"
-  fi
+  [[ -n "$API_TOKEN" ]] && write_config "LORE_API_TOKEN" "$API_TOKEN"
 
   echo ""
-  echo -e "  ${BOLD}Hermes install requires manual symlinking.${NC}"
+  echo -e "  ${BOLD}Hermes requires manual setup:${NC}"
   echo ""
-  echo "  Add to your Hermes plugin config:"
+  echo -e "  export LORE_BASE_URL=${BASE_URL}"
+  [[ -n "$API_TOKEN" ]] && echo -e "  export LORE_API_TOKEN=${API_TOKEN}"
+  echo -e "  ln -s ${hermes_src} <hermes-plugin-path>/lore_memory"
   echo ""
-  echo -e "    ${GREEN}export LORE_BASE_URL=${BASE_URL}${NC}"
-  if [[ -n "$API_TOKEN" ]]; then
-    echo -e "    ${GREEN}export LORE_API_TOKEN=${API_TOKEN}${NC}"
-  fi
-  echo ""
-  echo "  Then symlink the plugin:"
-  echo -e "    ${GREEN}ln -s ${hermes_plugin} <hermes-plugin-path>/lore_memory${NC}"
-  echo ""
-
-  ok "Hermes setup info printed above."
-}
-
-# ---- Clone repo for source-based channels ----
-
-clone_repo() {
-  # Only clone if a source-based channel is selected
-  local need_clone=false
-  for ch in "${CHANNELS[@]}"; do
-    case "$ch" in
-      codex|pi|openclaw|hermes) need_clone=true;;
-    esac
-  done
-
-  if ! $need_clone; then
-    return
-  fi
-
-  if [[ -d "$LORE_CLONE_DIR" ]]; then
-    info "Lore repo already cloned at $LORE_CLONE_DIR"
-    info "Pulling latest..."
-    (cd "$LORE_CLONE_DIR" && git pull --ff-only 2>/dev/null) || \
-      warn "git pull failed — using existing clone."
-  else
-    info "Cloning Lore repo to $LORE_CLONE_DIR ..."
-    mkdir -p "$(dirname "$LORE_CLONE_DIR")"
-    git clone --depth 1 "$REPO_URL" "$LORE_CLONE_DIR" 2>/dev/null || {
-      warn "Clone failed. Some channels will download files from GitHub directly."
-    }
-  fi
+  ok "Hermes setup info above."
 }
 
 # ---- Final summary ----
@@ -589,6 +560,7 @@ summary() {
   echo ""
   echo -e "  Base URL: ${GREEN}${BASE_URL}${NC}"
   echo -e "  Config:   ${BLUE}${LORE_ENV_FILE}${NC}"
+  echo -e "  Repo:     ${BLUE}${LORE_REPO_DIR}${NC}"
   echo ""
   echo "  Installed channels:"
   for ch in "${CHANNELS[@]}"; do
@@ -597,10 +569,10 @@ summary() {
   echo ""
   echo "  Next steps:"
   echo "    1. Restart your agent runtime(s)"
-  if [[ " ${CHANNELS[*]} " =~ " claudecode " ]]; then
-    echo "    2. In Claude Code, check: /plugin list (should show lore@lore)"
-  fi
-  echo "    3. Open http://${BASE_URL#http://}/setup to complete first-run setup"
+  echo "    2. Open http://${BASE_URL#http://}/setup to complete first-run setup"
+  echo ""
+  echo "  To update later, re-run:"
+  echo "    curl -fsSL ${REPO_RAW}/scripts/install.sh | bash"
   echo ""
   echo -e "${GREEN}${BOLD}══════════════════════════════════════════════${NC}"
   echo ""
@@ -612,7 +584,6 @@ main() {
   banner
   select_channels
   prompt_config
-  clone_repo
 
   for ch in "${CHANNELS[@]}"; do
     case "$ch" in
