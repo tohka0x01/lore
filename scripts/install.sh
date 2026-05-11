@@ -155,6 +155,17 @@ start_docker() {
     return
   fi
 
+  # Detect docker compose variant (plugin vs standalone)
+  local compose_cmd
+  if docker compose version >/dev/null 2>&1; then
+    compose_cmd="docker compose"
+  elif have_command docker-compose; then
+    compose_cmd="docker-compose"
+  else
+    warn "docker compose not found. Install Docker Compose first."
+    return
+  fi
+
   info "Starting Lore via Docker Compose..."
   mkdir -p "$LORE_DOCKER_DIR"
 
@@ -185,27 +196,15 @@ EOF
 
   (
     cd "$LORE_DOCKER_DIR"
-
-    # Work around macOS osxkeychain blocking public pulls without touching user config
-    local dc_config dc_tmp
-    dc_tmp=$(mktemp -d)
-    trap "rm -rf $dc_tmp" EXIT
-    if [[ -f "$HOME/.docker/config.json" ]]; then
-      cp "$HOME/.docker/config.json" "$dc_tmp/config.json"
-      python3 -c "
-import json
-with open('$dc_tmp/config.json') as f: d = json.load(f)
-d.pop('credsStore', None)
-with open('$dc_tmp/config.json', 'w') as f: json.dump(d, f)
-" 2>/dev/null || true
-    fi
-
-    DOCKER_CONFIG="$dc_tmp" docker compose up -d || {
-      warn "docker compose up failed. Check $LORE_DOCKER_DIR/docker-compose.yml"
+    if ! $compose_cmd up -d 2>&1 | tee /tmp/lore-docker-install.log; then
+      if grep -qi "keychain\|osxkeychain\|credsStore" /tmp/lore-docker-install.log 2>/dev/null; then
+        warn "Docker keychain blocked the pull. Fix with:"
+        echo "  python3 -c \"import json; d=json.load(open('$HOME/.docker/config.json')); d.pop('credsStore',None); json.dump(d,open('$HOME/.docker/config.json','w'),indent=2)\""
+      else
+        warn "$compose_cmd up failed. Check $LORE_DOCKER_DIR/docker-compose.yml"
+      fi
       exit 1
-    }
-    rm -rf "$dc_tmp"
-    trap - EXIT
+    fi
   ) || return
 
   ok "Lore server starting at http://127.0.0.1:18901"
@@ -226,7 +225,7 @@ with open('$dc_tmp/config.json', 'w') as f: json.dump(d, f)
       info "Still waiting... (${attempts}0s)"
     fi
   done
-  warn "Lore health check timed out (3 min). Check: docker compose -f $LORE_DOCKER_DIR/docker-compose.yml logs"
+  warn "Lore health check timed out (3 min). Check: $compose_cmd -f $LORE_DOCKER_DIR/docker-compose.yml logs"
 }
 
 # ---- Release / version ----
