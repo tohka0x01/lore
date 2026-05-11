@@ -55,6 +55,8 @@ warn()  { echo -e "${YELLOW}!${NC} $1"; }
 err()   { echo -e "${RED}✗${NC} $1"; }
 
 have_command() { command -v "$1" >/dev/null 2>&1; }
+is_tty() { [[ -t 0 && -t 1 ]]; }
+is_interactive() { [[ "${LORE_INSTALL_NO_INTERACTIVE:-0}" != "1" ]] && is_tty; }
 
 # ---- Config file ----
 
@@ -111,9 +113,9 @@ NEED_INSTALL=0
 check_release() {
   info "Checking latest release..."
 
-  local api_url="https://api.github.com/repos/${REPO}/releases/latest"
+  # Use /releases?per_page=1 to include pre-releases
   local release_json
-  release_json=$(curl -fsSL "$api_url" 2>/dev/null) || {
+  release_json=$(curl -fsSL "https://api.github.com/repos/${REPO}/releases?per_page=1" 2>/dev/null) || {
     warn "Cannot reach GitHub API."
     NEED_INSTALL=1
     return
@@ -121,7 +123,8 @@ check_release() {
 
   RELEASE_VERSION=$(echo "$release_json" | python3 -c "
 import sys, json
-print(json.loads(sys.stdin.read()).get('tag_name',''))
+arr = json.loads(sys.stdin.read())
+print(arr[0].get('tag_name','') if arr else '')
 " 2>/dev/null)
 
   if [[ -z "$RELEASE_VERSION" ]]; then
@@ -214,7 +217,7 @@ multi_select() {
   trap 'stty "$old_tty" 2>/dev/null || true' EXIT
 
   draw_menu() {
-    if [[ $_menu_drawn -gt 0 ]]; then printf '\033[%dA' "$((_menu_lines))"; fi
+    if [[ ${_menu_drawn:-0} -gt 0 ]]; then printf '\033[%dA' "$((_menu_lines))"; fi
     _menu_lines=$((n + 4))
     echo ""
     echo -e "${BOLD}Select channels (Space=toggle, Enter=confirm):${NC}"
@@ -279,7 +282,7 @@ select_channels() {
     echo -e "Using LORE_INSTALL_CHANNELS: ${LORE_INSTALL_CHANNELS}"; echo ""
     return
   fi
-  if [[ "${LORE_INSTALL_NO_INTERACTIVE:-0}" == "1" ]]; then
+  if ! is_interactive; then
     CHANNELS=("claudecode" "codex" "pi" "openclaw" "hermes")
     echo "Non-interactive mode, installing all channels."; echo ""
     return
@@ -296,17 +299,22 @@ prompt_config() {
   elif [[ -n "$saved_url" ]]; then
     BASE_URL="$saved_url"
     info "Using saved base URL: ${BASE_URL}"
-  else
+  elif is_interactive; then
     read -r -p "Lore server base URL [${DEFAULT_BASE_URL}]: " input_url
     BASE_URL="${input_url:-$DEFAULT_BASE_URL}"
+  else
+    BASE_URL="$DEFAULT_BASE_URL"
+    info "Using default base URL: ${BASE_URL}"
   fi
   BASE_URL="${BASE_URL%/}"
 
   if [[ -n "${LORE_API_TOKEN:-}" ]]; then
     API_TOKEN="$LORE_API_TOKEN"
-  else
+  elif is_interactive; then
     read -r -p "Lore API token (press Enter to skip): " input_token
     API_TOKEN="${input_token:-}"
+  else
+    API_TOKEN=""
   fi
 
   echo ""
@@ -318,7 +326,7 @@ prompt_config() {
   fi
   echo ""
 
-  if [[ "${LORE_INSTALL_NO_INTERACTIVE:-0}" != "1" ]]; then
+  if is_interactive; then
     read -r -p "Continue with these settings? [Y/n]: " confirm
     if [[ "$confirm" =~ ^[Nn] ]]; then err "Aborted."; exit 1; fi
   fi
