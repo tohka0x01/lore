@@ -54,12 +54,12 @@ BLUE='\033[0;34m'; BOLD='\033[1m'; NC='\033[0m'
 
 banner() {
   echo ""
-  echo -e "${BLUE}${BOLD}  █████       ${NC}"
-  echo -e "${BLUE}${BOLD} ██╱  ██      ${NC}  Lore — long-term memory for AI agents"
-  echo -e "${BLUE}${BOLD} ██╱  ╱██     ${NC}"
-  echo -e "${BLUE}${BOLD} ██╱  ╱██     ${NC}  One install script, all agent runtimes."
-  echo -e "${BLUE}${BOLD} ██╱  ╱██     ${NC}"
-  echo -e "${BLUE}${BOLD}  ████╱      ${NC}"
+  echo -e "${BLUE}${BOLD} _     ____  ____  _____ ${NC}"
+  echo -e "${BLUE}${BOLD}/ \   /  _ \/  __\/  __/ ${NC}  Lore — long-term memory for AI agents"
+  echo -e "${BLUE}${BOLD}| |   | / \||  \/||  \   ${NC}"
+  echo -e "${BLUE}${BOLD}| |_/\| \_/||    /|  /_  ${NC}  One install script, all agent runtimes."
+  echo -e "${BLUE}${BOLD}\____/\____/\_/\_\\____\ ${NC}"
+  echo -e "${BLUE}${BOLD}                        ${NC}"
   echo ""
 }
 
@@ -160,7 +160,7 @@ start_docker() {
 
   # Download docker-compose.yml from repo
   local compose_url="${REPO_RAW}/docker-compose.yml"
-  curl -fsSL "$compose_url" -o "$LORE_DOCKER_DIR/docker-compose.yml" 2>/dev/null || {
+  curl -fsSL "$compose_url" -o "$LORE_DOCKER_DIR/docker-compose.yml" || {
     warn "Failed to download docker-compose.yml"
     return
   }
@@ -185,7 +185,7 @@ EOF
 
   (
     cd "$LORE_DOCKER_DIR"
-    docker compose up -d 2>&1 || {
+    docker compose up -d || {
       warn "docker compose up failed. Check $LORE_DOCKER_DIR/docker-compose.yml"
       return
     }
