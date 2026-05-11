@@ -123,7 +123,7 @@ jobs:
             fi
           done
           cd dist/codex-marketplace
-          zip -r ../../lore-codex.zip .
+          zip -r ../lore-codex.zip .
 
       - name: Build OpenClaw artifact
         run: |
