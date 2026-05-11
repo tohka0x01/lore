@@ -155,26 +155,6 @@ start_docker() {
     return
   fi
 
-  # Fix common macOS keychain issue that blocks public pulls
-  local docker_config="$HOME/.docker/config.json"
-  if [[ -f "$docker_config" ]]; then
-    if python3 -c "
-import json
-with open('$docker_config') as f:
-    d = json.load(f)
-if d.get('credsStore') == 'osxkeychain':
-    print('keychain')
-" 2>/dev/null | grep -q keychain; then
-      info "Removing osxkeychain credsStore from Docker config (blocks public pulls)..."
-      python3 -c "
-import json
-with open('$docker_config') as f: d = json.load(f)
-d.pop('credsStore', None)
-with open('$docker_config', 'w') as f: json.dump(d, f, indent=2, ensure_ascii=False)
-" && ok "Docker config fixed."
-    fi
-  fi
-
   info "Starting Lore via Docker Compose..."
   mkdir -p "$LORE_DOCKER_DIR"
 
@@ -205,10 +185,27 @@ EOF
 
   (
     cd "$LORE_DOCKER_DIR"
-    docker compose up -d || {
+
+    # Work around macOS osxkeychain blocking public pulls without touching user config
+    local dc_config dc_tmp
+    dc_tmp=$(mktemp -d)
+    trap "rm -rf $dc_tmp" EXIT
+    if [[ -f "$HOME/.docker/config.json" ]]; then
+      cp "$HOME/.docker/config.json" "$dc_tmp/config.json"
+      python3 -c "
+import json
+with open('$dc_tmp/config.json') as f: d = json.load(f)
+d.pop('credsStore', None)
+with open('$dc_tmp/config.json', 'w') as f: json.dump(d, f)
+" 2>/dev/null || true
+    fi
+
+    DOCKER_CONFIG="$dc_tmp" docker compose up -d || {
       warn "docker compose up failed. Check $LORE_DOCKER_DIR/docker-compose.yml"
       exit 1
     }
+    rm -rf "$dc_tmp"
+    trap - EXIT
   ) || return
 
   ok "Lore server starting at http://127.0.0.1:18901"
