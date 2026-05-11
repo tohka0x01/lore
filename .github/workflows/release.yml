@@ -135,6 +135,11 @@ jobs:
           cd pi-extension
           zip -r ../dist/lore-pi.zip . -x 'node_modules/*' '__pycache__/*'
 
+      - name: Build Hermes artifact
+        run: |
+          cd hermes-plugin
+          zip -r ../dist/lore-hermes.zip lore_memory
+
       - name: Upload artifacts to release
         env:
           GH_REPO: ${{ github.repository }}

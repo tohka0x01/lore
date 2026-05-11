@@ -28,6 +28,7 @@ declare -A CHANNEL_ARTIFACT=(
   [codex]="lore-codex.zip"
   [pi]="lore-pi.zip"
   [openclaw]="lore-openclaw.zip"
+  [hermes]="lore-hermes.zip"
 )
 
 # ---- Colors ----
@@ -587,19 +588,30 @@ install_hermes() {
   echo ""
   echo -e "${BOLD}── Hermes ──────────────────────────────────────${NC}"; echo ""
 
-  if [[ -n "$RELEASE_VERSION" ]]; then
-    # Hermes just needs the plugin files, no artifact to download
-    info "Using files from release $RELEASE_VERSION"
+  local plugin_dir="$LORE_HOME/hermes"
+
+  if [[ $NEED_INSTALL -eq 0 ]]; then
+    download_artifact "hermes" "$plugin_dir" || return
+  elif [[ ! -d "$plugin_dir/lore_memory" ]]; then
+    if [[ -n "$RELEASE_VERSION" ]]; then
+      download_artifact "hermes" "$plugin_dir" || return
+    else
+      err "No release found."; return
+    fi
+  else
+    ok "Hermes plugin at $plugin_dir (version: ${RELEASE_VERSION:-local})"
   fi
 
   echo ""
-  echo -e "  ${BOLD}Hermes requires manual setup:${NC}"
+  echo -e "  ${BOLD}Hermes requires a symlink to complete setup:${NC}"
   echo ""
-  echo -e "  export LORE_BASE_URL=${BASE_URL}"
-  [[ -n "$API_TOKEN" ]] && echo -e "  export LORE_API_TOKEN=${API_TOKEN}"
-  echo "  Clone or download hermes-plugin/lore_memory into your Hermes plugin path."
+  echo -e "    ln -s ${plugin_dir}/lore_memory <hermes-plugin-path>/lore_memory"
   echo ""
-  ok "Hermes setup info above."
+  echo "  And ensure these env vars are set for Hermes:"
+  echo -e "    ${GREEN}export LORE_BASE_URL=${BASE_URL}${NC}"
+  [[ -n "$API_TOKEN" ]] && echo -e "    ${GREEN}export LORE_API_TOKEN=${API_TOKEN}${NC}"
+  echo ""
+  ok "Hermes setup info above. Create the symlink manually."
 }
 
 # ---- Final summary ----
