@@ -1,7 +1,6 @@
 services:
   postgres:
     image: ${LORE_POSTGRES_IMAGE:-fffattiger/pgvector-zhparser:pg16}
-    platform: linux/amd64
     container_name: lore-postgres
     restart: unless-stopped
     environment:
