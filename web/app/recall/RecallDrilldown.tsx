@@ -162,7 +162,7 @@ export default function RecallDrilldown(): React.JSX.Element {
   const clientTypeThresholdAnalysis = (stats?.client_type_threshold_analysis as RowData[]) || [];
 
   const recentQueryCols = useMemo(() => [
-    { key: 'query_text', label: t('Query'), className: 'w-[60%]', render: (v: unknown) => (
+    { key: 'query_text', label: t('Query'), className: 'max-w-[50%]', render: (v: unknown) => (
       <div className="max-w-full text-[14px] font-medium leading-snug text-txt-primary">{trunc(v, 140)}</div>
     ) },
     { key: 'client_type', label: t('Source'), className: 'text-center', render: (v: unknown) => <div className="flex justify-center"><ClientAvatarLabel clientType={v} compact /></div> },
