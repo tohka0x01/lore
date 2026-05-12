@@ -159,4 +159,10 @@ describe('RecallDrilldown overview', () => {
     expect(formatRecallDurationMs(850)).toBe('850ms');
     expect(formatRecallDurationMs(1530)).toBe('1.5s');
   });
+
+  it('caps the recent query text column at half the table width', () => {
+    const html = renderToStaticMarkup(<RecallDrilldown />);
+
+    expect(html).toContain('<th class="w-1/2 max-w-[50%]">Query</th>');
+  });
 });
