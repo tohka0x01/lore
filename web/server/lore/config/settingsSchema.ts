@@ -40,6 +40,15 @@ export interface SettingSection {
 // ---------------------------------------------------------------------------
 
 export const SETTINGS_SCHEMA: SettingDef[] = [
+  // -- Cache ---------------------------------------------------------------
+  {
+    key: 'cache.enabled',
+    section: 'cache',
+    label: '启用缓存',
+    type: 'boolean', default: true,
+    description: '关闭后所有缓存读写都会跳过；默认开启。Redis 是否使用由 REDIS_URL 自动决定。',
+  },
+
   // -- Recall weights -------------------------------------------------------
   {
     key: 'recall.weights.w_exact',
@@ -419,6 +428,7 @@ export const SCHEMA_BY_KEY = new Map<string, SettingDef>(
 // ---------------------------------------------------------------------------
 
 export const SECTIONS: SettingSection[] = [
+  { id: 'cache', label: '缓存', description: '控制缓存开关；Redis 后端由 REDIS_URL 自动启用' },
   { id: 'recall_weights', label: '召回权重', description: '四路评分的线性权重（建议和为 1）' },
   { id: 'recall_bonus', label: '加分参数', description: '优先级和多视图命中的加分' },
   { id: 'recall_recency', label: '时间衰减', description: '让近期更新的记忆排名更高（默认关闭）' },

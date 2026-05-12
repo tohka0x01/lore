@@ -1,5 +1,9 @@
 import { sql } from '../../db';
 import type { ClientType } from '../../auth';
+import { cached } from '../../cache/cacheAside';
+import { invalidateMemoryCaches } from '../../cache/invalidation';
+import { cacheKey } from '../../cache/key';
+import { CACHE_TAG, CACHE_TTL } from '../../cache/policies';
 import { ROOT_NODE_UUID } from '../core/constants';
 import type { TransactionClient } from '../core/types';
 import { parseUri } from '../core/utils';
@@ -95,6 +99,14 @@ export function scheduleGeneratedArtifactsRefresh(paths: PathRow[]): void {
 }
 
 export async function getGlossary(): Promise<{ glossary: Array<{ keyword: string; node_uuid: string }> }> {
+  return cached({
+    key: cacheKey('glossary', ['all']),
+    ttlMs: CACHE_TTL.glossary,
+    tags: [CACHE_TAG.glossary, CACHE_TAG.memory],
+  }, async () => getGlossaryUncached());
+}
+
+async function getGlossaryUncached(): Promise<{ glossary: Array<{ keyword: string; node_uuid: string }> }> {
   const result = await sql(
     `SELECT keyword, node_uuid FROM glossary_keywords ORDER BY keyword ASC, node_uuid ASC`,
   );
@@ -123,6 +135,7 @@ export async function addGlossaryKeyword(
     after_snapshot: { keyword },
     details: {},
   }).catch((err) => console.error('[write_events] glossary_add log failed', err));
+  await invalidateMemoryCaches(paths[0]?.domain || 'core', paths[0]?.path || '');
   scheduleGeneratedArtifactsRefresh(paths);
   return { success: true, keyword, node_uuid };
 }
@@ -150,6 +163,7 @@ export async function removeGlossaryKeyword(
       before_snapshot: { keyword },
       details: {},
     }).catch((err) => console.error('[write_events] glossary_remove log failed', err));
+    await invalidateMemoryCaches(paths[0]?.domain || 'core', paths[0]?.path || '');
     scheduleGeneratedArtifactsRefresh(paths);
   }
   return { success: (result.rowCount ?? 0) > 0 };
@@ -213,6 +227,7 @@ export async function manageTriggers(
   }
 
   const currentResult = await sql(`SELECT keyword FROM glossary_keywords WHERE node_uuid = $1 ORDER BY keyword ASC`, [nodeUuid]);
+  await invalidateMemoryCaches(domain, path);
   scheduleGeneratedArtifactsRefresh(await listPathsByNodeUuid(nodeUuid));
   return {
     success: true,

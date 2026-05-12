@@ -1,13 +1,21 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 
 vi.mock('../../config/settings', () => ({
   getSettings: vi.fn(),
 }));
 
 import { getSettings } from '../../config/settings';
+import { __resetCacheForTest, getCacheStore } from '../../../../server/cache';
 import { vectorLiteral, resolveEmbeddingConfig, embedTexts, getEmbeddingRuntimeConfig } from '../embeddings';
 
 const mockGetSettings = vi.mocked(getSettings);
+
+afterEach(async () => {
+  await (await getCacheStore()).clear();
+  __resetCacheForTest();
+  delete process.env.CACHE_EMBEDDINGS;
+  vi.unstubAllGlobals();
+});
 
 describe('vectorLiteral', () => {
   it('converts array to pgvector literal', () => {

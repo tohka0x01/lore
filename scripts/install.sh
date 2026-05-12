@@ -173,6 +173,9 @@ update_docker() {
 
   # Download latest docker-compose.yml
   local compose_url="${REPO_RAW}/docker-compose.yml"
+  if [[ -f "$LORE_DOCKER_DIR/docker-compose.yml" ]]; then
+    cp "$LORE_DOCKER_DIR/docker-compose.yml" "$LORE_DOCKER_DIR/docker-compose.yml.bak.$(date +%Y%m%d%H%M%S)"
+  fi
   curl -fsSL "$compose_url" -o "$LORE_DOCKER_DIR/docker-compose.yml" || {
     warn "Failed to download docker-compose.yml"
     return
@@ -183,9 +186,9 @@ update_docker() {
     local tag="latest"
     [[ "$CHECK_DEV" == "1" ]] && tag="dev-latest"
     [[ "$CHECK_PRE" == "1" ]] && tag="pre-latest"
-    python3 - "$LORE_DOCKER_DIR/.env" "$tag" <<'PY'
+    python3 - "$LORE_DOCKER_DIR/.env" "$tag" "$LORE_DOCKER_DIR" <<'PY'
 import sys
-path, tag = sys.argv[1], sys.argv[2]
+path, tag, docker_dir = sys.argv[1], sys.argv[2], sys.argv[3]
 with open(path) as f: lines = f.readlines()
 out = []; found = False
 for line in lines:
@@ -193,6 +196,9 @@ for line in lines:
         out.append(f'LORE_FRONTEND_IMAGE=fffattiger/lore:{tag}\n'); found = True
     else: out.append(line)
 if not found: out.append(f'LORE_FRONTEND_IMAGE=fffattiger/lore:{tag}\n')
+keys = {line.split('=', 1)[0] for line in out if '=' in line and not line.lstrip().startswith('#')}
+if 'REDIS_DATA_DIR' not in keys: out.append(f'REDIS_DATA_DIR={docker_dir}/data/redis\n')
+if 'REDIS_URL' not in keys: out.append('REDIS_URL=redis://redis:6379/0\n')
 with open(path, 'w') as f: f.writelines(out)
 PY
   fi
@@ -271,6 +277,8 @@ POSTGRES_PORT=55439
 WEB_PORT=18901
 POSTGRES_DATA_DIR=${LORE_DOCKER_DIR}/data/postgres
 SNAPSHOT_DATA_DIR=${LORE_DOCKER_DIR}/data/snapshots
+REDIS_DATA_DIR=${LORE_DOCKER_DIR}/data/redis
+REDIS_URL=redis://redis:6379/0
 DATABASE_URL=postgresql://lore:${pg_pass}@postgres:5432/lore
 EOF
     if [[ "$CHECK_DEV" == "1" ]]; then

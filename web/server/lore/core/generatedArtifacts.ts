@@ -6,6 +6,7 @@ import {
   deleteGeneratedMemoryViewsByPrefix,
   upsertGeneratedMemoryViewsForPath,
 } from '../view/viewCrud';
+import { invalidateMemoryCaches } from '../../cache/invalidation';
 
 interface GeneratedArtifactPath {
   domain?: unknown;
@@ -54,11 +55,21 @@ function scheduleGeneratedArtifacts(
 ): void {
   for (const row of normalizeGeneratedArtifactPaths(paths, options)) {
     queueMicrotask(() => {
-      updateMemoryViews(row).catch((error: unknown) => {
-        console.error(`[memory_views] ${logLabel} failed`, row.domain, row.path, error);
-      });
-      updateGlossaryEmbeddings(row).catch((error: unknown) => {
-        console.error(`[glossary_embeddings] ${logLabel} failed`, row.domain, row.path, error);
+      Promise.allSettled([
+        updateMemoryViews(row),
+        updateGlossaryEmbeddings(row),
+      ]).then(async ([memoryViewsResult, glossaryEmbeddingsResult]) => {
+        if (memoryViewsResult.status === 'rejected') {
+          console.error(`[memory_views] ${logLabel} failed`, row.domain, row.path, memoryViewsResult.reason);
+        }
+        if (glossaryEmbeddingsResult.status === 'rejected') {
+          console.error(`[glossary_embeddings] ${logLabel} failed`, row.domain, row.path, glossaryEmbeddingsResult.reason);
+        }
+        if (memoryViewsResult.status === 'fulfilled' && glossaryEmbeddingsResult.status === 'fulfilled') {
+          await invalidateMemoryCaches(row.domain, row.path);
+        }
+      }).catch((error: unknown) => {
+        console.error(`[generated_artifacts] ${logLabel} invalidation failed`, row.domain, row.path, error);
       });
     });
   }

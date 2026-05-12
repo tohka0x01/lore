@@ -1,5 +1,6 @@
 import fs from 'node:fs/promises';
 import path from 'node:path';
+import { clearAllCachesAfterRestore } from '../../cache/invalidation';
 import { getPool, sql } from '../../db';
 import { getSettings } from '../config/settings';
 import { BACKUP_DIR } from '../core/storagePaths';
@@ -203,6 +204,7 @@ export async function restoreDatabase(data: unknown): Promise<RestoreResult> {
     }
 
     await client.query('COMMIT');
+    await clearAllCachesAfterRestore();
     return { restored, duration_ms: Date.now() - start };
   } catch (err) {
     await client.query('ROLLBACK').catch(() => {});

@@ -1,3 +1,6 @@
+import { cached } from '../../cache/cacheAside';
+import { hashedCacheKey } from '../../cache/key';
+import { CACHE_TAG, CACHE_TTL } from '../../cache/policies';
 import { sql } from '../../db';
 import { clampLimit } from '../core/utils';
 
@@ -122,6 +125,14 @@ export interface PathEffectivenessReport {
 // ---------------------------------------------------------------------------
 
 export async function getMemoryHealthReport({ days = 30, limit = 20 }: { days?: number; limit?: number } = {}): Promise<MemoryHealthReport> {
+  return cached({
+    key: hashedCacheKey('analytics:feedback:health', { days, limit }),
+    ttlMs: CACHE_TTL.feedbackAnalytics,
+    tags: [CACHE_TAG.feedbackAnalytics],
+  }, async () => getMemoryHealthReportUncached({ days, limit }));
+}
+
+async function getMemoryHealthReportUncached({ days = 30, limit = 20 }: { days?: number; limit?: number } = {}): Promise<MemoryHealthReport> {
   const safeDays = intervalDaysSql(days);
   const safeLimit = clampLimit(limit, 1, 100, 20);
 
@@ -216,6 +227,14 @@ export async function getMemoryHealthReport({ days = 30, limit = 20 }: { days?: 
 // ---------------------------------------------------------------------------
 
 export async function getDeadWrites({ days = 30, limit = 20 }: { days?: number; limit?: number } = {}): Promise<DeadWritesReport> {
+  return cached({
+    key: hashedCacheKey('analytics:feedback:dead-writes', { days, limit }),
+    ttlMs: CACHE_TTL.feedbackAnalytics,
+    tags: [CACHE_TAG.feedbackAnalytics],
+  }, async () => getDeadWritesUncached({ days, limit }));
+}
+
+async function getDeadWritesUncached({ days = 30, limit = 20 }: { days?: number; limit?: number } = {}): Promise<DeadWritesReport> {
   const safeDays = intervalDaysSql(days);
   const safeLimit = clampLimit(limit, 1, 100, 20);
 
@@ -338,6 +357,14 @@ function generateRecommendations(pathRows: PathEffectivenessRow[]): PathRecommen
 }
 
 export async function getPathEffectiveness({ days = 30 }: { days?: number } = {}): Promise<PathEffectivenessReport> {
+  return cached({
+    key: hashedCacheKey('analytics:feedback:path-effectiveness', { days }),
+    ttlMs: CACHE_TTL.feedbackAnalytics,
+    tags: [CACHE_TAG.feedbackAnalytics],
+  }, async () => getPathEffectivenessUncached({ days }));
+}
+
+async function getPathEffectivenessUncached({ days = 30 }: { days?: number } = {}): Promise<PathEffectivenessReport> {
   const safeDays = intervalDaysSql(days);
 
   const result = await sql(

@@ -1,3 +1,6 @@
+import { cached } from '../../cache/cacheAside';
+import { hashedCacheKey } from '../../cache/key';
+import { CACHE_TAG, CACHE_TTL } from '../../cache/policies';
 import { sql } from '../../db';
 import { clampLimit } from '../core/utils';
 import { getSettings } from '../config/settings';
@@ -910,6 +913,22 @@ export async function getDreamRecallReview({
 }
 
 export async function getRecallStats({
+  days = 7,
+  limit = 12,
+  recentQueriesLimit = 20,
+  recentQueriesOffset = 0,
+  queryId = '',
+  queryText = '',
+  clientType = '',
+}: RecallStatsArgs = {}) {
+  return cached({
+    key: hashedCacheKey('analytics:recall', { days, limit, recentQueriesLimit, recentQueriesOffset, queryId, queryText, clientType }),
+    ttlMs: CACHE_TTL.recallAnalytics,
+    tags: [CACHE_TAG.recallAnalytics],
+  }, async () => getRecallStatsUncached({ days, limit, recentQueriesLimit, recentQueriesOffset, queryId, queryText, clientType }));
+}
+
+async function getRecallStatsUncached({
   days = 7,
   limit = 12,
   recentQueriesLimit = 20,

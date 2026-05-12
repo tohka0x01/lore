@@ -1,4 +1,8 @@
 import { generateText as generateSdkText, jsonSchema, stepCountIs, tool, type ModelMessage } from 'ai';
+import { getCacheStore } from '../../cache';
+import { hashedCacheKey, hashKey, sha256Hex } from '../../cache/key';
+import { CACHE_TAG, CACHE_TTL } from '../../cache/policies';
+import type { JsonValue } from '../../cache/types';
 import type { EmbeddingConfig } from '../core/types';
 import { createLanguageModel, type ResolvedViewLlmConfig } from './config';
 
@@ -359,18 +363,67 @@ export async function generateTextWithTools(
 }
 
 export async function embedTexts(config: EmbeddingConfig, inputs: string[]): Promise<number[][]> {
-  const results: number[][] = [];
-  for (const text of inputs) {
-    const response = await fetch(`${String(config.base_url || '').replace(/\/$/, '')}/embeddings`, {
-      method: 'POST',
-      headers: getJsonHeaders(config.api_key),
-      body: JSON.stringify({ model: config.model, input: text }),
-    });
-    if (!response.ok) throw new Error(`Embedding request failed: ${response.status}`);
-    const data = await response.json();
-    const rows = [...(data.data || [])].sort((a: Record<string, unknown>, b: Record<string, unknown>) => Number(a.index || 0) - Number(b.index || 0));
-    if (!rows[0]?.embedding) throw new Error('Embedding response missing data rows');
-    results.push(rows[0].embedding as number[]);
-  }
-  return results;
+  const cacheEnabled = String(process.env.CACHE_EMBEDDINGS || 'true').toLowerCase() !== 'false'
+    && (!process.env.VITEST || process.env.CACHE_TEST_ENABLE === 'true');
+  if (!cacheEnabled) return Promise.all(inputs.map((text) => embedOneRemote(config, text)));
+
+  const unique = new Map<string, string>();
+  for (const text of inputs) unique.set(embeddingCacheKey(config, text), text);
+  const loaded = new Map<string, number[]>();
+  await Promise.all([...unique].map(async ([key, text]) => {
+    loaded.set(key, await embedOneCached(config, text, key));
+  }));
+  return inputs.map((text) => loaded.get(embeddingCacheKey(config, text)) || []);
+}
+
+const inFlightEmbeddings = new Map<string, Promise<number[]>>();
+
+function normalizeEmbeddingInput(text: string): string {
+  return String(text || '').trim().replace(/\s+/g, ' ');
+}
+
+function embeddingCacheKey(config: EmbeddingConfig, text: string): string {
+  const baseUrl = String(config.base_url || '').replace(/\/$/, '');
+  return hashedCacheKey('embedding', {
+    baseUrlHash: hashKey(baseUrl),
+    model: config.model,
+    dimensions: null,
+    inputHash: sha256Hex(normalizeEmbeddingInput(text)),
+  });
+}
+
+async function embeddingTtlMs(): Promise<number> {
+  const store = await getCacheStore();
+  return store.provider === 'redis' ? CACHE_TTL.embeddingRedis : CACHE_TTL.embeddingLocal;
+}
+
+async function embedOneCached(config: EmbeddingConfig, text: string, key: string): Promise<number[]> {
+  const store = await getCacheStore();
+  const entry = await store.getEntry<JsonValue>(key);
+  if (entry.hit && Array.isArray(entry.value)) return entry.value as number[];
+
+  const existing = inFlightEmbeddings.get(key);
+  if (existing) return existing;
+
+  const promise = embedOneRemote(config, text)
+    .then(async (vector) => {
+      await store.set(key, vector, { ttlMs: await embeddingTtlMs(), tags: [CACHE_TAG.embedding] });
+      return vector;
+    })
+    .finally(() => inFlightEmbeddings.delete(key));
+  inFlightEmbeddings.set(key, promise);
+  return promise;
+}
+
+async function embedOneRemote(config: EmbeddingConfig, text: string): Promise<number[]> {
+  const response = await fetch(`${String(config.base_url || '').replace(/\/$/, '')}/embeddings`, {
+    method: 'POST',
+    headers: getJsonHeaders(config.api_key),
+    body: JSON.stringify({ model: config.model, input: text }),
+  });
+  if (!response.ok) throw new Error(`Embedding request failed: ${response.status}`);
+  const data = await response.json();
+  const rows = [...(data.data || [])].sort((a: Record<string, unknown>, b: Record<string, unknown>) => Number(a.index || 0) - Number(b.index || 0));
+  if (!rows[0]?.embedding) throw new Error('Embedding response missing data rows');
+  return rows[0].embedding as number[];
 }

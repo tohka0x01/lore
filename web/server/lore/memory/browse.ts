@@ -1,4 +1,7 @@
 import type { ClientType } from '../../auth';
+import { cached } from '../../cache/cacheAside';
+import { cacheKey } from '../../cache/key';
+import { CACHE_TAG, CACHE_TTL, nodeTag } from '../../cache/policies';
 import { sql } from '../../db';
 import { listMemoryViewsByNode } from '../view/viewCrud';
 import { ROOT_NODE_UUID } from '../core/constants';
@@ -73,6 +76,14 @@ export interface GetNodePayloadOptions {
 // ---------------------------------------------------------------------------
 
 export async function listDomains(): Promise<DomainSummary[]> {
+  return cached({
+    key: cacheKey('domains', ['list']),
+    ttlMs: CACHE_TTL.domains,
+    tags: [CACHE_TAG.domains, CACHE_TAG.memory],
+  }, async () => listDomainsUncached());
+}
+
+async function listDomainsUncached(): Promise<DomainSummary[]> {
   const result = await sql(
     `
       SELECT p.domain, COUNT(DISTINCT p.path) AS root_count
@@ -94,6 +105,14 @@ export async function getNodePayload({
   path = '',
   navOnly = false,
 }: GetNodePayloadOptions = {}): Promise<NodePayload> {
+  return cached({
+    key: cacheKey('node', [domain, path, navOnly ? 'nav' : 'full']),
+    ttlMs: CACHE_TTL.node,
+    tags: [CACHE_TAG.memory, CACHE_TAG.node, CACHE_TAG.glossary, nodeTag(domain, path)],
+  }, async () => getNodePayloadUncached({ domain, path, navOnly }));
+}
+
+async function getNodePayloadUncached({ domain, path, navOnly }: Required<GetNodePayloadOptions>): Promise<NodePayload> {
   const memory = await getMemoryByPath(domain, path);
   if (!memory) {
     const error = Object.assign(new Error(`Path not found: ${domain}://${path}`), { status: 404 });

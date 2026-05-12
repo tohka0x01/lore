@@ -18,6 +18,19 @@ services:
       timeout: 5s
       retries: 10
 
+  redis:
+    image: ${LORE_REDIS_IMAGE:-redis:7-alpine}
+    container_name: lore-redis
+    restart: unless-stopped
+    command: ["redis-server", "--appendonly", "yes"]
+    volumes:
+      - ${REDIS_DATA_DIR:-./data/redis}:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
   web:
     image: ${LORE_FRONTEND_IMAGE:-fffattiger/lore:latest}
     container_name: lore-web
@@ -26,10 +39,15 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
+      redis:
+        condition: service_healthy
     environment:
       TZ: ${TZ:-Asia/Shanghai}
       DATABASE_URL: ${DATABASE_URL:-postgresql://lore:change-me@postgres:5432/lore}
       API_TOKEN: ${API_TOKEN:-}
+      REDIS_URL: ${REDIS_URL:-redis://redis:6379/0}
+      CACHE_KEY_PREFIX: ${CACHE_KEY_PREFIX:-lore}
+      CACHE_LOCAL_MAX_ITEMS: ${CACHE_LOCAL_MAX_ITEMS:-2000}
     ports:
       - "${WEB_PORT:-18901}:18901"
     volumes:

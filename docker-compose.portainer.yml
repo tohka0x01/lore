@@ -16,6 +16,18 @@ services:
       timeout: 5s
       retries: 10
 
+  redis:
+    image: ${LORE_REDIS_IMAGE:-redis:7-alpine}
+    restart: unless-stopped
+    command: ["redis-server", "--appendonly", "yes"]
+    volumes:
+      - ${REDIS_DATA_DIR:-./data/redis}:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
   web:
     image: fffattiger/lore:latest
     restart: unless-stopped
@@ -23,10 +35,15 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
+      redis:
+        condition: service_healthy
     environment:
       DATABASE_URL: postgresql://${POSTGRES_USER:-lore}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-lore}
       API_TOKEN: ${API_TOKEN:-}
       CORE_MEMORY_URIS: ${CORE_MEMORY_URIS:-core://soul,preferences://user,core://agent}
+      REDIS_URL: ${REDIS_URL:-redis://redis:6379/0}
+      CACHE_KEY_PREFIX: ${CACHE_KEY_PREFIX:-lore}
+      CACHE_LOCAL_MAX_ITEMS: ${CACHE_LOCAL_MAX_ITEMS:-2000}
     ports:
       - "${WEB_PORT:-18901}:18901"
     volumes:
