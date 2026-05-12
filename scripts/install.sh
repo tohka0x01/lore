@@ -650,43 +650,17 @@ PY
     ok "Codex hooks feature enabled."
   fi
 
-  # Remove legacy user-level hooks installed by earlier Lore versions. Current hooks are bundled
-  # inside the plugin manifest and managed by Codex.
-  rm -rf "${CODEX_HOME:-$HOME/.codex}/hooks/lore"
-  local hooks_json="${CODEX_HOME:-$HOME/.codex}/hooks.json"
-  if [[ -f "$hooks_json" ]] && have_command python3; then
-    cp "$hooks_json" "$hooks_json.bak.$(date +%Y%m%d%H%M%S)"
-    python3 - "$hooks_json" <<'PY'
-import json, sys
-path = sys.argv[1]
-try:
-    with open(path, encoding='utf-8') as f: data = json.load(f)
-except Exception:
-    raise SystemExit(0)
-hooks = data.get('hooks')
-if isinstance(hooks, dict):
-    for event, entries in list(hooks.items()):
-        if not isinstance(entries, list): continue
-        kept = []
-        for entry in entries:
-            hs = entry.get('hooks') if isinstance(entry, dict) else None
-            commands = [str(h.get('command', '')) for h in hs] if isinstance(hs, list) else []
-            if any('/hooks/lore/hooks/rules-inject.ts' in c or '/hooks/lore/hooks/recall-inject.ts' in c for c in commands):
-                continue
-            if isinstance(entry, dict) and entry.get('matcher', '') == '' and entry.get('hooks') == []:
-                continue
-            kept.append(entry)
-        if kept: hooks[event] = kept
-        else: hooks.pop(event, None)
-if not hooks: data.pop('hooks', None)
-with open(path, 'w', encoding='utf-8') as f:
-    json.dump(data, f, indent=2, ensure_ascii=False); f.write('\n')
-PY
-    ok "Legacy user hooks cleaned."
+  # Codex 0.130 still does not execute plugin-local hooks at runtime; install user-level hooks
+  # as the compatibility path while keeping hooks bundled in the plugin for future Codex versions.
+  if [[ -x "$installed_plugin_root/scripts/install-hooks.sh" ]]; then
+    LORE_CODEX_PLUGIN_ROOT="$installed_plugin_root" \
+      LORE_BASE_URL="${BASE_URL}" \
+      bash "$installed_plugin_root/scripts/install-hooks.sh" 2>/dev/null || true
+    ok "Codex user-level hooks installed."
   fi
 
   ok "Codex plugin materialized at $installed_plugin_root"
-  ok "Codex done. Restart Codex. If hooks need review, open /hooks and trust the Lore plugin hooks."
+  ok "Codex done. Restart Codex, then open /hooks and trust the Lore user hooks if prompted."
 }
 
 # ---- Channel: Pi ----

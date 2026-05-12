@@ -162,48 +162,9 @@ configure_mcp() {
   fi
 }
 
-cleanup_legacy_user_hooks() {
-  # Older Lore installers wrote user-level hooks under ~/.codex/hooks.json.
-  # Current Codex plugin hooks are bundled via .codex-plugin/plugin.json -> hooks/hooks.json.
-  local hooks_json="$CODEX_HOME/hooks.json"
-  local hook_root="$CODEX_HOME/hooks/lore"
-  rm -rf "$hook_root"
-  if [ -f "$hooks_json" ]; then
-    cp "$hooks_json" "$hooks_json.bak.$(date +%Y%m%d%H%M%S)"
-    python3 - "$hooks_json" <<'PY'
-import json, sys
-path = sys.argv[1]
-try:
-    with open(path, "r", encoding="utf-8") as handle:
-        data = json.load(handle)
-except Exception:
-    sys.exit(0)
-
-def keep_entry(entry):
-    hooks = entry.get("hooks") if isinstance(entry, dict) else None
-    if not isinstance(hooks, list):
-        return True
-    commands = [str(h.get("command", "")) for h in hooks if isinstance(h, dict)]
-    return not any("/hooks/lore/hooks/rules-inject.ts" in c or "/hooks/lore/hooks/recall-inject.ts" in c for c in commands)
-
-hooks = data.get("hooks")
-if isinstance(hooks, dict):
-    for event, entries in list(hooks.items()):
-        if isinstance(entries, list):
-            filtered = [entry for entry in entries if keep_entry(entry)]
-            # Drop empty matcher entries produced by early installers.
-            filtered = [entry for entry in filtered if not (isinstance(entry, dict) and entry.get("matcher", "") == "" and entry.get("hooks") == [])]
-            if filtered:
-                hooks[event] = filtered
-            else:
-                hooks.pop(event, None)
-if not hooks:
-    data.pop("hooks", None)
-with open(path, "w", encoding="utf-8") as handle:
-    json.dump(data, handle, indent=2, ensure_ascii=False)
-    handle.write("\n")
-PY
-  fi
+install_user_hooks() {
+  # Compatibility path: Codex currently executes config-layer hooks, not plugin-local hooks.
+  "$INSTALLED_PLUGIN_ROOT/scripts/install-hooks.sh"
 }
 
 require_command codex
@@ -231,7 +192,7 @@ register_marketplace
 enable_plugin_config
 enable_codex_hooks_feature
 configure_mcp
-cleanup_legacy_user_hooks
+install_user_hooks
 
 echo ""
 echo "Lore Codex plugin installed."
@@ -240,5 +201,6 @@ echo "Plugin: $PLUGIN_ID enabled in $CODEX_CONFIG"
 echo "MCP: ${LORE_BASE_URL%/}/api/mcp?client_type=codex"
 echo "Installed plugin: $INSTALLED_PLUGIN_ROOT"
 echo "Hooks: bundled in $INSTALLED_PLUGIN_ROOT/hooks/hooks.json"
-echo "If Codex reports hook review is required, open /hooks and trust the Lore plugin hooks."
+echo "User hooks: $CODEX_HOME/hooks.json"
+echo "Open /hooks and trust the Lore user hooks if Codex asks for review."
 echo "Restart Codex for plugin and hook changes to take effect."
