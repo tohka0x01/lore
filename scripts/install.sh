@@ -7,6 +7,7 @@ set -euo pipefail
 #
 # Usage:
 #   curl -fsSL https://raw.githubusercontent.com/FFatTiger/lore/main/scripts/install.sh | bash -s -- [OPTIONS]
+#   curl -fsSL https://raw.githubusercontent.com/FFatTiger/lore/main/scripts/install.zh.sh | bash -s -- [OPTIONS]
 #
 # Options:
 #   --base-url URL       Lore server base URL
@@ -17,6 +18,13 @@ set -euo pipefail
 #   --force              Force reinstall even if version unchanged
 #   --pre                Use pre-release channel (pre-latest tag)
 #   --dev                Use dev channel (dev-latest tag)
+#
+# Notes:
+#   - Docker Compose output is shown so you can see image pull/start progress.
+#   - Other installer subcommands are quiet; rerun with the same options if needed.
+#   - Codex: restart Codex after install. Open /hooks and trust Lore hooks if prompted.
+#     If /plugins still shows Lore as installable, install it there manually; MCP/hooks are
+#     already configured by this script.
 
 # ---- Args ----
 
@@ -27,6 +35,7 @@ SKIP_DOCKER=0
 FORCE=0
 CHECK_PRE=0
 CHECK_DEV=0
+SHOW_HELP=0
 DOCKER_MANAGED=""
 
 while [[ $# -gt 0 ]]; do
@@ -38,6 +47,7 @@ while [[ $# -gt 0 ]]; do
     --force)       FORCE=1; shift;;
     --pre)         CHECK_PRE=1; shift;;
     --dev)         CHECK_DEV=1; shift;;
+    -h|--help)     SHOW_HELP=1; shift;;
     *) shift;;
   esac
 done
@@ -50,6 +60,7 @@ LORE_HOME="${LORE_HOME:-$HOME/.lore}"
 LORE_CONFIG_FILE="$LORE_HOME/config.json"
 LORE_DOCKER_DIR="$LORE_HOME/docker"
 REPO_RAW="https://raw.githubusercontent.com/${REPO}/main"
+LORE_INSTALL_LANG="${LORE_INSTALL_LANG:-en}"
 
 # ---- Colors ----
 
@@ -58,12 +69,13 @@ BLUE='\033[0;34m'; BOLD='\033[1m'; NC='\033[0m'
 
 banner() {
   echo ""
-  echo -e "${BLUE}${BOLD} _     ____  ____  _____ ${NC}"
-  echo -e "${BLUE}${BOLD}/ \   /  _ \/  __\/  __/ ${NC}  Lore — long-term memory for AI agents"
-  echo -e "${BLUE}${BOLD}| |   | / \||  \/||  \   ${NC}"
-  echo -e "${BLUE}${BOLD}| |_/\| \_/||    /|  /_  ${NC}  One install script, all agent runtimes."
-  echo -e "${BLUE}${BOLD}\____/\____/\_/\_\\____\ ${NC}"
-  echo -e "${BLUE}${BOLD}                        ${NC}"
+  if [[ "$LORE_INSTALL_LANG" == "zh" ]]; then
+    echo -e "${BLUE}${BOLD}Lore 安装器${NC}"
+    echo "长期记忆服务 + Agent 插件"
+  else
+    echo -e "${BLUE}${BOLD}Lore installer${NC}"
+    echo "Long-term memory service + agent plugins"
+  fi
   echo ""
 }
 
@@ -71,6 +83,64 @@ info()  { echo -e "${BLUE}→${NC} $1"; }
 ok()    { echo -e "${GREEN}✓${NC} $1"; }
 warn()  { echo -e "${YELLOW}!${NC} $1"; }
 err()   { echo -e "${RED}✗${NC} $1"; }
+section() { echo ""; echo -e "${BOLD}── $1${NC}"; }
+run_quiet() { "$@" >/dev/null 2>&1; }
+
+print_usage() {
+  if [[ "$LORE_INSTALL_LANG" == "zh" ]]; then
+    cat <<'EOF'
+用法：
+  curl -fsSL https://raw.githubusercontent.com/FFatTiger/lore/main/scripts/install.zh.sh | bash -s -- [选项]
+
+选项：
+  --base-url URL       使用已有 Lore 服务地址；传入后不会启动 Docker
+  --api-token TOKEN    Lore API Token
+  --channels CH,...    安装渠道：claudecode,codex,pi,openclaw,hermes；默认全部
+  --skip-docker        不运行 docker compose
+  --force              即使版本相同也重新安装
+  --pre                使用 pre-latest 镜像/预发布包
+  --dev                使用 dev-latest 镜像/开发包
+
+说明：
+  - Docker Compose 的 pull/up 输出会保留，便于观察启动进度。
+  - 其他命令默认静默，只输出安装脚本自己的关键状态。
+  - Codex 安装后请重启 Codex，打开 /hooks 并按提示 trust Lore hooks。
+  - 如果 Codex 的 /plugins 仍提示 Lore 可安装，手动安装即可；MCP/hooks 已由脚本配置。
+EOF
+  else
+    cat <<'EOF'
+Usage:
+  curl -fsSL https://raw.githubusercontent.com/FFatTiger/lore/main/scripts/install.sh | bash -s -- [OPTIONS]
+
+Options:
+  --base-url URL       Use an existing Lore server; skips Docker
+  --api-token TOKEN    Lore API token
+  --channels CH,...    Channels: claudecode,codex,pi,openclaw,hermes; default all
+  --skip-docker        Do not run docker compose
+  --force              Reinstall even if version is unchanged
+  --pre                Use pre-latest image/pre-release artifacts
+  --dev                Use dev-latest image/dev artifacts
+
+Notes:
+  - Docker Compose pull/up output is shown so you can see startup progress.
+  - Other subcommands are quiet; only key installer status is printed.
+  - Codex: restart Codex, open /hooks, and trust Lore hooks if prompted.
+  - If Codex /plugins still shows Lore as installable, install it manually; MCP/hooks are already configured.
+EOF
+  fi
+}
+
+msg_restart() {
+  if [[ "$LORE_INSTALL_LANG" == "zh" ]]; then
+    info "下一步：重启 Agent，然后打开 ${BASE_URL}/setup"
+    info "Codex：打开 /hooks，按提示信任 Lore hooks"
+    info "Codex：如果 /plugins 仍显示 Lore 可安装，手动安装即可"
+  else
+    info "Next: restart agent runtimes, then open ${BASE_URL}/setup"
+    info "Codex: open /hooks and trust Lore hooks if prompted"
+    info "Codex: if /plugins still shows Lore as installable, install it manually"
+  fi
+}
 
 have_command() { command -v "$1" >/dev/null 2>&1; }
 
@@ -136,7 +206,7 @@ elif 'docker_managed' not in data:
 with open(path, 'w') as f:
     json.dump(data, f, indent=2, ensure_ascii=False)
 PY
-  ok "Config saved → $LORE_CONFIG_FILE"
+  ok "Config saved"
 }
 
 # ---- Resolve channels ----
@@ -169,7 +239,7 @@ update_docker() {
     return
   fi
 
-  info "Updating Lore Docker containers..."
+  section "Docker"; info "Updating containers"
 
   # Download latest docker-compose.yml
   local compose_url="${REPO_RAW}/docker-compose.yml"
@@ -209,18 +279,18 @@ PY
     $compose_cmd up -d || { warn "docker compose up -d failed."; return; }
   )
 
-  ok "Docker containers updated."
+  ok "Docker updated"
 }
 
 start_docker() {
   if [[ "$SKIP_DOCKER" == "1" ]]; then
-    info "Skipping Docker (--skip-docker)."
+    info "Skipping Docker"
     return
   fi
 
   # Only skip docker if user explicitly passed --base-url
   if [[ -n "${_EXPLICIT_BASE_URL:-}" ]]; then
-    info "Using external Lore server: $BASE_URL — skipping Docker."
+    info "Using external Lore server"
     DOCKER_MANAGED=0
     return
   fi
@@ -233,7 +303,7 @@ start_docker() {
     if [[ "$managed" == "True" ]]; then
       update_docker
     else
-      info "Config has saved server: $saved — skipping Docker."
+      info "Using saved external server"
     fi
     return
   fi
@@ -254,7 +324,7 @@ start_docker() {
     return
   fi
 
-  info "Starting Lore via Docker Compose..."
+  section "Docker"; info "Starting containers"
   mkdir -p "$LORE_DOCKER_DIR"
 
   # Download docker-compose.yml from repo
@@ -286,7 +356,7 @@ EOF
     elif [[ "$CHECK_PRE" == "1" ]]; then
       echo "LORE_FRONTEND_IMAGE=fffattiger/lore:pre-latest" >> "$LORE_DOCKER_DIR/.env"
     fi
-    ok "Docker .env written → $LORE_DOCKER_DIR/.env"
+    ok "Docker env written"
   fi
 
   (
@@ -298,22 +368,22 @@ EOF
   ) || return
 
   DOCKER_MANAGED=1
-  ok "Lore server starting at http://127.0.0.1:18901"
+  ok "Lore server starting"
   BASE_URL="$DEFAULT_BASE_URL"
 
   # Wait for health
-  info "Waiting for Lore to be ready (this may take a minute)..."
+  info "Waiting for health check"
   local attempts=0
   while [[ $attempts -lt 60 ]]; do
     if curl -fsS "${BASE_URL}/api/health" >/dev/null 2>&1; then
-      ok "Lore server is healthy."
+      ok "Lore server healthy"
       return
     fi
     sleep 3
     attempts=$((attempts + 1))
     # Show progress every 30 seconds
     if [[ $((attempts % 10)) -eq 0 ]]; then
-      info "Still waiting... (${attempts}0s)"
+      info "Still waiting (${attempts}0s)"
     fi
   done
   warn "Lore health check timed out (3 min). Check: $compose_cmd -f $LORE_DOCKER_DIR/docker-compose.yml logs"
@@ -325,10 +395,10 @@ RELEASE_VERSION=""
 NEED_INSTALL=0
 
 check_release() {
-  info "Checking latest release..."
+  info "Checking release"
 
   if [[ "$CHECK_DEV" == "1" ]]; then
-    info "Dev channel — using dev-latest, skipping release check."
+    info "Using dev channel"
     RELEASE_VERSION="dev"
     NEED_INSTALL=0
     return
@@ -402,7 +472,7 @@ else:
 " 2>/dev/null) || cmp="unknown"
 
     if [[ "$cmp" == "same" ]]; then
-      ok "Already at latest version: $RELEASE_VERSION"
+      ok "Already up to date: $RELEASE_VERSION"
       NEED_INSTALL=2
     elif [[ "$cmp" == "newer" ]]; then
       ok "Installed $installed (newer than $RELEASE_VERSION). Use --pre to check pre-releases."
@@ -445,7 +515,7 @@ download_artifact() {
 
   local url="https://github.com/${REPO}/releases/download/${RELEASE_VERSION}/${artifact}"
 
-  info "Downloading ${artifact}..."
+  info "Downloading $channel"
   rm -rf "$dest.tmp"
   mkdir -p "$dest.tmp"
 
@@ -464,7 +534,7 @@ download_artifact() {
   rm -rf "$dest"
   mv "$dest.tmp/extracted" "$dest"
   rm -rf "$dest.tmp"
-  ok "Installed to $dest"
+  ok "$channel files ready"
   return 0
 }
 
@@ -479,15 +549,14 @@ download_or_skip() {
       err "No local install and no release."; return 1
     fi
   else
-    ok "${channel} at $dest (${RELEASE_VERSION:-local})"
+    ok "$channel files ready"
   fi
 }
 
 # ---- Channel: Claude Code ----
 
 install_claudecode() {
-  echo ""
-  echo -e "${BOLD}── Claude Code ────────────────────────────────${NC}"; echo ""
+  section "Claude Code"
 
   if ! have_command claude; then warn "claude CLI not found. Skipping."; return; fi
 
@@ -495,12 +564,12 @@ install_claudecode() {
   download_or_skip "claudecode" "$plugin_dir" || return
 
   rm -rf "$HOME/.claude/plugins/cache/lore"
-  claude plugin marketplace add "$plugin_dir" 2>/dev/null || true
+  run_quiet claude plugin marketplace add "$plugin_dir" || true
 
   if ! claude plugin list 2>/dev/null | grep -q "lore@lore"; then
-    claude plugin install lore@lore 2>/dev/null || warn "Try: /plugin install lore@lore"
+    run_quiet claude plugin install lore@lore || warn "Claude: install lore@lore manually in /plugin"
   else
-    ok "Plugin already enabled."
+    ok "Claude plugin already enabled"
   fi
 
   # settings.json env (for MCP URL)
@@ -520,7 +589,7 @@ data["env"]["LORE_BASE_URL"] = base_url
 if api_token: data["env"]["LORE_API_TOKEN"] = api_token
 with open(path, 'w') as f: json.dump(data, f, indent=2, ensure_ascii=False)
 PY
-    ok "Claude Code settings updated."
+    ok "Claude settings updated"
   fi
 
   # lore-guidance.md + CLAUDE.md @import
@@ -528,7 +597,7 @@ PY
   local gdst="$HOME/.claude/lore-guidance.md"
   if [[ -f "$gsrc" ]]; then
     cp "$gsrc" "$gdst"
-    ok "lore-guidance.md → $gdst"
+    ok "Claude guidance installed"
   fi
 
   local cmd="$HOME/.claude/CLAUDE.md"
@@ -542,17 +611,16 @@ PY
     else
       printf '%s\n' "$iline" > "$cmd"
     fi
-    ok "Added @import to CLAUDE.md"
+    ok "Claude guidance import added"
   fi
 
-  ok "Claude Code done. Restart Claude Code."
+  ok "Claude Code configured"
 }
 
 # ---- Channel: Codex ----
 
 install_codex() {
-  echo ""
-  echo -e "${BOLD}── Codex ───────────────────────────────────────${NC}"; echo ""
+  section "Codex"
 
   if ! have_command codex; then warn "codex CLI not found. Skipping."; return; fi
 
@@ -576,7 +644,7 @@ hooks_path.write_text(hooks_path.read_text().replace("__LORE_CODEX_PLUGIN_ROOT__
 PY
   fi
 
-  codex plugin marketplace add "$market_dir" 2>/dev/null || true
+  run_quiet codex plugin marketplace add "$market_dir" || true
 
   # Enable in config.toml
   local cfg="${CODEX_HOME:-$HOME/.codex}/config.toml"
@@ -604,18 +672,18 @@ if not found:
     out.extend([section + '\n', 'enabled = true\n'])
 with open(path, 'w') as f: f.writelines(out)
 PY
-    ok "Plugin enabled in config.toml"
+    ok "Codex plugin enabled"
   fi
 
   # MCP
   local mcp_url="${BASE_URL}/api/mcp?client_type=codex"
-  codex mcp remove lore >/dev/null 2>&1 || true
+  run_quiet codex mcp remove lore || true
   if [[ -n "$API_TOKEN" ]]; then
-    codex mcp add lore --url "$mcp_url" --bearer-token-env-var LORE_API_TOKEN 2>/dev/null || true
+    run_quiet codex mcp add lore --url "$mcp_url" --bearer-token-env-var LORE_API_TOKEN || true
   else
-    codex mcp add lore --url "$mcp_url" 2>/dev/null || true
+    run_quiet codex mcp add lore --url "$mcp_url" || true
   fi
-  ok "MCP configured."
+  ok "MCP configured"
 
   # Enable official Codex lifecycle hooks support for plugin-bundled hooks.
   mkdir -p "$(dirname "$cfg")"
@@ -647,7 +715,7 @@ if not found:
     out.extend(['[features]', 'codex_hooks = true'])
 with open(path, 'w', encoding='utf-8') as f: f.write('\n'.join(out).rstrip() + '\n')
 PY
-    ok "Codex hooks feature enabled."
+    ok "Codex hooks enabled"
   fi
 
   # Codex 0.130 still does not execute plugin-local hooks at runtime; install user-level hooks
@@ -656,18 +724,16 @@ PY
     LORE_CODEX_PLUGIN_ROOT="$installed_plugin_root" \
       LORE_BASE_URL="${BASE_URL}" \
       bash "$installed_plugin_root/scripts/install-hooks.sh" 2>/dev/null || true
-    ok "Codex user-level hooks installed."
+    ok "Codex hooks installed"
   fi
 
-  ok "Codex plugin materialized at $installed_plugin_root"
-  ok "Codex done. Restart Codex, then open /hooks and trust the Lore user hooks if prompted."
+  ok "Codex configured"
 }
 
 # ---- Channel: Pi ----
 
 install_pi() {
-  echo ""
-  echo -e "${BOLD}── Pi ──────────────────────────────────────────${NC}"; echo ""
+  section "Pi"
 
   if ! have_command pi; then warn "pi CLI not found. Skipping."; return; fi
 
@@ -675,15 +741,14 @@ install_pi() {
   download_or_skip "pi" "$pi_dir" || return
 
   LORE_BASE_URL="${BASE_URL}" LORE_API_TOKEN="${API_TOKEN:-}" \
-    bash "$pi_dir/scripts/install-local.sh"
-  ok "Pi done. Run /reload in Pi."
+    bash "$pi_dir/scripts/install-local.sh" >/dev/null 2>&1
+  ok "Pi configured"
 }
 
 # ---- Channel: OpenClaw ----
 
 install_openclaw() {
-  echo ""
-  echo -e "${BOLD}── OpenClaw ────────────────────────────────────${NC}"; echo ""
+  section "OpenClaw"
 
   if ! have_command openclaw; then warn "openclaw CLI not found. Skipping."; return; fi
 
@@ -693,10 +758,10 @@ install_openclaw() {
   rm -rf "$HOME/.openclaw/extensions/lore"
   (
     cd "$oc_dir"
-    npm install --silent 2>/dev/null || npm install
-    npm run build 2>/dev/null || true
-    openclaw plugins install . --force --dangerously-force-unsafe-install 2>/dev/null || true
-    openclaw plugins enable lore 2>/dev/null || true
+    npm install --silent >/dev/null 2>&1 || npm install --silent >/dev/null 2>&1
+    npm run build >/dev/null 2>&1 || true
+    run_quiet openclaw plugins install . --force --dangerously-force-unsafe-install || true
+    run_quiet openclaw plugins enable lore || true
   )
 
   local occ="$HOME/.openclaw/openclaw.json"
@@ -715,34 +780,31 @@ if api_token: lore["config"]["apiToken"] = api_token
 lore.setdefault("enabled", True)
 with open(path, 'w') as f: json.dump(data, f, indent=2, ensure_ascii=False)
 PY
-    ok "OpenClaw config updated."
+    ok "OpenClaw config updated"
   fi
-  ok "OpenClaw done."
+  ok "OpenClaw configured"
 }
 
 # ---- Channel: Hermes ----
 
 install_hermes() {
-  echo ""
-  echo -e "${BOLD}── Hermes ──────────────────────────────────────${NC}"; echo ""
+  section "Hermes"
 
   local plugin_dir="$LORE_HOME/hermes"
   download_or_skip "hermes" "$plugin_dir" || return
 
-  echo ""
-  echo -e "  Symlink to complete Hermes setup:"
-  echo -e "    ${GREEN}ln -s ${plugin_dir}/lore_memory <hermes-plugin-path>/lore_memory${NC}"
-  echo ""
-  echo "  And ensure env vars in Hermes environment:"
-  echo -e "    ${GREEN}export LORE_BASE_URL=${BASE_URL}${NC}"
-  [[ -n "$API_TOKEN" ]] && echo -e "    ${GREEN}export LORE_API_TOKEN=${API_TOKEN}${NC}"
-  echo ""
-  ok "Hermes files ready."
+  ok "Hermes files ready"
+  info "Hermes: symlink ${plugin_dir}/lore_memory into your Hermes plugin path"
 }
 
 # ---- Main ----
 
 main() {
+  if [[ "$SHOW_HELP" == "1" ]]; then
+    print_usage
+    return
+  fi
+
   banner
 
   resolve_channels
@@ -752,14 +814,11 @@ main() {
   BASE_URL="${BASE_URL:-$DEFAULT_BASE_URL}"
   BASE_URL="${BASE_URL%/}"
 
-  echo ""
-  echo -e "  Base URL:  ${GREEN}${BASE_URL}${NC}"
-  echo -e "  Channels:  ${GREEN}$(IFS=,; echo "${CHANNELS[*]}")${NC}"
   local channel_label="stable"
   [[ "$CHECK_DEV" == "1" ]] && channel_label="dev"
   [[ "$CHECK_PRE" == "1" ]] && channel_label="pre-release"
-  echo -e "  Release:   ${GREEN}${channel_label}${NC}"
-  echo ""
+  info "Server: ${BASE_URL}"
+  info "Channels: $(IFS=,; echo "${CHANNELS[*]}") (${channel_label})"
 
   check_release || true
 
@@ -777,21 +836,10 @@ main() {
   write_config
 
   echo ""
-  echo -e "${GREEN}${BOLD}══════════════════════════════════════════════${NC}"
-  echo -e "${GREEN}${BOLD}  Lore install complete!${NC}"
-  echo ""
-  echo -e "  Version:   ${GREEN}${RELEASE_VERSION:-unknown}${NC}"
-  echo -e "  Base URL:  ${GREEN}${BASE_URL}${NC}"
-  echo -e "  Config:    ${BLUE}${LORE_CONFIG_FILE}${NC}"
-  echo -e "  Docker:    ${BLUE}${LORE_DOCKER_DIR}${NC}"
-  echo ""
-  echo "  Next:"
-  echo "    1. Restart agent runtime(s)"
-  echo "    2. Open http://${BASE_URL#http://}/setup for first-run setup"
-  echo ""
-  echo "  To update: re-run this script."
-  echo -e "${GREEN}${BOLD}══════════════════════════════════════════════${NC}"
-  echo ""
+  ok "Install complete (${RELEASE_VERSION:-unknown})"
+  info "Config: $LORE_CONFIG_FILE"
+  info "Setup: ${BASE_URL}/setup"
+  msg_restart
 }
 
 main "$@"
