@@ -1,7 +1,4 @@
 import type { ClientType } from '../../auth';
-import { cached } from '../../cache/cacheAside';
-import { hashedCacheKey } from '../../cache/key';
-import { CACHE_TAG, CACHE_TTL } from '../../cache/policies';
 import { sql } from '../../db';
 import { parseUri } from '../core/utils';
 import { getSettings } from '../config/settings';
@@ -329,17 +326,6 @@ export async function getBootDraftGenerationStatus(): Promise<BootDraftGeneratio
 }
 
 export async function bootView(options: BootViewOptions = {}): Promise<BootViewResult> {
-  return cached({
-    key: hashedCacheKey('boot', {
-      client_type: options.client_type || 'global',
-      include_all_clients: options.include_all_clients === true,
-    }),
-    ttlMs: CACHE_TTL.boot,
-    tags: [CACHE_TAG.boot, CACHE_TAG.memory, CACHE_TAG.settings],
-  }, async () => bootViewUncached(options));
-}
-
-async function bootViewUncached(options: BootViewOptions = {}): Promise<BootViewResult> {
   const includesAllClients = shouldIncludeAllClientBootNodes(options);
   const selectedNodes = includesAllClients
     ? getBootNodeSpecs()

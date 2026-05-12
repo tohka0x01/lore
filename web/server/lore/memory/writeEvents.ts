@@ -1,7 +1,4 @@
 import { normalizeClientType, type ClientType } from '../../auth';
-import { cached } from '../../cache/cacheAside';
-import { hashedCacheKey } from '../../cache/key';
-import { CACHE_TAG, CACHE_TTL } from '../../cache/policies';
 import { sql } from '../../db';
 import type { TransactionClient } from '../core/types';
 import { clampLimit } from '../core/utils';
@@ -277,20 +274,6 @@ function formatEventRow(row: Record<string, unknown>): FormattedEvent {
 }
 
 export async function getWriteEventStats({
-  days = 7,
-  limit = 20,
-  eventType = '',
-  nodeUri = '',
-  source = '',
-}: WriteEventStatsOptions = {}): Promise<WriteEventStats> {
-  return cached({
-    key: hashedCacheKey('analytics:write', { days, limit, eventType, nodeUri, source }),
-    ttlMs: CACHE_TTL.writeAnalytics,
-    tags: [CACHE_TAG.writeAnalytics],
-  }, async () => getWriteEventStatsUncached({ days, limit, eventType, nodeUri, source }));
-}
-
-async function getWriteEventStatsUncached({
   days = 7,
   limit = 20,
   eventType = '',

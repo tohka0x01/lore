@@ -1,4 +1,6 @@
 import { sql } from '../../db';
+import { invalidateCacheTags } from '../../cache/cacheAside';
+import { CACHE_TAG } from '../../cache/policies';
 import { embedTexts, vectorLiteral, resolveEmbeddingConfig } from './embeddings';
 import { NORMALIZED_DOCUMENTS_CTE, loadNormalizedDocuments } from './retrieval';
 import { truncate } from '../core/utils';
@@ -16,6 +18,10 @@ import {
 } from './viewBuilders';
 import { resolveViewLlmConfig, refineDocumentsWithLlm } from './viewLlm';
 import type { EmbeddingConfig } from '../core/types';
+
+async function invalidateRecallRetrievalCache(): Promise<void> {
+  await invalidateCacheTags([CACHE_TAG.recallRetrieval]);
+}
 
 // ---------------------------------------------------------------------------
 // View record builder
@@ -180,8 +186,9 @@ export async function upsertGeneratedMemoryViewsForPath({
   const docs = await loadSourceDocuments({ domain, path });
 
   if (!docs.length) {
-    await sql(`DELETE FROM memory_views WHERE domain = $1 AND path = $2 AND source = $3`, [domain, path, GENERATED_SOURCE]);
-    return { source_count: 0, updated_count: 0, deleted_count: 0, llm_refined_docs: 0 };
+    const result = await sql(`DELETE FROM memory_views WHERE domain = $1 AND path = $2 AND source = $3`, [domain, path, GENERATED_SOURCE]);
+    if ((result.rowCount || 0) > 0) await invalidateRecallRetrievalCache();
+    return { source_count: 0, updated_count: 0, deleted_count: result.rowCount || 0, llm_refined_docs: 0 };
   }
 
   const existing = await sql(
@@ -232,6 +239,8 @@ export async function upsertGeneratedMemoryViewsForPath({
     }
   }
 
+  if (stale.length || deletedCount) await invalidateRecallRetrievalCache();
+
   return { source_count: sourceViews.length, updated_count: stale.length, deleted_count: deletedCount, llm_refined_docs: llmRefinedDocs };
 }
 
@@ -246,6 +255,7 @@ export async function deleteGeneratedMemoryViewsByPrefix({
     `DELETE FROM memory_views WHERE domain = $1 AND source = $2 AND (path = $3 OR path LIKE $4)`,
     [domain, GENERATED_SOURCE, path, `${path}/%`],
   );
+  if ((result.rowCount || 0) > 0) await invalidateRecallRetrievalCache();
   return { deleted_count: result.rowCount || 0 };
 }
 
@@ -329,6 +339,8 @@ export async function ensureMemoryViewsIndex(
       deletedCount += result.rowCount || 0;
     }
   }
+
+  if (stale.length || deletedCount) await invalidateRecallRetrievalCache();
 
   return {
     source_count: sourceViews.length,

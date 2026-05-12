@@ -1,7 +1,3 @@
-import { cached } from '../../cache/cacheAside';
-import { invalidateSessionCaches } from '../../cache/invalidation';
-import { cacheKey } from '../../cache/key';
-import { CACHE_TTL, sessionTag } from '../../cache/policies';
 import { sql } from '../../db';
 import { ROOT_NODE_UUID } from '../core/constants';
 import { parseUri } from '../core/utils';
@@ -72,19 +68,10 @@ export async function markSessionRead({
     `,
     [session_id, uri, resolvedNodeUuid, session_key, source],
   );
-  await invalidateSessionCaches(session_id);
   return result.rows[0] as SessionReadNode;
 }
 
 export async function listSessionReads(sessionId: string): Promise<SessionReadNode[]> {
-  return cached({
-    key: cacheKey('session', [sessionId, 'reads']),
-    ttlMs: CACHE_TTL.sessionReads,
-    tags: [sessionTag(sessionId)],
-  }, async () => listSessionReadsUncached(sessionId));
-}
-
-async function listSessionReadsUncached(sessionId: string): Promise<SessionReadNode[]> {
   const result = await sql(
     `
       SELECT session_id, uri, node_uuid, session_key, source, read_count, first_read_at, last_read_at
@@ -101,6 +88,5 @@ export async function clearSessionReads(
   sessionId: string,
 ): Promise<{ success: boolean; session_id: string; cleared: number | null }> {
   const result = await sql(`DELETE FROM session_read_nodes WHERE session_id = $1`, [sessionId]);
-  await invalidateSessionCaches(sessionId);
   return { success: true, session_id: sessionId, cleared: result.rowCount };
 }

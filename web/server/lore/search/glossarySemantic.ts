@@ -1,11 +1,18 @@
 import crypto from 'crypto';
 import { sql } from '../../db';
+import { cached, invalidateCacheTags } from '../../cache/cacheAside';
+import { hashedCacheKey, hashKey } from '../../cache/key';
+import { CACHE_TAG, CACHE_TTL } from '../../cache/policies';
 import { embedTexts, resolveEmbeddingConfig, vectorLiteral } from '../view/embeddings';
 import { loadNormalizedDocuments } from '../view/retrieval';
 import { clampLimit } from '../core/utils';
 import type { EmbeddingConfig } from '../core/types';
 
 const GENERATED_SOURCE = 'generated';
+
+async function invalidateRecallRetrievalCache(): Promise<void> {
+  await invalidateCacheTags([CACHE_TAG.recallRetrieval]);
+}
 
 // ---------------------------------------------------------------------------
 // Internal types
@@ -190,8 +197,9 @@ export async function upsertGeneratedGlossaryEmbeddingsForPath({
   const docs = await loadGlossarySourceDocuments({ domain, path });
 
   if (!docs.length) {
-    await sql(`DELETE FROM glossary_term_embeddings WHERE domain = $1 AND path = $2 AND source = $3`, [domain, path, GENERATED_SOURCE]);
-    return { source_count: 0, updated_count: 0, deleted_count: 0 };
+    const result = await sql(`DELETE FROM glossary_term_embeddings WHERE domain = $1 AND path = $2 AND source = $3`, [domain, path, GENERATED_SOURCE]);
+    if ((result.rowCount || 0) > 0) await invalidateRecallRetrievalCache();
+    return { source_count: 0, updated_count: 0, deleted_count: result.rowCount || 0 };
   }
 
   const sourceRecords = docs.flatMap(buildGlossaryRecords);
@@ -223,6 +231,8 @@ export async function upsertGeneratedGlossaryEmbeddingsForPath({
     }
   }
 
+  if (stale.length || deletedCount) await invalidateRecallRetrievalCache();
+
   return { source_count: sourceRecords.length, updated_count: stale.length, deleted_count: deletedCount };
 }
 
@@ -237,6 +247,7 @@ export async function deleteGeneratedGlossaryEmbeddingsByPrefix({
     `DELETE FROM glossary_term_embeddings WHERE domain = $1 AND source = $2 AND (path = $3 OR path LIKE $4)`,
     [domain, GENERATED_SOURCE, path, `${path}/%`],
   );
+  if ((result.rowCount || 0) > 0) await invalidateRecallRetrievalCache();
   return { deleted_count: result.rowCount || 0 };
 }
 
@@ -271,6 +282,8 @@ export async function ensureGlossaryEmbeddingsIndex(
     }
   }
 
+  if (stale.length || deletedCount) await invalidateRecallRetrievalCache();
+
   return {
     source_count: sourceRecords.length,
     updated_count: stale.length,
@@ -279,6 +292,30 @@ export async function ensureGlossaryEmbeddingsIndex(
 }
 
 export async function fetchGlossarySemanticRows({
+  embedding,
+  queryVector,
+  limit = 36,
+  domain = null,
+}: {
+  embedding: EmbeddingConfig;
+  queryVector: number[];
+  limit?: number;
+  domain?: string | null;
+}): Promise<GlossarySemanticRow[]> {
+  const safeLimit = clampLimit(limit, 1, 300, 36);
+  return cached<GlossarySemanticRow[]>({
+    key: hashedCacheKey('recall:glossary_semantic_rows', {
+      model: embedding.model,
+      vectorHash: hashKey(queryVector),
+      limit: safeLimit,
+      domain: domain || null,
+    }),
+    ttlMs: CACHE_TTL.recallRetrieval,
+    tags: [CACHE_TAG.recallRetrieval],
+  }, () => fetchGlossarySemanticRowsUncached({ embedding, queryVector, limit: safeLimit, domain }));
+}
+
+async function fetchGlossarySemanticRowsUncached({
   embedding,
   queryVector,
   limit = 36,

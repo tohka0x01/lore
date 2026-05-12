@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 
 vi.mock('../../../db', () => ({ sql: vi.fn() }));
 vi.mock('../../view/embeddings', () => ({
@@ -20,12 +20,19 @@ import {
   fetchGlossarySemanticRows,
   ensureGlossaryEmbeddingsIndex,
 } from '../glossarySemantic';
+import { __resetCacheForTest, getCacheStore } from '../../../cache';
 
 const mockSql = vi.mocked(sql);
 const mockEmbedTexts = vi.mocked(embedTexts);
 const mockResolveEmbeddingConfig = vi.mocked(resolveEmbeddingConfig);
 const mockLoadNormalizedDocuments = vi.mocked(loadNormalizedDocuments);
 const mockVectorLiteral = vi.mocked(vectorLiteral);
+
+afterEach(async () => {
+  await (await getCacheStore()).clear();
+  __resetCacheForTest();
+  delete process.env.CACHE_TEST_ENABLE;
+});
 
 function makeResult(rows: Record<string, unknown>[] = [], rowCount = rows.length) {
   return { rows, rowCount } as any;
@@ -296,5 +303,22 @@ describe('fetchGlossarySemanticRows', () => {
     // domain param would be the 3rd element (after vectorLiteral and model); with no domain it shouldn't be present
     const params = selectCall![1] as unknown[];
     expect(params.includes('core')).toBe(false);
+  });
+
+  it('caches glossary semantic retrieval rows for identical query vectors', async () => {
+    process.env.CACHE_TEST_ENABLE = 'true';
+    const rows = [
+      { domain: 'core', path: 'a', uri: 'core://a', node_uuid: 'u1', memory_id: 1, priority: 0, disclosure: null, keyword: 'alpha', metadata: {}, glossary_semantic_score: 0.9, updated_at: '2025-01-01' },
+    ];
+    mockSql.mockResolvedValue(makeResult(rows));
+
+    const cfg = makeEmbeddingConfig('model-x');
+    const first = await fetchGlossarySemanticRows({ embedding: cfg, queryVector: [0.1, 0.2], limit: 10, domain: 'core' });
+    const second = await fetchGlossarySemanticRows({ embedding: cfg, queryVector: [0.1, 0.2], limit: 10, domain: 'core' });
+
+    expect(first).toEqual(rows);
+    expect(second).toEqual(rows);
+    const retrievalCalls = mockSql.mock.calls.filter((call) => String(call[0]).includes('FROM glossary_term_embeddings'));
+    expect(retrievalCalls).toHaveLength(1);
   });
 });

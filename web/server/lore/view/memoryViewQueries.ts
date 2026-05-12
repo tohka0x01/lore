@@ -1,4 +1,7 @@
 import { sql } from '../../db';
+import { cached } from '../../cache/cacheAside';
+import { hashedCacheKey, hashKey } from '../../cache/key';
+import { CACHE_TAG, CACHE_TTL } from '../../cache/policies';
 import { vectorLiteral } from './embeddings';
 import { NORMALIZED_DOCUMENTS_CTE } from './retrieval';
 import { dedupeTerms, clampLimit } from '../core/utils';
@@ -90,6 +93,25 @@ export interface MemoryViewRuntimeConfig {
 // ---------------------------------------------------------------------------
 
 export async function fetchDenseMemoryViewRows({
+  embedding,
+  queryVector,
+  limit = 36,
+  domain = null,
+}: FetchDenseOptions): Promise<MemoryViewRow[]> {
+  const safeLimit = clampLimit(limit, 1, 300, 36);
+  return cached<MemoryViewRow[]>({
+    key: hashedCacheKey('recall:dense_rows', {
+      model: embedding.model,
+      vectorHash: hashKey(Array.isArray(queryVector) ? queryVector : String(queryVector)),
+      limit: safeLimit,
+      domain: domain || null,
+    }),
+    ttlMs: CACHE_TTL.recallRetrieval,
+    tags: [CACHE_TAG.recallRetrieval],
+  }, () => fetchDenseMemoryViewRowsUncached({ embedding, queryVector, limit: safeLimit, domain }));
+}
+
+async function fetchDenseMemoryViewRowsUncached({
   embedding,
   queryVector,
   limit = 36,

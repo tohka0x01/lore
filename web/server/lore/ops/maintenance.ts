@@ -1,6 +1,3 @@
-import { invalidateCacheTags } from '../../cache/cacheAside';
-import { invalidateMemoryCaches } from '../../cache/invalidation';
-import { CACHE_TAG } from '../../cache/policies';
 import { sql } from '../../db';
 import { logMemoryEvent } from '../memory/writeEvents';
 
@@ -227,8 +224,6 @@ export async function permanentlyDeleteDeprecatedMemory(
     });
 
     await client.query('COMMIT');
-    await invalidateMemoryCaches();
-    await invalidateCacheTags([CACHE_TAG.maintenance]);
     return { deleted_memory_id: memoryId as number, chain_repaired_to: target.migrated_to as number | null };
   } catch (error) {
     await client.query('ROLLBACK');

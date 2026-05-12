@@ -6,7 +6,6 @@ import {
   deleteGeneratedMemoryViewsByPrefix,
   upsertGeneratedMemoryViewsForPath,
 } from '../view/viewCrud';
-import { invalidateMemoryCaches } from '../../cache/invalidation';
 
 interface GeneratedArtifactPath {
   domain?: unknown;
@@ -64,9 +63,6 @@ function scheduleGeneratedArtifacts(
         }
         if (glossaryEmbeddingsResult.status === 'rejected') {
           console.error(`[glossary_embeddings] ${logLabel} failed`, row.domain, row.path, glossaryEmbeddingsResult.reason);
-        }
-        if (memoryViewsResult.status === 'fulfilled' && glossaryEmbeddingsResult.status === 'fulfilled') {
-          await invalidateMemoryCaches(row.domain, row.path);
         }
       }).catch((error: unknown) => {
         console.error(`[generated_artifacts] ${logLabel} invalidation failed`, row.domain, row.path, error);

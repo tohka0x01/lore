@@ -1,6 +1,5 @@
 import crypto from 'crypto';
 import type { ClientType } from '../../auth';
-import { invalidateMemoryCaches } from '../../cache/invalidation';
 import { getPool } from '../../db';
 import { ROOT_NODE_UUID } from './browse';
 import { logMemoryEvent } from './writeEvents';
@@ -250,7 +249,6 @@ export async function createNode(
     });
 
     await client.query('COMMIT');
-    await invalidateMemoryCaches(domain, path);
     scheduleWriteArtifactsRefresh({ domain, path });
     return buildCreateMutationReceipt({ uri: `${domain}://${path}`, path, node_uuid: childUuid });
   } catch (error) {
@@ -427,7 +425,6 @@ export async function updateNodeByPath(
     });
 
     await client.query('COMMIT');
-    await invalidateMemoryCaches(domain, path);
     scheduleWriteArtifactsRefresh({ domain, path });
     return buildUpdateMutationReceipt({ uri: `${domain}://${path}`, path, node_uuid: ctx.child_uuid });
   } catch (error) {
@@ -530,7 +527,6 @@ export async function deleteNodeByPath(
     });
 
     await client.query('COMMIT');
-    await invalidateMemoryCaches(domain, path);
     scheduleWriteArtifactsDelete({ domain, path });
     return buildDeleteMutationReceipt({ uri: `${domain}://${path}`, path, node_uuid: baseCtx.child_uuid });
   } catch (error) {
@@ -610,8 +606,6 @@ export async function moveNode(
     );
 
     await client.query('COMMIT');
-    await invalidateMemoryCaches(old.domain, old.path);
-    await invalidateMemoryCaches(target.domain, target.path);
 
     // Delete old views/glossary at old prefix, then refresh at new prefix
     scheduleWriteArtifactsAfterMove(

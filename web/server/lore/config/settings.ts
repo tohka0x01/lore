@@ -11,7 +11,6 @@
  */
 
 import { sql } from '../../db';
-import { invalidateSettingsCaches } from '../../cache/invalidation';
 import { resetCacheStore } from '../../cache';
 import {
   SETTINGS_SCHEMA,
@@ -184,7 +183,6 @@ export async function updateSettings(patch: Record<string, unknown>): ReturnType
     );
   }
   clearCache();
-  await invalidateSettingsCaches();
   if (Object.prototype.hasOwnProperty.call(patch, 'cache.enabled')) resetCacheStore();
   return getSettingsSnapshot();
 }
@@ -198,7 +196,6 @@ export async function resetSettings(keys: string | string[]): ReturnType<typeof 
     await sql(`DELETE FROM app_settings WHERE key = $1`, [key]);
   }
   clearCache();
-  await invalidateSettingsCaches();
   if (list.includes('cache.enabled')) resetCacheStore();
   return getSettingsSnapshot();
 }

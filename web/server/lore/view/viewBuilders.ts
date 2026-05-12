@@ -1,5 +1,8 @@
 import crypto from 'crypto';
 import { sql } from '../../db';
+import { cached } from '../../cache/cacheAside';
+import { hashedCacheKey, sha256Hex } from '../../cache/key';
+import { CACHE_TAG, CACHE_TTL } from '../../cache/policies';
 import { dedupeTerms, truncate } from '../core/utils';
 import { getSettings as getSettingsBatch } from '../config/settings';
 
@@ -47,11 +50,20 @@ export async function countQueryTokens(query: unknown): Promise<number> {
   if (!cleanedQuery) return 1;
   const ftsQuery = await getFtsQueryConfig();
   try {
-    const result = await sql(
-      `SELECT GREATEST(1, COALESCE(array_length(string_to_array(plainto_tsquery('${ftsQuery}', $1)::text, ' & '), 1), 0)) AS tokens`,
-      [cleanedQuery],
-    );
-    return Number(result.rows[0]?.tokens || 1);
+    return await cached<number>({
+      key: hashedCacheKey('query:tokens', {
+        ftsQuery,
+        queryHash: sha256Hex(cleanedQuery),
+      }),
+      ttlMs: CACHE_TTL.queryTokens,
+      tags: [CACHE_TAG.queryTokens],
+    }, async () => {
+      const result = await sql(
+        `SELECT GREATEST(1, COALESCE(array_length(string_to_array(plainto_tsquery('${ftsQuery}', $1)::text, ' & '), 1), 0)) AS tokens`,
+        [cleanedQuery],
+      );
+      return Number(result.rows[0]?.tokens || 1);
+    });
   } catch {
     // Fallback: rough char-based estimate (CJK ~1 token per 3 chars, ASCII ~1 per word)
     return Math.max(1, Math.round(cleanedQuery.length / 3));

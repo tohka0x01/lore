@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 
 // Mocks must be declared before imports
 vi.mock('../../../db', () => ({ sql: vi.fn() }));
@@ -37,8 +37,15 @@ import {
   getMemoryViewRuntimeConfig,
   listMemoryViewsByNode,
 } from '../memoryViewQueries';
+import { __resetCacheForTest, getCacheStore } from '../../../cache';
 
 const mockSql = vi.mocked(sql);
+
+afterEach(async () => {
+  await (await getCacheStore()).clear();
+  __resetCacheForTest();
+  delete process.env.CACHE_TEST_ENABLE;
+});
 
 // ---------------------------------------------------------------------------
 // buildCandidateKey
@@ -273,6 +280,30 @@ describe('fetchDenseMemoryViewRows', () => {
     });
     const [, params] = mockSql.mock.calls[0] as [string, unknown[]];
     expect(params[params.length - 1]).toBe(300);
+  });
+
+  it('caches dense vector retrieval rows for identical query vectors', async () => {
+    process.env.CACHE_TEST_ENABLE = 'true';
+    const rows = [{ uri: 'core://cached', view_type: 'gist', semantic_score: 0.9 }];
+    mockSql.mockResolvedValue({ rows, rowCount: rows.length } as any);
+
+    const first = await fetchDenseMemoryViewRows({
+      embedding: { model: 'model-x' },
+      queryVector: [0.1, 0.2, 0.3],
+      limit: 10,
+      domain: 'core',
+    });
+    const second = await fetchDenseMemoryViewRows({
+      embedding: { model: 'model-x' },
+      queryVector: [0.1, 0.2, 0.3],
+      limit: 10,
+      domain: 'core',
+    });
+
+    expect(first).toEqual(rows);
+    expect(second).toEqual(rows);
+    const retrievalCalls = mockSql.mock.calls.filter((call) => String(call[0]).includes('FROM memory_views'));
+    expect(retrievalCalls).toHaveLength(1);
   });
 });
 

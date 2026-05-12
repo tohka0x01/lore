@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 
 vi.mock('../../../db', () => ({ sql: vi.fn() }));
 vi.mock('../../config/settings', () => ({
@@ -24,8 +24,15 @@ import {
   _resetFtsCache,
   VIEW_GENERATOR_VERSION,
 } from '../viewBuilders';
+import { __resetCacheForTest, getCacheStore } from '../../../cache';
 
 const mockSql = vi.mocked(sql);
+
+afterEach(async () => {
+  await (await getCacheStore()).clear();
+  __resetCacheForTest();
+  delete process.env.CACHE_TEST_ENABLE;
+});
 const mockGetSettings = vi.mocked(getSettings);
 
 // ---------------------------------------------------------------------------
@@ -127,6 +134,17 @@ describe('countQueryTokens', () => {
     mockSql.mockRejectedValueOnce(new Error('SQL error'));
     const result = await countQueryTokens('abcdef');
     expect(result).toBe(Math.max(1, Math.round(6 / 3)));
+  });
+
+  it('caches jieba token counts for identical queries', async () => {
+    process.env.CACHE_TEST_ENABLE = 'true';
+    mockSql.mockResolvedValue({ rows: [{ tokens: '7' }], rowCount: 1 } as any);
+
+    expect(await countQueryTokens('缓存测试')).toBe(7);
+    expect(await countQueryTokens('缓存测试')).toBe(7);
+
+    const tokenCountCalls = mockSql.mock.calls.filter((call) => String(call[0]).includes('plainto_tsquery'));
+    expect(tokenCountCalls).toHaveLength(1);
   });
 });
 
