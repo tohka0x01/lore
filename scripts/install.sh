@@ -559,8 +559,15 @@ install_codex() {
   local market_dir="$LORE_HOME/codex"
   download_or_skip "codex" "$market_dir" || return
 
-  if [[ -f "$market_dir/plugins/lore/hooks/hooks.json" ]] && have_command python3; then
-    python3 - "$market_dir/plugins/lore/hooks/hooks.json" "$market_dir/plugins/lore" <<'PY'
+  local codex_home="${CODEX_HOME:-$HOME/.codex}"
+  local installed_plugin_root="$codex_home/plugins/cache/lore/lore/local"
+  rm -rf "$installed_plugin_root.tmp"
+  mkdir -p "$(dirname "$installed_plugin_root")"
+  cp -a "$market_dir/plugins/lore" "$installed_plugin_root.tmp"
+  rm -rf "$installed_plugin_root"
+  mv "$installed_plugin_root.tmp" "$installed_plugin_root"
+  if [[ -f "$installed_plugin_root/hooks/hooks.json" ]] && have_command python3; then
+    python3 - "$installed_plugin_root/hooks/hooks.json" "$installed_plugin_root" <<'PY'
 import sys
 from pathlib import Path
 hooks_path = Path(sys.argv[1])
@@ -569,7 +576,6 @@ hooks_path.write_text(hooks_path.read_text().replace("__LORE_CODEX_PLUGIN_ROOT__
 PY
   fi
 
-  rm -rf "$HOME/.codex/plugins/cache/lore"
   codex plugin marketplace add "$market_dir" 2>/dev/null || true
 
   # Enable in config.toml
@@ -679,6 +685,7 @@ PY
     ok "Legacy user hooks cleaned."
   fi
 
+  ok "Codex plugin materialized at $installed_plugin_root"
   ok "Codex done. Restart Codex. If hooks need review, open /hooks and trust the Lore plugin hooks."
 }
 

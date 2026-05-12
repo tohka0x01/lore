@@ -11,6 +11,7 @@ PLUGIN_SOURCE_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 CODEX_HOME="${CODEX_HOME:-$HOME/.codex}"
 CODEX_CONFIG="${CODEX_CONFIG:-$CODEX_HOME/config.toml}"
 TARGET_ROOT="${LORE_CODEX_MARKETPLACE_ROOT:-$CODEX_HOME/plugins/lore-local-marketplace}"
+INSTALLED_PLUGIN_ROOT="$CODEX_HOME/plugins/cache/$MARKETPLACE_NAME/$PLUGIN_NAME/local"
 LORE_BASE_URL="${LORE_BASE_URL:-$DEFAULT_BASE_URL}"
 
 require_command() {
@@ -210,7 +211,12 @@ require_command jq
 require_command python3
 
 copy_source_layout
-python3 - "$TARGET_ROOT/plugins/$PLUGIN_NAME/hooks/hooks.json" "$TARGET_ROOT/plugins/$PLUGIN_NAME" <<'PY'
+rm -rf "$INSTALLED_PLUGIN_ROOT.tmp"
+mkdir -p "$(dirname "$INSTALLED_PLUGIN_ROOT")"
+cp -a "$TARGET_ROOT/plugins/$PLUGIN_NAME" "$INSTALLED_PLUGIN_ROOT.tmp"
+rm -rf "$INSTALLED_PLUGIN_ROOT"
+mv "$INSTALLED_PLUGIN_ROOT.tmp" "$INSTALLED_PLUGIN_ROOT"
+python3 - "$INSTALLED_PLUGIN_ROOT/hooks/hooks.json" "$INSTALLED_PLUGIN_ROOT" <<'PY'
 import sys
 from pathlib import Path
 hooks_path = Path(sys.argv[1])
@@ -219,7 +225,7 @@ if hooks_path.exists():
     hooks_path.write_text(hooks_path.read_text().replace("__LORE_CODEX_PLUGIN_ROOT__", plugin_root))
 PY
 jq -e '.plugins[0].source.path == "./plugins/lore"' "$TARGET_ROOT/.agents/plugins/marketplace.json" >/dev/null
-jq -e '.mcpServers.lore.url | contains("client_type=codex")' "$TARGET_ROOT/plugins/$PLUGIN_NAME/.mcp.json" >/dev/null
+jq -e '.mcpServers.lore.url | contains("client_type=codex")' "$INSTALLED_PLUGIN_ROOT/.mcp.json" >/dev/null
 
 register_marketplace
 enable_plugin_config
@@ -232,6 +238,7 @@ echo "Lore Codex plugin installed."
 echo "Marketplace: $TARGET_ROOT"
 echo "Plugin: $PLUGIN_ID enabled in $CODEX_CONFIG"
 echo "MCP: ${LORE_BASE_URL%/}/api/mcp?client_type=codex"
-echo "Hooks: bundled in $TARGET_ROOT/plugins/$PLUGIN_NAME/hooks/hooks.json"
+echo "Installed plugin: $INSTALLED_PLUGIN_ROOT"
+echo "Hooks: bundled in $INSTALLED_PLUGIN_ROOT/hooks/hooks.json"
 echo "If Codex reports hook review is required, open /hooks and trust the Lore plugin hooks."
 echo "Restart Codex for plugin and hook changes to take effect."
