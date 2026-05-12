@@ -702,17 +702,19 @@ while idx < len(lines):
     if line.strip() == '[features]':
         found = True; out.append(line); idx += 1; written = False
         while idx < len(lines) and not lines[idx].lstrip().startswith('['):
-            if lines[idx].strip().startswith('codex_hooks'):
-                out.append('codex_hooks = true'); written = True
+            stripped = lines[idx].strip()
+            if stripped.startswith('hooks') or stripped.startswith('codex_hooks'):
+                if not written:
+                    out.append('hooks = true'); written = True
             else:
                 out.append(lines[idx])
             idx += 1
-        if not written: out.append('codex_hooks = true')
+        if not written: out.append('hooks = true')
         continue
     out.append(line); idx += 1
 if not found:
     if out and out[-1] != '': out.append('')
-    out.extend(['[features]', 'codex_hooks = true'])
+    out.extend(['[features]', 'hooks = true'])
 with open(path, 'w', encoding='utf-8') as f: f.write('\n'.join(out).rstrip() + '\n')
 PY
     ok "Codex hooks enabled"

@@ -43,7 +43,7 @@ Lore ships plugin-bundled lifecycle hooks through `hooks/hooks.json`, referenced
 
 ```toml
 [features]
-codex_hooks = true
+hooks = true
 ```
 
 The hooks add:
