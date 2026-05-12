@@ -48,11 +48,12 @@ Lore 面向需要跨会话、跨工具、跨运行时连续性的 agent。
 ### 1. 运行安装脚本
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/FFatTiger/lore/main/scripts/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/FFatTiger/lore/main/scripts/install.zh.sh | bash
 ```
 
 一条命令完成：启动 Lore 服务器（Docker Compose）、接入全部 5 个 agent 运行时、
 创建 `~/.lore/config.json`。随时重新运行即可更新。
+脚本会保留 Docker Compose 的 pull/start 输出，其他子命令默认静默，只输出关键状态。
 
 | 参数 | 说明 |
 |---|---|
@@ -175,19 +176,19 @@ docker compose up -d --build
 
 ```bash
 # 稳定版（默认）
-curl -fsSL https://raw.githubusercontent.com/FFatTiger/lore/main/scripts/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/FFatTiger/lore/main/scripts/install.zh.sh | bash
 
 # 尝鲜版
-curl -fsSL https://raw.githubusercontent.com/FFatTiger/lore/main/scripts/install.sh | bash -s -- --pre
+curl -fsSL https://raw.githubusercontent.com/FFatTiger/lore/main/scripts/install.zh.sh | bash -s -- --pre
 
 # 开发版
-curl -fsSL https://raw.githubusercontent.com/FFatTiger/lore/main/scripts/install.sh | bash -s -- --dev
+curl -fsSL https://raw.githubusercontent.com/FFatTiger/lore/main/scripts/install.zh.sh | bash -s -- --dev
 
 # 外部服务器（跳过本地 Docker）
-curl -fsSL https://raw.githubusercontent.com/FFatTiger/lore/main/scripts/install.sh | bash -s -- --base-url http://192.168.1.100:18901 --api-token my-token
+curl -fsSL https://raw.githubusercontent.com/FFatTiger/lore/main/scripts/install.zh.sh | bash -s -- --base-url http://192.168.1.100:18901 --api-token my-token
 
 # 只安装指定 channel
-curl -fsSL https://raw.githubusercontent.com/FFatTiger/lore/main/scripts/install.sh | bash -s -- --channels claudecode,codex
+curl -fsSL https://raw.githubusercontent.com/FFatTiger/lore/main/scripts/install.zh.sh | bash -s -- --channels claudecode,codex
 ```
 
 完整选项：
@@ -218,6 +219,9 @@ curl -fsSL https://raw.githubusercontent.com/FFatTiger/lore/main/scripts/install
 > **Claude Code 注意：** Claude Code 自带 auto-memory 功能，安装脚本不会关闭它。
 > 如果希望 Lore 作为唯一记忆系统，请设置 `CLAUDE_CODE_DISABLE_AUTO_MEMORY=1`
 > 或在 `~/.claude/settings.json` 中设置 `"autoMemoryEnabled": false`。
+
+> **Codex 注意：** 安装后请重启 Codex，打开 `/hooks` 并按提示 trust Lore hooks。
+> 如果 `/plugins` 仍提示 Lore 可安装，在那里手动安装即可；脚本已经配置好 MCP 和用户级 hooks。
 
 ---
 

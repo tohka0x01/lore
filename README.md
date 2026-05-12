@@ -51,8 +51,15 @@ Lore is built for agents that need continuity across sessions, tools, and runtim
 curl -fsSL https://raw.githubusercontent.com/FFatTiger/lore/main/scripts/install.sh | bash
 ```
 
+Chinese installer output:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/FFatTiger/lore/main/scripts/install.zh.sh | bash
+```
+
 This single command starts the Lore server (Docker Compose), connects all 5 agent runtimes,
 and creates `~/.lore/config.json`. Re-run anytime to update.
+Docker Compose pull/start output is shown; other installer subcommands stay quiet.
 
 | Flag | Description |
 |---|---|
@@ -177,6 +184,9 @@ agents to an external server, use `--base-url`. After installing, restart each a
 # Stable (default)
 curl -fsSL https://raw.githubusercontent.com/FFatTiger/lore/main/scripts/install.sh | bash
 
+# Chinese output
+curl -fsSL https://raw.githubusercontent.com/FFatTiger/lore/main/scripts/install.zh.sh | bash
+
 # Pre-release channel
 curl -fsSL https://raw.githubusercontent.com/FFatTiger/lore/main/scripts/install.sh | bash -s -- --pre
 
@@ -219,6 +229,10 @@ Re-run the install script anytime to update. If Docker was auto-started on first
 > install script does not disable it — if you want Lore as your only memory
 > system, set `CLAUDE_CODE_DISABLE_AUTO_MEMORY=1` or `"autoMemoryEnabled": false`
 > in `~/.claude/settings.json`.
+
+> **Codex note:** Restart Codex after installing. Open `/hooks` and trust Lore
+> hooks if prompted. If `/plugins` still shows Lore as installable, install it
+> manually there; the script has already configured MCP and user-level hooks.
 
 ---
 
