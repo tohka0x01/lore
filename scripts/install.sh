@@ -70,11 +70,19 @@ BLUE='\033[0;34m'; BOLD='\033[1m'; NC='\033[0m'
 banner() {
   echo ""
   if [[ "$LORE_INSTALL_LANG" == "zh" ]]; then
-    echo -e "${BLUE}${BOLD}Lore 安装器${NC}"
-    echo "长期记忆服务 + Agent 插件"
+    echo -e "${BLUE}${BOLD} _     ____  ____  _____ ${NC}"
+    echo -e "${BLUE}${BOLD}/ \   /  _ \/  __\/  __/ ${NC}  Lore — AI Agent 长期记忆"
+    echo -e "${BLUE}${BOLD}| |   | / \||  \/||  \   ${NC}"
+    echo -e "${BLUE}${BOLD}| |_/\| \_/||    /|  /_  ${NC}  一条安装脚本，接入所有 Agent 运行时"
+    echo -e "${BLUE}${BOLD}\____/\____/\_/\_\\____\ ${NC}"
+    echo -e "${BLUE}${BOLD}                        ${NC}"
   else
-    echo -e "${BLUE}${BOLD}Lore installer${NC}"
-    echo "Long-term memory service + agent plugins"
+    echo -e "${BLUE}${BOLD} _     ____  ____  _____ ${NC}"
+    echo -e "${BLUE}${BOLD}/ \   /  _ \/  __\/  __/ ${NC}  Lore — long-term memory for AI agents"
+    echo -e "${BLUE}${BOLD}| |   | / \||  \/||  \   ${NC}"
+    echo -e "${BLUE}${BOLD}| |_/\| \_/||    /|  /_  ${NC}  One install script, all agent runtimes."
+    echo -e "${BLUE}${BOLD}\____/\____/\_/\_\\____\ ${NC}"
+    echo -e "${BLUE}${BOLD}                        ${NC}"
   fi
   echo ""
 }
