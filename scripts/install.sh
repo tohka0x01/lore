@@ -559,6 +559,16 @@ install_codex() {
   local market_dir="$LORE_HOME/codex"
   download_or_skip "codex" "$market_dir" || return
 
+  if [[ -f "$market_dir/plugins/lore/hooks/hooks.json" ]] && have_command python3; then
+    python3 - "$market_dir/plugins/lore/hooks/hooks.json" "$market_dir/plugins/lore" <<'PY'
+import sys
+from pathlib import Path
+hooks_path = Path(sys.argv[1])
+plugin_root = sys.argv[2]
+hooks_path.write_text(hooks_path.read_text().replace("__LORE_CODEX_PLUGIN_ROOT__", plugin_root))
+PY
+  fi
+
   rm -rf "$HOME/.codex/plugins/cache/lore"
   codex plugin marketplace add "$market_dir" 2>/dev/null || true
 
@@ -601,15 +611,75 @@ PY
   fi
   ok "MCP configured."
 
-  # Hooks
-  if [[ -x "$market_dir/plugins/lore/scripts/install-hooks.sh" ]]; then
-    LORE_CODEX_PLUGIN_ROOT="$market_dir/plugins/lore" \
-      LORE_BASE_URL="${BASE_URL}" \
-      bash "$market_dir/plugins/lore/scripts/install-hooks.sh" 2>/dev/null || true
-    ok "Hooks installed."
+  # Enable official Codex lifecycle hooks support for plugin-bundled hooks.
+  mkdir -p "$(dirname "$cfg")"
+  touch "$cfg"
+  if have_command python3; then
+    python3 - "$cfg" <<'PY'
+import sys
+path = sys.argv[1]
+try:
+    with open(path, encoding='utf-8') as f: lines = f.read().splitlines()
+except FileNotFoundError:
+    lines = []
+out = []; idx = 0; found = False
+while idx < len(lines):
+    line = lines[idx]
+    if line.strip() == '[features]':
+        found = True; out.append(line); idx += 1; written = False
+        while idx < len(lines) and not lines[idx].lstrip().startswith('['):
+            if lines[idx].strip().startswith('codex_hooks'):
+                out.append('codex_hooks = true'); written = True
+            else:
+                out.append(lines[idx])
+            idx += 1
+        if not written: out.append('codex_hooks = true')
+        continue
+    out.append(line); idx += 1
+if not found:
+    if out and out[-1] != '': out.append('')
+    out.extend(['[features]', 'codex_hooks = true'])
+with open(path, 'w', encoding='utf-8') as f: f.write('\n'.join(out).rstrip() + '\n')
+PY
+    ok "Codex hooks feature enabled."
   fi
 
-  ok "Codex done. Restart Codex."
+  # Remove legacy user-level hooks installed by earlier Lore versions. Current hooks are bundled
+  # inside the plugin manifest and managed by Codex.
+  rm -rf "${CODEX_HOME:-$HOME/.codex}/hooks/lore"
+  local hooks_json="${CODEX_HOME:-$HOME/.codex}/hooks.json"
+  if [[ -f "$hooks_json" ]] && have_command python3; then
+    cp "$hooks_json" "$hooks_json.bak.$(date +%Y%m%d%H%M%S)"
+    python3 - "$hooks_json" <<'PY'
+import json, sys
+path = sys.argv[1]
+try:
+    with open(path, encoding='utf-8') as f: data = json.load(f)
+except Exception:
+    raise SystemExit(0)
+hooks = data.get('hooks')
+if isinstance(hooks, dict):
+    for event, entries in list(hooks.items()):
+        if not isinstance(entries, list): continue
+        kept = []
+        for entry in entries:
+            hs = entry.get('hooks') if isinstance(entry, dict) else None
+            commands = [str(h.get('command', '')) for h in hs] if isinstance(hs, list) else []
+            if any('/hooks/lore/hooks/rules-inject.ts' in c or '/hooks/lore/hooks/recall-inject.ts' in c for c in commands):
+                continue
+            if isinstance(entry, dict) and entry.get('matcher', '') == '' and entry.get('hooks') == []:
+                continue
+            kept.append(entry)
+        if kept: hooks[event] = kept
+        else: hooks.pop(event, None)
+if not hooks: data.pop('hooks', None)
+with open(path, 'w', encoding='utf-8') as f:
+    json.dump(data, f, indent=2, ensure_ascii=False); f.write('\n')
+PY
+    ok "Legacy user hooks cleaned."
+  fi
+
+  ok "Codex done. Restart Codex. If hooks need review, open /hooks and trust the Lore plugin hooks."
 }
 
 # ---- Channel: Pi ----

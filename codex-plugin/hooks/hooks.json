@@ -1,0 +1,29 @@
+{
+  "hooks": {
+    "SessionStart": [
+      {
+        "matcher": "startup|resume|clear",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "LORE_CODEX_PLUGIN_ROOT=\"__LORE_CODEX_PLUGIN_ROOT__\" LORE_BASE_URL=${LORE_BASE_URL:-http://127.0.0.1:18901} npx tsx \"__LORE_CODEX_PLUGIN_ROOT__/hooks/rules-inject.ts\"",
+            "timeout": 10,
+            "statusMessage": "Loading Lore guidance"
+          }
+        ]
+      }
+    ],
+    "UserPromptSubmit": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "LORE_CODEX_PLUGIN_ROOT=\"__LORE_CODEX_PLUGIN_ROOT__\" LORE_BASE_URL=${LORE_BASE_URL:-http://127.0.0.1:18901} npx tsx \"__LORE_CODEX_PLUGIN_ROOT__/hooks/recall-inject.ts\"",
+            "timeout": 10,
+            "statusMessage": "Recalling Lore context"
+          }
+        ]
+      }
+    ]
+  }
+}

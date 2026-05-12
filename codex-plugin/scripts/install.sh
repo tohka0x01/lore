@@ -101,6 +101,47 @@ register_marketplace() {
   codex plugin marketplace add "$TARGET_ROOT"
 }
 
+enable_codex_hooks_feature() {
+  mkdir -p "$(dirname "$CODEX_CONFIG")"
+  touch "$CODEX_CONFIG"
+  cp "$CODEX_CONFIG" "$CODEX_CONFIG.bak.$(date +%Y%m%d%H%M%S)"
+
+  python3 - "$CODEX_CONFIG" <<'PY'
+import sys
+path = sys.argv[1]
+with open(path, "r", encoding="utf-8") as handle:
+    lines = handle.read().splitlines()
+out = []
+idx = 0
+found = False
+while idx < len(lines):
+    line = lines[idx]
+    if line.strip() == "[features]":
+        found = True
+        out.append(line)
+        idx += 1
+        written = False
+        while idx < len(lines) and not lines[idx].lstrip().startswith("["):
+            if lines[idx].strip().startswith("codex_hooks"):
+                out.append("codex_hooks = true")
+                written = True
+            else:
+                out.append(lines[idx])
+            idx += 1
+        if not written:
+            out.append("codex_hooks = true")
+        continue
+    out.append(line)
+    idx += 1
+if not found:
+    if out and out[-1] != "":
+        out.append("")
+    out.extend(["[features]", "codex_hooks = true"])
+with open(path, "w", encoding="utf-8") as handle:
+    handle.write("\n".join(out).rstrip() + "\n")
+PY
+}
+
 configure_mcp() {
   local url="${LORE_BASE_URL%/}/api/mcp?client_type=codex"
   local token_env="${LORE_BEARER_TOKEN_ENV_VAR:-}"
@@ -120,8 +161,48 @@ configure_mcp() {
   fi
 }
 
-install_hooks() {
-  "$TARGET_ROOT/plugins/$PLUGIN_NAME/scripts/install-hooks.sh"
+cleanup_legacy_user_hooks() {
+  # Older Lore installers wrote user-level hooks under ~/.codex/hooks.json.
+  # Current Codex plugin hooks are bundled via .codex-plugin/plugin.json -> hooks/hooks.json.
+  local hooks_json="$CODEX_HOME/hooks.json"
+  local hook_root="$CODEX_HOME/hooks/lore"
+  rm -rf "$hook_root"
+  if [ -f "$hooks_json" ]; then
+    cp "$hooks_json" "$hooks_json.bak.$(date +%Y%m%d%H%M%S)"
+    python3 - "$hooks_json" <<'PY'
+import json, sys
+path = sys.argv[1]
+try:
+    with open(path, "r", encoding="utf-8") as handle:
+        data = json.load(handle)
+except Exception:
+    sys.exit(0)
+
+def keep_entry(entry):
+    hooks = entry.get("hooks") if isinstance(entry, dict) else None
+    if not isinstance(hooks, list):
+        return True
+    commands = [str(h.get("command", "")) for h in hooks if isinstance(h, dict)]
+    return not any("/hooks/lore/hooks/rules-inject.ts" in c or "/hooks/lore/hooks/recall-inject.ts" in c for c in commands)
+
+hooks = data.get("hooks")
+if isinstance(hooks, dict):
+    for event, entries in list(hooks.items()):
+        if isinstance(entries, list):
+            filtered = [entry for entry in entries if keep_entry(entry)]
+            # Drop empty matcher entries produced by early installers.
+            filtered = [entry for entry in filtered if not (isinstance(entry, dict) and entry.get("matcher", "") == "" and entry.get("hooks") == [])]
+            if filtered:
+                hooks[event] = filtered
+            else:
+                hooks.pop(event, None)
+if not hooks:
+    data.pop("hooks", None)
+with open(path, "w", encoding="utf-8") as handle:
+    json.dump(data, handle, indent=2, ensure_ascii=False)
+    handle.write("\n")
+PY
+  fi
 }
 
 require_command codex
@@ -129,18 +210,28 @@ require_command jq
 require_command python3
 
 copy_source_layout
+python3 - "$TARGET_ROOT/plugins/$PLUGIN_NAME/hooks/hooks.json" "$TARGET_ROOT/plugins/$PLUGIN_NAME" <<'PY'
+import sys
+from pathlib import Path
+hooks_path = Path(sys.argv[1])
+plugin_root = sys.argv[2]
+if hooks_path.exists():
+    hooks_path.write_text(hooks_path.read_text().replace("__LORE_CODEX_PLUGIN_ROOT__", plugin_root))
+PY
 jq -e '.plugins[0].source.path == "./plugins/lore"' "$TARGET_ROOT/.agents/plugins/marketplace.json" >/dev/null
 jq -e '.mcpServers.lore.url | contains("client_type=codex")' "$TARGET_ROOT/plugins/$PLUGIN_NAME/.mcp.json" >/dev/null
 
 register_marketplace
 enable_plugin_config
+enable_codex_hooks_feature
 configure_mcp
-install_hooks
+cleanup_legacy_user_hooks
 
 echo ""
 echo "Lore Codex plugin installed."
 echo "Marketplace: $TARGET_ROOT"
 echo "Plugin: $PLUGIN_ID enabled in $CODEX_CONFIG"
 echo "MCP: ${LORE_BASE_URL%/}/api/mcp?client_type=codex"
-echo "Hooks: $CODEX_HOME/hooks.json"
+echo "Hooks: bundled in $TARGET_ROOT/plugins/$PLUGIN_NAME/hooks/hooks.json"
+echo "If Codex reports hook review is required, open /hooks and trust the Lore plugin hooks."
 echo "Restart Codex for plugin and hook changes to take effect."

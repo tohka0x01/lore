@@ -9,9 +9,9 @@ export LORE_BASE_URL=http://127.0.0.1:18901
 ./scripts/install.sh
 ```
 
-The installer stages the official Codex marketplace layout under `~/.codex/plugins/lore-local-marketplace`, registers the marketplace, enables `lore@lore`, configures the Lore MCP server, and installs the optional Codex hooks.
+The installer stages the official Codex marketplace layout, registers the marketplace, enables `lore@lore`, enables Codex lifecycle hooks, and configures the Lore MCP server. Lore hooks are bundled in the plugin manifest (`hooks/hooks.json`) rather than installed as user-level `~/.codex/hooks.json` entries.
 
-Restart Codex after the script finishes.
+Restart Codex after the script finishes. If Codex reports that hooks need review, open `/hooks` and trust the Lore plugin hooks.
 
 ## Local Server
 
@@ -37,14 +37,13 @@ export LORE_API_TOKEN="$API_TOKEN"
 
 The installer uses `LORE_API_TOKEN` when present, then `API_TOKEN`, and writes the matching bearer-token env var into Codex MCP config.
 
-## Optional Prompt Injection
+## Prompt Injection Hooks
 
-Codex discovers hooks from `~/.codex/hooks.json`, `~/.codex/config.toml`, `<repo>/.codex/hooks.json`, or `<repo>/.codex/config.toml`. Plugin install is not treated as automatic hook enablement here.
+Lore ships plugin-bundled lifecycle hooks through `hooks/hooks.json`, referenced by `.codex-plugin/plugin.json`. The installer enables the official Codex hooks feature in `~/.codex/config.toml`:
 
-The one-command installer runs the hook installer automatically. To refresh only hooks:
-
-```bash
-./scripts/install-hooks.sh
+```toml
+[features]
+codex_hooks = true
 ```
 
 The hooks add:

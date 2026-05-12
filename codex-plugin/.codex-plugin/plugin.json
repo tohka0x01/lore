@@ -1,7 +1,7 @@
 {
   "name": "lore",
-  "version": "1.3.1-pre.0",
-  "description": "Long-term Lore memory for Codex via MCP tools and optional hook-based prompt context.",
+  "version": "1.3.1-pre.1",
+  "description": "Long-term Lore memory for Codex via MCP tools, skills, and bundled lifecycle hooks.",
   "author": {
     "name": "FFatTiger"
   },
@@ -19,12 +19,13 @@
   "interface": {
     "displayName": "Lore",
     "shortDescription": "Long-term memory and recall tools for Codex",
-    "longDescription": "Connect Codex to Lore's fixed boot baseline, durable memory graph, recall search, and memory write tools through MCP. Optional Codex hooks can inject boot and recall context when installed explicitly.",
+    "longDescription": "Connect Codex to Lore's fixed boot baseline, durable memory graph, recall search, and memory write tools through MCP. Bundled Codex hooks can inject boot and recall context when the plugin and hooks feature are enabled.",
     "developerName": "FFatTiger",
     "category": "Productivity",
     "capabilities": [
       "MCP",
-      "Skills"
+      "Skills",
+      "Hooks"
     ],
     "websiteURL": "https://github.com/FFatTiger/lore",
     "privacyPolicyURL": "https://github.com/FFatTiger/lore",
@@ -35,5 +36,6 @@
       "Remember this project decision in Lore."
     ],
     "brandColor": "#111827"
-  }
+  },
+  "hooks": "./hooks/hooks.json"
 }
