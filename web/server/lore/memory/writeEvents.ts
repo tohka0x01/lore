@@ -160,7 +160,10 @@ function snapshotNumber(snapshot: Record<string, unknown>, key: string): number 
 
 function snapshotKeywords(snapshot: Record<string, unknown>): string[] {
   const values = Array.isArray(snapshot.glossary_keywords) ? snapshot.glossary_keywords : [];
-  return [...new Set(values.map((value) => String(value || '').trim()).filter(Boolean))].slice(0, 12);
+  return [...new Set(values.flatMap((value) => {
+    const keyword = String(value || '').trim();
+    return keyword ? [keyword] : [];
+  }))].slice(0, 12);
 }
 
 function keywordDiff(before: string[], after: string[]): { added: string[]; removed: string[] } {
@@ -512,7 +515,7 @@ export async function getDreamMemoryEventSummary({
   );
 
   const events = result.rows.map((row) => compactMemoryEventRow(row as Record<string, unknown>));
-  const distinctNodes = new Set(events.map((event) => event.node_uri).filter(Boolean));
+  const distinctNodes = new Set(events.flatMap((event) => event.node_uri ? [event.node_uri] : []));
   const countType = (predicate: (event: DreamMemoryEventSummaryItem) => boolean) => events.filter(predicate).length;
 
   return {

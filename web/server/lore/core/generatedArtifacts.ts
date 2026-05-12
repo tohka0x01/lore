@@ -26,17 +26,17 @@ function normalizeGeneratedArtifactPaths(
   { defaultDomain = 'core' }: ScheduleGeneratedArtifactsOptions = {},
 ): NormalizedGeneratedArtifactPath[] {
   return (Array.isArray(paths) ? paths : [])
-    .map((row) => {
+    .flatMap((row) => {
       const domain = String(row?.domain || '').trim();
       const path = String(row?.path || '')
         .trim()
         .replace(/^\/+|\/+$/g, '');
-      return {
+      const normalized = {
         domain: domain || String(defaultDomain || '').trim(),
         path,
       };
-    })
-    .filter((row) => Boolean(row.domain) && Boolean(row.path));
+      return normalized.domain && normalized.path ? [normalized] : [];
+    });
 }
 
 function scheduleGeneratedArtifacts(

@@ -1,3 +1,8 @@
+export const metadata = {
+  title: 'Lore',
+  description: 'Lore fixed-boot memory console and structural audit',
+};
+
 export default function HomePage() {
   // AppShell (in root layout) handles auth + redirect to /memory
   return (

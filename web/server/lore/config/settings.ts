@@ -20,7 +20,7 @@ import {
 } from './settingsSchema';
 
 // Re-export schema for callers that import from './settings'
-export { SETTINGS_SCHEMA, SECTIONS, SCHEMA_BY_KEY };
+export { SECTIONS };
 
 const CACHE_TTL_MS = 30_000;
 
@@ -34,14 +34,14 @@ export function clearCache(): void {
   _cache = null;
 }
 
-export async function loadValuesFromDb(): Promise<Map<string, unknown>> {
+async function loadValuesFromDb(): Promise<Map<string, unknown>> {
   const result = await sql(`SELECT key, value FROM app_settings`);
   const map = new Map<string, unknown>();
   for (const row of result.rows) map.set(row.key as string, row.value);
   return map;
 }
 
-export async function getCachedValues(): Promise<Map<string, unknown>> {
+async function getCachedValues(): Promise<Map<string, unknown>> {
   const now = Date.now();
   if (_cache && _cache.expiresAt > now) return _cache.values;
   const values = await loadValuesFromDb();

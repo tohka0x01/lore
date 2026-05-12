@@ -173,7 +173,7 @@ export async function runRecallPipeline(
     candidates,
     items,
     suppressed,
-    boot_uris: [...bootUris].sort(),
+    boot_uris: Array.from(bootUris).toSorted(),
     read_node_display_mode: readNodeDisplayMode,
     retrieval_meta: {
       exact_candidates: exactRows.length,

@@ -1,5 +1,5 @@
 export const SETUP_STATUS_CHANGED_EVENT = 'lore:setup-status-changed';
-export const BOOT_STATUS_CHANGED_EVENT = SETUP_STATUS_CHANGED_EVENT;
+const BOOT_STATUS_CHANGED_EVENT = SETUP_STATUS_CHANGED_EVENT;
 
 export type BootNodeRole = 'agent' | 'soul' | 'user';
 export type BootNodeState = 'missing' | 'empty' | 'initialized';
@@ -11,7 +11,7 @@ export type BootDraftStatus = 'generated' | 'failed';
 export type SetupStepId = string;
 
 export const CHANNEL_AGENTS_SETUP_STEP_ID = 'channel_agents';
-export const CHANNEL_AGENTS_SETUP_PATH = '/setup/channels';
+const CHANNEL_AGENTS_SETUP_PATH = '/setup/channels';
 
 const STATIC_SETUP_STEP_PATHS = {
   embedding: '/setup/embedding',
@@ -19,13 +19,13 @@ const STATIC_SETUP_STEP_PATHS = {
   [CHANNEL_AGENTS_SETUP_STEP_ID]: CHANNEL_AGENTS_SETUP_PATH,
 } as const;
 
-export const GLOBAL_BOOT_URIS = [
+const GLOBAL_BOOT_URIS = [
   'core://agent',
   'core://soul',
   'preferences://user',
 ] as const;
 
-export const CLIENT_BOOT_URIS = [
+const CLIENT_BOOT_URIS = [
   'core://agent/claudecode',
   'core://agent/openclaw',
   'core://agent/hermes',
@@ -33,7 +33,7 @@ export const CLIENT_BOOT_URIS = [
   'core://agent/pi',
 ] as const;
 
-export const DEFAULT_BOOT_CONTENT: Record<string, string> = {
+const DEFAULT_BOOT_CONTENT: Record<string, string> = {
   'core://agent': `# 工作流约束
 
 开始行动前先遵守当前仓库和运行环境的指令。先读相关文件，再做最小安全改动，最后用最小有效检查验证结果。
@@ -78,11 +78,11 @@ export function getDefaultBootContent(uri: string | null | undefined): string {
   return DEFAULT_BOOT_CONTENT[String(uri || '').trim()] || '';
 }
 
-export function isClientBootUri(uri: string | null | undefined): boolean {
+function isClientBootUri(uri: string | null | undefined): boolean {
   return CLIENT_BOOT_URIS.includes(String(uri || '').trim() as (typeof CLIENT_BOOT_URIS)[number]);
 }
 
-export function isGlobalBootUri(uri: string | null | undefined): boolean {
+function isGlobalBootUri(uri: string | null | undefined): boolean {
   return GLOBAL_BOOT_URIS.includes(String(uri || '').trim() as (typeof GLOBAL_BOOT_URIS)[number]);
 }
 
@@ -215,12 +215,12 @@ export function makeBootSetupStepId(setupSlug: string): SetupStepId {
   return `boot:${String(setupSlug || '').trim()}`;
 }
 
-export function extractBootSetupSlug(stepId: string): string | null {
+function extractBootSetupSlug(stepId: string): string | null {
   const value = String(stepId || '').trim();
   return value.startsWith('boot:') ? value.slice('boot:'.length) : null;
 }
 
-export function isBootSetupStepId(stepId: string): boolean {
+function isBootSetupStepId(stepId: string): boolean {
   return extractBootSetupSlug(stepId) !== null;
 }
 
@@ -314,6 +314,6 @@ export function dispatchSetupStatusChanged(): void {
   window.dispatchEvent(new CustomEvent(SETUP_STATUS_CHANGED_EVENT));
 }
 
-export function dispatchBootStatusChanged(): void {
+function dispatchBootStatusChanged(): void {
   dispatchSetupStatusChanged();
 }

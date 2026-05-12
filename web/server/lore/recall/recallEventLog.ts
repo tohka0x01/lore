@@ -22,7 +22,10 @@ export function asObject(value: unknown): Record<string, unknown> {
 
 export function normalizeUriList(values: unknown): string[] {
   if (!Array.isArray(values)) return [];
-  return [...new Set(values.map((value) => String(value || '').trim()).filter(Boolean))];
+  return [...new Set(values.flatMap((value) => {
+    const uri = String(value || '').trim();
+    return uri ? [uri] : [];
+  }))];
 }
 
 export function truncateText(value: unknown, maxChars = 280): string {

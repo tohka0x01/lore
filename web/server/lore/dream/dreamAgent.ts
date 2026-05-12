@@ -177,7 +177,7 @@ export function getDreamPhaseToolNames(phase: DreamPhase): string[] {
   return [...DREAM_PHASE_TOOLS[phase]];
 }
 
-export function buildDreamToolsForPhase(phase: DreamPhase): ToolDefinition[] {
+function buildDreamToolsForPhase(phase: DreamPhase): ToolDefinition[] {
   const allowed = new Set(getDreamPhaseToolNames(phase));
   return buildDreamTools().filter((tool) => allowed.has(tool.name));
 }
@@ -409,7 +409,10 @@ function auditBackedByToolWrites(
   const changedNodes = asArrayField(audit.changed_nodes).map((node) => (
     isString(node) ? { uri: node } : node
   ));
-  const changedNodeUris = new Set(changedNodes.map(auditNodeUri).filter(isString));
+  const changedNodeUris = new Set(changedNodes.flatMap((node) => {
+    const uri = auditNodeUri(node);
+    return isString(uri) ? [uri] : [];
+  }));
   for (const write of writes) {
     if (changedNodeUris.has(write.uri)) continue;
     changedNodes.push({ uri: write.uri, action: write.operation, result: 'success' });
@@ -419,7 +422,10 @@ function auditBackedByToolWrites(
   const evidence = asArrayField(audit.evidence).map((item) => (
     isString(item) ? { reason: item } : item
   ));
-  const evidenceKeys = new Set(evidence.map(auditEvidenceKey).filter(isString));
+  const evidenceKeys = new Set(evidence.flatMap((item) => {
+    const key = auditEvidenceKey(item);
+    return isString(key) ? [key] : [];
+  }));
   for (const write of writes) {
     const reason = `${write.tool} succeeded: ${write.uri}`;
     if (evidenceKeys.has(reason)) continue;

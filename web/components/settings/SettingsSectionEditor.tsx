@@ -307,31 +307,31 @@ export function findSettingsSection(data: SettingsData | null, sectionId: string
   return groupSettingsSections(data).find((section) => section.id === sectionId) || null;
 }
 
-export function buildSettingsSaveLabel(count: number, t: (key: string) => string): string {
+function buildSettingsSaveLabel(count: number, t: (key: string) => string): string {
   if (count <= 0) return t('Save');
   return `${t('Save')} ${count}`;
 }
 
-export function canResetField(source: SettingSource, dirty: boolean): boolean {
+function canResetField(source: SettingSource, dirty: boolean): boolean {
   return source !== 'default' && !dirty;
 }
 
-export function renderSectionAction(
+function renderSectionAction(
   node: React.ReactNode,
   condition = true,
 ): React.ReactNode {
   return condition ? node : null;
 }
 
-export function sectionHasDirtyKey(section: SectionGroup, draft: Record<string, unknown>): boolean {
+function sectionHasDirtyKey(section: SectionGroup, draft: Record<string, unknown>): boolean {
   return section.items.some((item) => item.key in draft);
 }
 
-export function buildResetAllKeys(section: SectionGroup): string[] {
+function buildResetAllKeys(section: SectionGroup): string[] {
   return section.items.map((item) => item.key);
 }
 
-export function SectionActionButton({
+function SectionActionButton({
   onClick,
   children,
   disabled,

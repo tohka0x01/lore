@@ -5,7 +5,7 @@ import { useRouter, useSearchParams } from 'next/navigation';
 import { api } from '../../lib/api';
 import { buildUrlWithSearchParams, readStringParam } from '../../lib/url-state';
 
-export interface ToolCall {
+interface ToolCall {
   tool: string;
   args?: unknown;
 }
@@ -279,6 +279,9 @@ export function useDreamPageController({ confirmDialog, t }: UseDreamPageControl
 
     return () => {
       closed = true;
+      source?.removeEventListener('workflow_event', handleWorkflowEvent as EventListener);
+      source?.removeEventListener('done', handleDone as EventListener);
+      source?.removeEventListener('error', handleError as EventListener);
       source?.close();
     };
   }, [detail, loadEntry]);

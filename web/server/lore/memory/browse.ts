@@ -20,7 +20,6 @@ import { buildBreadcrumbs, pickBestPath, type Breadcrumb } from './browsePaths';
 
 // Re-export for backward compatibility — other modules import ROOT_NODE_UUID from './browse'
 export { ROOT_NODE_UUID };
-export { buildBreadcrumbs, pickBestPath };
 export type { Breadcrumb };
 export type { UpdaterSummary };
 export type { ChildNode };

@@ -629,4 +629,4 @@ export async function moveNode(
 }
 
 // Export internal helpers for testing
-export { assertValidPathSegment, assertValidPathSegments, parseUri };
+export { parseUri };

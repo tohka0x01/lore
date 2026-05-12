@@ -336,7 +336,7 @@ export function mergeEventsByNode(rows: EventRow[]): MergedCandidate[] {
       lexical_score: e.lexical_score,
       selected: e.selected,
       used_in_answer: e.used_in_answer,
-      matched_on: [...e.matched_on].sort(),
+      matched_on: Array.from(e.matched_on).toSorted(),
       cues: [...e.cues].slice(0, 6),
       view_types: [...e.view_types],
       client_type: e.client_type,
@@ -645,7 +645,10 @@ export async function getDreamQueryRecallDetail({
     merged_count: Number(queryRow.merged_count || 0),
     shown_count: Number(queryRow.shown_count || 0),
     used_count: Number(queryRow.used_count || 0),
-    shown_node_uris: candidateResult.rows.map((row: Record<string, unknown>) => String(row.node_uri || '')).filter(Boolean),
+    shown_node_uris: candidateResult.rows.flatMap((row: Record<string, unknown>) => {
+      const nodeUri = String(row.node_uri || '');
+      return nodeUri ? [nodeUri] : [];
+    }),
   };
 }
 

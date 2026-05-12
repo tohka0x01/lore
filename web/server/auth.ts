@@ -38,7 +38,7 @@ function extractCookieToken(request: { headers: Headers; cookies?: { get(name: s
   return match ? decodeURIComponent(match[1]) : '';
 }
 
-export function isAuthorizedRequest(request: { headers: Headers; cookies?: { get(name: string): { value: string } | undefined } }): boolean {
+function isAuthorizedRequest(request: { headers: Headers; cookies?: { get(name: string): { value: string } | undefined } }): boolean {
   const expectedToken = getApiToken();
   if (!expectedToken) return true;
 

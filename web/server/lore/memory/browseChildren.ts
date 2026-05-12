@@ -80,15 +80,14 @@ export async function getChildren({
   if (childRows.length === 0) return [];
 
   const normalizedChildRows = childRows
-    .map((row) => {
+    .flatMap((row) => {
       const edgeId = normalizeEdgeId(row.edge_id);
-      if (edgeId == null) return null;
-      return {
+      if (edgeId == null) return [];
+      return [{
         ...row,
         edge_id: edgeId,
-      };
-    })
-    .filter((row): row is ChildRow & { edge_id: number } => row !== null);
+      }];
+    });
   if (normalizedChildRows.length === 0) return [];
 
   const childUuids = [...new Set(normalizedChildRows.map((row) => row.child_uuid))];

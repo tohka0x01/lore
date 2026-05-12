@@ -48,7 +48,7 @@ export function formatResult(
       ...(recencyBonus ? { recency: round(recencyBonus) } : {}),
     },
     cues: dedupeTerms([...item.cues], 3),
-    matched_on: [...item.matched_on].sort(),
+    matched_on: Array.from(item.matched_on).toSorted(),
     priority: item.priority,
     ...(recencyInfo ? { memory_age_days: recencyInfo.memory_age_days, recency_bonus: recencyInfo.recency_bonus } : {}),
   };

@@ -202,7 +202,7 @@ const CLIENT_BOOT_NODES: readonly BootNodeSpec[] = [
   },
 ] as const;
 
-export const FIXED_BOOT_NODES: readonly BootNodeSpec[] = [
+const FIXED_BOOT_NODES: readonly BootNodeSpec[] = [
   ...GLOBAL_BOOT_NODES,
   ...CLIENT_BOOT_NODES,
 ] as const;
@@ -244,11 +244,11 @@ const FIXED_BOOT_NODE_MAP = new Map<string, BootNodeSpec>(
   FIXED_BOOT_NODES.map((node) => [normalizeUri(node.uri), node]),
 );
 
-export function getBootNodeSpecs(): BootNodeSpec[] {
+function getBootNodeSpecs(): BootNodeSpec[] {
   return [...FIXED_BOOT_NODES];
 }
 
-export function getRuntimeBootNodeSpecs(clientType?: ClientType | null): BootNodeSpec[] {
+function getRuntimeBootNodeSpecs(clientType?: ClientType | null): BootNodeSpec[] {
   const specs = [...GLOBAL_BOOT_NODES];
   const normalizedClientType = clientType ?? null;
   if (!isRuntimeBootClientType(normalizedClientType)) return specs;
@@ -279,7 +279,7 @@ export function isBootUri(uri: unknown): boolean {
   return getBootNodeSpec(uri) !== null;
 }
 
-export async function getBootDraftGenerationStatus(): Promise<BootDraftGenerationStatus> {
+async function getBootDraftGenerationStatus(): Promise<BootDraftGenerationStatus> {
   const resolved = await resolveViewLlmConfig();
   if (resolved) {
     return {

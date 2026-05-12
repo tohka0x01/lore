@@ -179,7 +179,6 @@ export function buildSourceDocument(row: Record<string, unknown>): Record<string
 }
 
 // Re-export utils for backward compatibility (memoryViews.js previously exported these)
-export { dedupeTerms, truncate };
 
 // ---------------------------------------------------------------------------
 // Test-support: reset cached FTS config (used by tests only)

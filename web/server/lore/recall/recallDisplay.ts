@@ -39,13 +39,15 @@ export function buildRecallDisplay({
   suppressed: RecallSuppressed;
 } {
   const decorated = ranked
-    .map((item) => ({
+    .flatMap((item) => {
+      const decoratedItem = {
       ...item,
       score_display: Number(item.score.toFixed(scorePrecision)),
       read: readUris.has(item.uri),
       boot: bootUris.has(item.uri),
-    }))
-    .filter((item) => item.score >= minScore);
+      };
+      return decoratedItem.score >= minScore ? [decoratedItem] : [];
+    });
 
   const candidates = decorated.slice(0, candidateCount);
   const items: RecallDisplayItem[] = [];

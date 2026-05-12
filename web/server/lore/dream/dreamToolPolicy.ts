@@ -26,7 +26,10 @@ function toFiniteNumber(value: unknown): number | undefined {
 
 function normalizeWarnings(value: unknown): string[] {
   if (!Array.isArray(value)) return [];
-  return value.map((item) => String(item || '').trim()).filter(Boolean);
+  return value.flatMap((item) => {
+    const warning = String(item || '').trim();
+    return warning ? [warning] : [];
+  });
 }
 
 function buildPolicyBlockedResult(errors: string[], warnings: string[]): Record<string, unknown> {

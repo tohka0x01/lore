@@ -151,14 +151,15 @@ const GlossaryHighlighter = ({ content, glossary, currentNodeUuid, onNavigate }:
 
   const filteredGlossary = useMemo((): GlossaryEntry[] => {
     if (!glossary) return [];
-    return glossary
-      .map((entry) => ({ ...entry, nodes: entry.nodes?.filter((n) => n.node_uuid !== currentNodeUuid) || [] }))
-      .filter((entry) => (entry.nodes?.length ?? 0) > 0);
+    return glossary.flatMap((entry) => {
+      const nodes = entry.nodes?.filter((n) => n.node_uuid !== currentNodeUuid) || [];
+      return nodes.length > 0 ? [{ ...entry, nodes }] : [];
+    });
   }, [glossary, currentNodeUuid]);
 
   useEffect(() => {
     if (!filteredGlossary.length || !containerRef.current) return;
-    const keywords = filteredGlossary.map((entry) => entry.keyword).filter(Boolean) as string[];
+    const keywords = filteredGlossary.flatMap((entry) => entry.keyword ? [entry.keyword] : []);
     if (!keywords.length) return;
 
     const walker = document.createTreeWalker(containerRef.current, NodeFilter.SHOW_TEXT);

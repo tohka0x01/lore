@@ -235,8 +235,9 @@ export async function searchMemories({
   }
 
   // 5. Re-sort and slice
-  const merged = [...scoredMap.values()]
-    .sort((a, b) => b.score - a.score || a.priority - b.priority || a.uri.localeCompare(b.uri))
+  const merged = scoredMap.values()
+    .toArray()
+    .toSorted((a, b) => b.score - a.score || a.priority - b.priority || a.uri.localeCompare(b.uri))
     .slice(0, safeLimit);
 
   // 6. Fetch content for top N
@@ -289,12 +290,13 @@ export async function searchMemories({
   };
 }
 
-// Legacy exports for backward compatibility with existing tests
-export { fetchContentLexicalRows };
-export function dedupeMatchedOn(values: unknown[]): string[] {
-  return [...new Set(values.map((item) => String(item || '').trim()).filter(Boolean))];
+function dedupeMatchedOn(values: unknown[]): string[] {
+  return [...new Set(values.flatMap((item) => {
+    const value = String(item || '').trim();
+    return value ? [value] : [];
+  }))];
 }
-export function mergeSearchResults({ lexicalRows, semanticRows, limit }: { lexicalRows: any[]; semanticRows: any[]; limit: number }) {
+function mergeSearchResults({ lexicalRows, semanticRows, limit }: { lexicalRows: any[]; semanticRows: any[]; limit: number }) {
   // Deprecated — kept for test compatibility only
   return [];
 }

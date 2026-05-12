@@ -16,9 +16,9 @@ describe('migration files', () => {
       byVersion.set(version, [...(byVersion.get(version) || []), file]);
     }
 
-    const duplicates = [...byVersion.entries()]
-      .filter(([, versionFiles]) => versionFiles.length > 1)
-      .map(([version, versionFiles]) => `${version}: ${versionFiles.join(', ')}`);
+    const duplicates = [...byVersion.entries()].flatMap(([version, versionFiles]) => (
+      versionFiles.length > 1 ? [`${version}: ${versionFiles.join(', ')}`] : []
+    ));
 
     expect(duplicates).toEqual([]);
   });

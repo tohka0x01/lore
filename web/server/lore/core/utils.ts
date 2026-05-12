@@ -35,7 +35,7 @@ export function clampLimit(val: unknown, min: number, max: number, fallback: num
   return Math.max(min, Math.min(max, Number(val) || fallback));
 }
 
-export function systemTimezone(): string {
+function systemTimezone(): string {
   try {
     return Intl.DateTimeFormat().resolvedOptions().timeZone;
   } catch {

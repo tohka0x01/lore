@@ -33,10 +33,10 @@ export const CACHE_TAG = {
   maintenance: cacheTag('maintenance'),
 };
 
-export function nodeTag(domain: string, path: string): string {
+function nodeTag(domain: string, path: string): string {
   return cacheTag('node', `${domain}://${path}`);
 }
 
-export function sessionTag(sessionId: string): string {
+function sessionTag(sessionId: string): string {
   return cacheTag('session', sessionId);
 }

@@ -100,7 +100,7 @@ function normalizeUpdater(updater?: UpdaterSummary | null): ResolvedUpdater | nu
 }
 
 function sortUpdaters(updaters: ResolvedUpdater[]): ResolvedUpdater[] {
-  return [...updaters].sort((left, right) => {
+  return updaters.toSorted((left, right) => {
     const leftTime = left.updated_at || '';
     const rightTime = right.updated_at || '';
     return rightTime.localeCompare(leftTime);
@@ -113,7 +113,10 @@ function resolveUpdaters({
   fallbackSource,
   fallbackUpdatedAt,
 }: Omit<UpdaterDisplayProps, 'size' | 'showTimestamp' | 'className'>): ResolvedUpdater[] {
-  const normalized = sortUpdaters((updaters || []).map(normalizeUpdater).filter(Boolean) as ResolvedUpdater[]);
+  const normalized = sortUpdaters((updaters || []).flatMap((updater) => {
+    const normalizedUpdater = normalizeUpdater(updater);
+    return normalizedUpdater ? [normalizedUpdater] : [];
+  }));
   if (normalized.length > 0) return normalized;
   const fallback = normalizeUpdater({
     client_type: fallbackClientType,
@@ -153,7 +156,7 @@ export function ChannelAvatar({
       avatar={isHermes ? (
         <span
           aria-hidden="true"
-          className="block h-[72%] w-[72%] shrink-0 bg-current select-none"
+          className="block size-[72%] shrink-0 bg-current select-none"
           style={{
             WebkitMaskImage: 'url(/channel-icons/hermes.svg)',
             maskImage: 'url(/channel-icons/hermes.svg)',
@@ -200,6 +203,13 @@ export default function UpdaterDisplay({
     fallbackUpdatedAt,
   }), [fallbackClientType, fallbackSource, fallbackUpdatedAt, updaters]);
 
+  const openHistory = useCallback((event: React.MouseEvent<HTMLButtonElement>) => {
+    if (!onOpenHistory) return;
+    event.preventDefault();
+    event.stopPropagation();
+    onOpenHistory();
+  }, [onOpenHistory]);
+
   if (resolvedUpdaters.length === 0) return null;
 
   const {
@@ -219,50 +229,51 @@ export default function UpdaterDisplay({
   const showStack = visibleUpdaters.length > 1;
   const canOpenHistory = Boolean(onOpenHistory);
 
-  const openHistory = useCallback((event: React.MouseEvent | React.KeyboardEvent) => {
-    if (!onOpenHistory) return;
-    event.preventDefault();
-    event.stopPropagation();
-    onOpenHistory();
-  }, [onOpenHistory]);
-
-  const trigger = (
-    <span
-      className={clsx('relative inline-flex items-center gap-2', canOpenHistory && 'cursor-pointer', className)}
-      onClick={canOpenHistory ? openHistory : undefined}
-      onKeyDown={canOpenHistory ? (event) => {
-        if (event.key === 'Enter' || event.key === ' ') openHistory(event);
-      } : undefined}
-      role={canOpenHistory ? 'button' : undefined}
-      tabIndex={canOpenHistory ? 0 : undefined}
-    >
-      <span className="inline-flex cursor-pointer items-center">
-            {showStack ? (
-              <span className="relative inline-block shrink-0" style={{ width: stackWidth, height: stackHeight }}>
-                <span className="absolute left-0 top-0 z-10">
-                  <ChannelAvatar clientType={visibleUpdaters[0].client_type} size={stackPrimary} elevated />
-                </span>
-                <span className="absolute z-20" style={{ left: stackOffsetX, top: stackOffsetY }}>
-                  <ChannelAvatar clientType={visibleUpdaters[1].client_type} size={stackSecondary} elevated />
-                </span>
-              </span>
-            ) : (
-              <ChannelAvatar clientType={latestUpdater.client_type} size={avatar} elevated />
-            )}
-            {overflowCount > 0 && (
-              <span
-                className="ml-1 inline-flex shrink-0 items-center justify-center rounded-full border border-separator-thin bg-bg-elevated font-medium text-txt-secondary shadow-sm"
-                style={{ minWidth: overflow, height: overflow, fontSize }}
-              >
-                +{overflowCount}
-              </span>
-            )}
+  const triggerContent = (
+    <>
+      <span className={clsx('inline-flex items-center', canOpenHistory && 'cursor-pointer')}>
+        {showStack ? (
+          <span className="relative inline-block shrink-0" style={{ width: stackWidth, height: stackHeight }}>
+            <span className="absolute left-0 top-0 z-10">
+              <ChannelAvatar clientType={visibleUpdaters[0].client_type} size={stackPrimary} elevated />
+            </span>
+            <span className="absolute z-20" style={{ left: stackOffsetX, top: stackOffsetY }}>
+              <ChannelAvatar clientType={visibleUpdaters[1].client_type} size={stackSecondary} elevated />
+            </span>
+          </span>
+        ) : (
+          <ChannelAvatar clientType={latestUpdater.client_type} size={avatar} elevated />
+        )}
+        {overflowCount > 0 && (
+          <span
+            className="ml-1 inline-flex shrink-0 items-center justify-center rounded-full border border-separator-thin bg-bg-elevated font-medium text-txt-secondary shadow-sm"
+            style={{ minWidth: overflow, height: overflow, fontSize }}
+          >
+            +{overflowCount}
+          </span>
+        )}
       </span>
       {showTimestamp && latestUpdater.updated_at && (
         <span className="text-[11px] text-txt-quaternary">
           {formatUpdatedAt(latestUpdater.updated_at, t)}
         </span>
       )}
+    </>
+  );
+
+  const trigger = canOpenHistory ? (
+    <button
+      className={clsx('relative inline-flex items-center gap-2 border-0 bg-transparent p-0 text-left font-inherit text-current cursor-pointer', className)}
+      onClick={openHistory}
+      type="button"
+    >
+      {triggerContent}
+    </button>
+  ) : (
+    <span
+      className={clsx('relative inline-flex items-center gap-2', className)}
+    >
+      {triggerContent}
     </span>
   );
 

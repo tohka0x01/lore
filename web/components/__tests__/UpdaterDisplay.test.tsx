@@ -45,7 +45,7 @@ describe('UpdaterDisplay', () => {
     expect(html).toContain('data-alt="Pi"');
   });
 
-  it('renders history entry click target when history handler is provided', () => {
+  it('renders history entry as a native button when history handler is provided', () => {
     const html = renderToStaticMarkup(
       <UpdaterDisplay
         updaters={[{ client_type: 'claudecode', source: 'api:test', updated_at: '2026-04-28T10:00:00.000Z', event_count: 2 }]}
@@ -53,7 +53,8 @@ describe('UpdaterDisplay', () => {
       />,
     );
 
-    expect(html).toContain('role="button"');
+    expect(html).toContain('<button');
+    expect(html).toContain('type="button"');
     expect(html).toContain('data-tooltip="View history changes"');
     expect(html).not.toContain('api:test');
   });

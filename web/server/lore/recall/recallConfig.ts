@@ -8,7 +8,7 @@ import {
   type ScoringConfig,
 } from './recallScoring';
 
-export const SCORING_SETTING_KEYS = [
+const SCORING_SETTING_KEYS = [
   'recall.weights.w_exact',
   'recall.weights.w_glossary_semantic',
   'recall.weights.w_dense',
@@ -25,13 +25,13 @@ export const SCORING_SETTING_KEYS = [
   'views.prior.question',
 ] as const;
 
-export const RECALL_SAFETY_SETTING_KEYS = [
+const RECALL_SAFETY_SETTING_KEYS = [
   'recall.safety.max_query_chars',
   'recall.safety.timeout_ms',
 ] as const;
 
-export const DEFAULT_RECALL_MAX_QUERY_CHARS = 200;
-export const DEFAULT_RECALL_TIMEOUT_MS = 2000;
+const DEFAULT_RECALL_MAX_QUERY_CHARS = 200;
+const DEFAULT_RECALL_TIMEOUT_MS = 2000;
 
 export interface LoadedScoringConfig extends ScoringConfig {
   strategy: string;
@@ -135,6 +135,6 @@ export async function getRecallRuntimeConfig(embedding: Partial<EmbeddingConfig>
     },
     display,
     safety,
-    core_memory_uris: [...getBootUris()].sort(),
+    core_memory_uris: getBootUris().toSorted(),
   };
 }

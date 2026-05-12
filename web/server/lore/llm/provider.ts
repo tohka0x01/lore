@@ -205,8 +205,9 @@ export function buildProviderPrompt(
   messages: ModelMessage[];
 } {
   const system = messages
-    .filter((message) => message.role === 'system')
-    .map((message) => Array.isArray(message.content) ? '' : message.content || '')
+    .flatMap((message) => (
+      message.role === 'system' ? [Array.isArray(message.content) ? '' : message.content || ''] : []
+    ))
     .join('\n\n')
     .trim() || undefined;
 
@@ -289,7 +290,7 @@ function toProviderToolCalls(toolCalls: Array<{ toolCallId: string; toolName: st
   }));
 }
 
-export function supportsTools(config: ResolvedViewLlmConfig): boolean {
+function supportsTools(config: ResolvedViewLlmConfig): boolean {
   return config.provider === 'anthropic' || config.provider === 'openai_compatible' || config.provider === 'openai_responses';
 }
 
@@ -423,7 +424,7 @@ async function embedOneRemote(config: EmbeddingConfig, text: string): Promise<nu
   });
   if (!response.ok) throw new Error(`Embedding request failed: ${response.status}`);
   const data = await response.json();
-  const rows = [...(data.data || [])].sort((a: Record<string, unknown>, b: Record<string, unknown>) => Number(a.index || 0) - Number(b.index || 0));
+  const rows = (data.data || []).toSorted((a: Record<string, unknown>, b: Record<string, unknown>) => Number(a.index || 0) - Number(b.index || 0));
   if (!rows[0]?.embedding) throw new Error('Embedding response missing data rows');
   return rows[0].embedding as number[];
 }

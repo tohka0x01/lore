@@ -42,18 +42,16 @@ function settingsSectionAnchor(sectionId: string): string {
 
 function buildSettingsTocGroups(sections: SectionGroup[], backupLabel: string): SettingsTocGroup[] {
   const byId = new Map(sections.map((section) => [section.id, section]));
-  const groups: SettingsTocGroup[] = SETTINGS_TOC_GROUPS
-    .map((group) => ({
-      label: group.label,
-      items: group.ids
-        .map((id) => byId.get(id))
-        .filter(Boolean)
-        .map((section) => ({
-          id: settingsSectionAnchor(section!.id),
-          label: section!.label,
-        })),
-    }))
-    .filter((group) => group.items.length > 0);
+  const groups: SettingsTocGroup[] = SETTINGS_TOC_GROUPS.flatMap((group) => {
+    const items = group.ids.flatMap((id) => {
+      const section = byId.get(id);
+      return section ? [{
+        id: settingsSectionAnchor(section.id),
+        label: section.label,
+      }] : [];
+    });
+    return items.length > 0 ? [{ label: group.label, items }] : [];
+  });
 
   groups.push({
     label: 'Operations',

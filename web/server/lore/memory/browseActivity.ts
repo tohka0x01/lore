@@ -56,8 +56,10 @@ const NORMALIZED_EVENT_CLIENT_TYPE_SQL = `
 export async function getLatestWriteMetaByNodeUuid(nodeUuids: string[]): Promise<Map<string, LatestWriteMeta>> {
   const safeNodeUuids = [...new Set(
     (Array.isArray(nodeUuids) ? nodeUuids : [])
-      .map((value) => String(value || '').trim())
-      .filter(Boolean),
+      .flatMap((value) => {
+        const nodeUuid = String(value || '').trim();
+        return nodeUuid ? [nodeUuid] : [];
+      }),
   )];
   if (safeNodeUuids.length === 0) return new Map();
 
@@ -88,8 +90,10 @@ export async function getLatestWriteMetaByNodeUuid(nodeUuids: string[]): Promise
 export async function getUpdaterSummariesByNodeUuid(nodeUuids: string[]): Promise<Map<string, UpdaterSummary[]>> {
   const safeNodeUuids = [...new Set(
     (Array.isArray(nodeUuids) ? nodeUuids : [])
-      .map((value) => String(value || '').trim())
-      .filter(Boolean),
+      .flatMap((value) => {
+        const nodeUuid = String(value || '').trim();
+        return nodeUuid ? [nodeUuid] : [];
+      }),
   )];
   if (safeNodeUuids.length === 0) return new Map();
 

@@ -266,15 +266,19 @@ export async function inspectMemoryNodeForDream(
   if (parentPayload) await trackDreamRead(parentPayload.node, eventContext, 'inspect_memory_node_for_dream_parent');
   const siblings = parentPayload
     ? (Array.isArray(parentPayload.children) ? parentPayload.children : [])
-        .filter((child) => String((child as unknown as Record<string, unknown>).uri || '') !== String(node.uri || ''))
+        .flatMap((child) => (
+          String((child as unknown as Record<string, unknown>).uri || '') !== String(node.uri || '')
+            ? [compactNode(child as unknown as Record<string, unknown>)].filter(Boolean)
+            : []
+        ))
         .slice(0, safeSiblingsLimit)
-        .map((child) => compactNode(child as unknown as Record<string, unknown>))
-        .filter(Boolean)
     : [];
   const children = (Array.isArray(current.children) ? current.children : [])
     .slice(0, safeChildrenLimit)
-    .map((child) => compactNode(child as unknown as Record<string, unknown>))
-    .filter(Boolean);
+    .flatMap((child) => {
+      const compacted = compactNode(child as unknown as Record<string, unknown>);
+      return compacted ? [compacted] : [];
+    });
   const content = String(node.content || '');
   const payload: Record<string, unknown> = {
     uri: node.uri || `${domain}://${path}`,

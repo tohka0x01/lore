@@ -99,7 +99,7 @@ export function buildViewMap(views: Record<string, unknown>[]): Map<string, Reco
   return new Map(views.map((view) => [`${view.domain}::${view.path}::${view.view_type}`, view]));
 }
 
-export async function loadSourceViewRecords(filters: Record<string, unknown> = {}): Promise<Record<string, unknown>[]> {
+async function loadSourceViewRecords(filters: Record<string, unknown> = {}): Promise<Record<string, unknown>[]> {
   const docs = await loadSourceDocuments(filters);
   const weights = await loadViewWeights();
   return docs.flatMap((doc) => buildViewRecords(doc, weights));
@@ -356,17 +356,5 @@ export async function ensureMemoryViewsIndex(
 // Re-export query functions from memoryViewQueries for backward compatibility
 // ---------------------------------------------------------------------------
 
-export {
-  fetchDenseMemoryViewRows,
-  fetchLexicalMemoryViewRows,
-  fetchExactMemoryRows,
-  buildCandidateKey,
-  extractCueTerms,
-  getViewPrior,
-  getMemoryViewRuntimeConfig,
-  listMemoryViewsByNode,
-} from './memoryViewQueries';
+export { listMemoryViewsByNode } from './memoryViewQueries';
 
-// Re-export from viewBuilders for backward compatibility
-export { viewWeight, viewPrior, getFtsConfig, getFtsQueryConfig, countQueryTokens } from './viewBuilders';
-export { dedupeTerms, truncate } from '../core/utils';

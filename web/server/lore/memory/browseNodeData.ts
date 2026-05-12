@@ -97,9 +97,9 @@ export async function getAliases(nodeUuid: string, domain: string, path: string)
     [nodeUuid],
   );
 
-  return result.rows
-    .filter((row) => !(row.domain === domain && row.path === path))
-    .map((row) => `${row.domain}://${row.path}`);
+  return result.rows.flatMap((row) => (
+    row.domain === domain && row.path === path ? [] : [`${row.domain}://${row.path}`]
+  ));
 }
 
 export async function getGlossaryKeywords(nodeUuid: string): Promise<string[]> {

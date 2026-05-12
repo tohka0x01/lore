@@ -183,14 +183,11 @@ export default function RecallDrilldown(): React.JSX.Element {
     ...KNOWN_CLIENT_TYPES.map((value) => ({ value, label: t(clientTypeLabel(value)) })),
   ], [t]);
   const thresholdClientRows = useMemo<RowData[]>(() => clientTypeThresholdAnalysis
-    .filter((row) => {
+    .flatMap((row) => {
       const clientType = typeof row.client_type === 'string' && row.client_type.trim() ? row.client_type.trim() : '__legacy__';
-      return clientType !== '__legacy__' && clientType !== 'admin';
-    })
-    .map((row) => {
-      const clientType = typeof row.client_type === 'string' && row.client_type.trim() ? row.client_type.trim() : '__legacy__';
+      if (clientType === '__legacy__' || clientType === 'admin') return [];
       const analysis = (row.analysis as RowData) || {};
-      return {
+      return [{
         client_type: clientType,
         label: t(clientTypeLabel(clientType)),
         shown_candidate_count: analysis.shown_candidate_count,
@@ -201,7 +198,7 @@ export default function RecallDrilldown(): React.JSX.Element {
         memory_created_count: asNumber(row.memory_created_count, 0),
         memory_updated_count: asNumber(row.memory_updated_count, 0),
         memory_deleted_count: asNumber(row.memory_deleted_count, 0),
-      };
+      }];
     }), [clientTypeThresholdAnalysis, t]);
   const thresholdClientCols = useMemo(() => [
     {

@@ -56,9 +56,9 @@ export function buildSetupFlowStatus(input: {
   llm: SetupRuntimeStatus;
   boot: BootViewResult;
 }): SetupFlowStatus {
-  const globalBootSteps = input.boot.nodes
-    .filter((node) => node.scope === 'global')
-    .map((node) => buildBootStep(node));
+  const globalBootSteps = input.boot.nodes.flatMap((node) => (
+    node.scope === 'global' ? [buildBootStep(node)] : []
+  ));
   const channelAgentsStep = buildChannelAgentsStep(input.boot.nodes);
   const steps: SetupFlowStep[] = [
     {

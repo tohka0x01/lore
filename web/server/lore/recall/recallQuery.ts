@@ -7,7 +7,7 @@
 const METADATA_PREFIX_RE =
   /^(?:\s*(?:Conversation info|Sender|Channel info|Reply info)\s*\(untrusted metadata\)\s*:\s*```[a-z]*[\s\S]*?```\s*)+/i;
 
-export const RECALL_QUERY_CHAR_LIMIT = 200;
+const RECALL_QUERY_CHAR_LIMIT = 200;
 
 export function sanitizeRecallQuery(raw: string): string {
   if (!raw) return '';

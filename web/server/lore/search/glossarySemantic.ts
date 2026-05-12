@@ -78,8 +78,10 @@ export function buildGlossaryRecords(doc: GlossarySourceDoc): GlossaryRecord[] {
   const keywords = [
     ...new Set(
       (Array.isArray(doc.glossary_keywords) ? doc.glossary_keywords : [])
-        .map((item) => String(item || '').trim())
-        .filter(Boolean),
+        .flatMap((item) => {
+          const keyword = String(item || '').trim();
+          return keyword ? [keyword] : [];
+        }),
     ),
   ];
   return keywords.map((keyword) => ({

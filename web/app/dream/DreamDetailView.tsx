@@ -94,20 +94,28 @@ function parseDreamAudit(rawNarrative: string): DreamAudit | null {
   if (!hasAuditShape) return null;
 
   const changedNodes = Array.isArray(parsed.changed_nodes)
-    ? parsed.changed_nodes.filter(isRecord).map((node) => ({
-      uri: typeof node.uri === 'string' ? node.uri : undefined,
-      action: typeof node.action === 'string' ? node.action : undefined,
-      result: typeof node.result === 'string' ? node.result : undefined,
-      candidate_ids: toStringArray(node.candidate_ids),
-      changes: toStringArray(node.changes),
-    }))
+    ? parsed.changed_nodes.flatMap((node) => (
+      isRecord(node)
+        ? [{
+          uri: typeof node.uri === 'string' ? node.uri : undefined,
+          action: typeof node.action === 'string' ? node.action : undefined,
+          result: typeof node.result === 'string' ? node.result : undefined,
+          candidate_ids: toStringArray(node.candidate_ids),
+          changes: toStringArray(node.changes),
+        }]
+        : []
+    ))
     : undefined;
 
   const evidence = Array.isArray(parsed.evidence)
-    ? parsed.evidence.filter(isRecord).map((item) => ({
-      query_id: typeof item.query_id === 'string' ? item.query_id : undefined,
-      reason: typeof item.reason === 'string' ? item.reason : undefined,
-    }))
+    ? parsed.evidence.flatMap((item) => (
+      isRecord(item)
+        ? [{
+          query_id: typeof item.query_id === 'string' ? item.query_id : undefined,
+          reason: typeof item.reason === 'string' ? item.reason : undefined,
+        }]
+        : []
+    ))
     : undefined;
 
   return {

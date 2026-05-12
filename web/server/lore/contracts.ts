@@ -45,7 +45,10 @@ export interface ContractErrorEnvelope extends Partial<ContractWarningEnvelope> 
 
 function normalizeWarnings(warnings: string[] | null | undefined): string[] {
   if (!Array.isArray(warnings)) return [];
-  return warnings.map((warning) => String(warning || '').trim()).filter(Boolean);
+  return warnings.flatMap((warning) => {
+    const normalized = String(warning || '').trim();
+    return normalized ? [normalized] : [];
+  });
 }
 
 export function buildCreateMutationReceipt({
@@ -157,7 +160,7 @@ export function getErrorStatus(error: unknown, fallback = 500): number {
   return Number.isFinite(status) && status > 0 ? status : fallback;
 }
 
-export function normalizeErrorCode(error: unknown, status: number): string | undefined {
+function normalizeErrorCode(error: unknown, status: number): string | undefined {
   const explicit = typeof (error as { code?: unknown })?.code === 'string'
     ? String((error as { code?: string }).code || '').trim()
     : '';

@@ -31,8 +31,10 @@ export function readCueList(item: ItemWithCues | null | undefined, max = 4): str
       ? item.cue_terms
       : [];
   return (cues as unknown[])
-    .map((x) => String(x || '').replace(/\s+/g, ' ').trim())
-    .filter(Boolean)
+    .flatMap((x) => {
+      const cue = String(x || '').replace(/\s+/g, ' ').trim();
+      return cue ? [cue] : [];
+    })
     .slice(0, max);
 }
 

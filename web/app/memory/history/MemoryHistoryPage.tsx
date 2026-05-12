@@ -33,7 +33,10 @@ function stringifyValue(value: unknown): string {
 
 function stringifyList(value: unknown): string[] {
   return Array.isArray(value)
-    ? value.map((item) => String(item || '').trim()).filter(Boolean)
+    ? value.flatMap((item) => {
+      const normalized = String(item || '').trim();
+      return normalized ? [normalized] : [];
+    })
     : [];
 }
 

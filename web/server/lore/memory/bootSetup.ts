@@ -157,9 +157,9 @@ function normalizeBootRecord(nodes: unknown): Array<{ uri: string; content: stri
     throw asStatusError('At least one fixed boot node must be provided.', 422);
   }
 
-  return getBootUris()
-    .filter((uri) => normalized.has(uri))
-    .map((uri) => ({ uri, content: normalized.get(uri) || '' }));
+  return getBootUris().flatMap((uri) => (
+    normalized.has(uri) ? [{ uri, content: normalized.get(uri) || '' }] : []
+  ));
 }
 
 function normalizeBootUriList(uris: unknown): string[] {

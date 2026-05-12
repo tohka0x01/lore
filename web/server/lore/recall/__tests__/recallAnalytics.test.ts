@@ -692,9 +692,10 @@ describe('getRecallStats', () => {
 
     await getRecallStats({ clientType: 'codex' });
 
-    const candidateQueries = mockSql.mock.calls
-      .map(([query]) => String(query))
-      .filter((sqlText) => sqlText.includes('FROM recall_query_candidates'));
+    const candidateQueries = mockSql.mock.calls.flatMap(([query]) => {
+      const sqlText = String(query);
+      return sqlText.includes('FROM recall_query_candidates') ? [sqlText] : [];
+    });
     expect(candidateQueries.length).toBeGreaterThan(0);
     expect(candidateQueries.every((sqlText) => !sqlText.includes('JOIN recall_queries q'))).toBe(true);
     expect(candidateQueries.some((sqlText) => sqlText.includes('c.client_type = $2'))).toBe(true);
@@ -705,9 +706,10 @@ describe('getRecallStats', () => {
 
     await getRecallStats({ queryText: 'needle' });
 
-    const candidateQueries = mockSql.mock.calls
-      .map(([query]) => String(query))
-      .filter((sqlText) => sqlText.includes('FROM recall_query_candidates'));
+    const candidateQueries = mockSql.mock.calls.flatMap(([query]) => {
+      const sqlText = String(query);
+      return sqlText.includes('FROM recall_query_candidates') ? [sqlText] : [];
+    });
     expect(candidateQueries.some((sqlText) => sqlText.includes('JOIN recall_queries q ON q.query_id = c.query_id'))).toBe(true);
   });
 

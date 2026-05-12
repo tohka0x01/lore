@@ -175,7 +175,6 @@ interface RecallData {
   retrieval_meta?: RetrievalMeta;
 }
 
-export { clientTypeLabel, clientTypeTone } from './clientTypeMeta';
 
 interface RuntimeWeights {
   w_exact?: number;

@@ -34,6 +34,6 @@ export async function invalidateCacheTags(tags: string[]): Promise<void> {
   await (await getCacheStore()).invalidateTags(tags);
 }
 
-export async function clearApplicationCache(): Promise<void> {
+async function clearApplicationCache(): Promise<void> {
   await (await getCacheStore()).clear();
 }

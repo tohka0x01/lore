@@ -623,7 +623,7 @@ describe('loadScoringConfig (via getRecallRuntimeConfig)', () => {
 
   it('core_memory_uris is sorted and matches the fixed boot manifest', async () => {
     const config = await getRecallRuntimeConfig(null);
-    const expected = [...getBootUris()].sort();
+    const expected = getBootUris().toSorted();
     expect(Array.isArray(config.core_memory_uris)).toBe(true);
     expect(config.core_memory_uris).toEqual(expected);
   });

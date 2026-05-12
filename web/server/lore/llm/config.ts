@@ -76,7 +76,7 @@ export function createLanguageModel(config: ResolvedViewLlmConfig): LanguageMode
   return provider.chat(config.model);
 }
 
-export function createEmbeddingModel(config: ResolvedEmbeddingConfig): EmbeddingModel<string> {
+function createEmbeddingModel(config: ResolvedEmbeddingConfig): EmbeddingModel<string> {
   return buildOpenAiProvider(config).embedding(config.model);
 }
 

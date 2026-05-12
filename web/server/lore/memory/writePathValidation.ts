@@ -21,8 +21,10 @@ export function assertValidPathSegment(value: unknown, label = 'path segment'): 
 export function assertValidPathSegments(path: unknown, label = 'path'): string[] {
   const segments = String(path || '')
     .split('/')
-    .map((segment) => segment.trim())
-    .filter(Boolean);
+    .flatMap((segment) => {
+      const trimmed = segment.trim();
+      return trimmed ? [trimmed] : [];
+    });
   if (!segments.length) {
     const error = Object.assign(
       new Error(`${label} must include at least one path segment`),
