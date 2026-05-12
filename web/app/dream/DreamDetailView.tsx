@@ -3,9 +3,8 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
-import clsx from 'clsx';
 import DiffViewer from '../../components/DiffViewer';
-import { Section, Button, Badge, Notice } from '../../components/ui';
+import { Section, Button, Badge, StatCard, Notice } from '../../components/ui';
 import type { DreamEntry, DreamWorkflowEvent, MemoryChange } from './useDreamPageController';
 
 function fmtDuration(ms: number | null | undefined): string {
@@ -336,27 +335,6 @@ interface DreamDetailViewProps {
   t: (key: string) => string;
 }
 
-type CompactMetricTone = 'default' | 'blue' | 'green' | 'orange' | 'red';
-
-const COMPACT_METRIC_TONES: Record<CompactMetricTone, string> = {
-  default: 'text-txt-primary',
-  blue: 'text-sys-blue',
-  green: 'text-sys-green',
-  orange: 'text-sys-orange',
-  red: 'text-sys-red',
-};
-
-function CompactMetric({ label, value, tone = 'default' }: { label: string; value: React.ReactNode; tone?: CompactMetricTone }): React.JSX.Element {
-  return (
-    <div className="min-w-0 border-t border-separator-thin px-4 py-3 sm:border-l sm:first:border-l-0 md:px-5">
-      <div className="text-[11px] font-medium uppercase tracking-[0.08em] text-txt-tertiary">{label}</div>
-      <div className={clsx('mt-1 truncate text-[22px] font-semibold leading-none tracking-[-0.02em] tabular-nums', COMPACT_METRIC_TONES[tone])}>
-        {value ?? '—'}
-      </div>
-    </div>
-  );
-}
-
 export function DreamDetailView({ entry, loading, canRollback, rollingBack, onBack, onRollback, t }: DreamDetailViewProps): React.JSX.Element {
   const stats = useMemo(() => {
     const toolCalls = entry?.tool_calls || [];
@@ -374,7 +352,6 @@ export function DreamDetailView({ entry, loading, canRollback, rollingBack, onBa
       policyWarnings: summaryStructure?.policy_warnings ?? workflowEvents.filter((event) => event.event_type === 'policy_warning_emitted').length,
     };
   }, [entry]);
-  const summaryBadges = useMemo(() => (entry ? getSummaryBadges(entry, t) : []), [entry, t]);
 
   if (loading || !entry) {
     return (
@@ -390,111 +367,76 @@ export function DreamDetailView({ entry, loading, canRollback, rollingBack, onBa
   const rawNarrative = entry.raw_narrative || entry.narrative || '';
   const poeticNarrative = entry.poetic_narrative || entry.narrative || rawNarrative;
   const audit = parseDreamAudit(rawNarrative);
-  const totalChanges = entry.memory_changes?.length ?? (stats.modified + stats.created + stats.deleted + stats.moved);
-  const totalBlocks = stats.protectedBlocks + stats.policyBlocks;
 
   return (
-    <div className="space-y-6">
-      <section className="animate-in overflow-hidden rounded-[28px] border border-separator-thin bg-bg-elevated/80 shadow-card">
-        <div className="flex flex-col gap-5 px-4 py-4 md:flex-row md:items-start md:justify-between md:px-6 md:py-6">
-          <div className="min-w-0 flex-1">
-            <Button className="-ml-2" variant="ghost" onClick={onBack}>← {t('Dream Diary')}</Button>
-            <div className="mt-4 flex flex-wrap items-center gap-2">
-              <Badge className="min-w-[3.9rem] justify-center" tone={statusTone(entry.status)}>{t(entry.status)}</Badge>
-              <span className="text-sm text-txt-tertiary">{fmtDate(entry.started_at)} · {fmtDuration(entry.duration_ms)}</span>
-            </div>
-            <h1 className="mt-3 text-[28px] font-semibold leading-tight tracking-[-0.03em] text-txt-primary md:text-[36px]">
-              {t('Dream Review')}
-            </h1>
-            <p className="mt-2 max-w-2xl text-sm leading-relaxed text-txt-secondary md:text-[15px]">
-              {t('One-page review of what changed, why it changed, and whether the run stayed safe.')}
-            </p>
-          </div>
-
+    <>
+      <div className="flex flex-col justify-between gap-3 mb-6 sm:flex-row sm:items-center">
+        <Button variant="ghost" onClick={onBack}>← {t('Dream Diary')}</Button>
+        <div className="flex items-center gap-3 flex-wrap">
+          <Badge className="min-w-[3.9rem] justify-center" tone={statusTone(entry.status)}>{t(entry.status)}</Badge>
+          <span className="text-sm text-txt-tertiary">{fmtDate(entry.started_at)} · {fmtDuration(entry.duration_ms)}</span>
           {canRollback && (
-            <Button className="self-start" variant="destructive" onClick={onRollback} disabled={rollingBack}>
+            <Button variant="destructive" onClick={onRollback} disabled={rollingBack}>
               {rollingBack ? t('Rolling back…') : t('Rollback')}
             </Button>
           )}
         </div>
+      </div>
 
-        <div className="grid grid-cols-2 sm:grid-cols-4">
-          <CompactMetric label={t('Changes')} value={totalChanges} tone={totalChanges > 0 ? 'green' : 'default'} />
-          <CompactMetric label={t('Viewed')} value={stats.viewed} tone="blue" />
-          <CompactMetric label={t('Blocks')} value={totalBlocks} tone={totalBlocks > 0 ? 'red' : 'default'} />
-          <CompactMetric label={t('Warnings')} value={stats.policyWarnings} tone={stats.policyWarnings > 0 ? 'orange' : 'default'} />
-        </div>
-      </section>
+      <div className="animate-in stagger-1 mb-5 grid grid-cols-2 gap-3 md:grid-cols-8">
+        <StatCard label={t('Viewed')} value={stats.viewed} tone="blue" compact />
+        <StatCard label={t('Modified')} value={stats.modified} tone="orange" compact />
+        <StatCard label={t('Created')} value={stats.created} tone="green" compact />
+        <StatCard label={t('Deleted')} value={stats.deleted} tone="red" compact />
+        <StatCard label={t('Moved')} value={stats.moved} tone="blue" compact />
+        <StatCard label={t('Protected')} value={stats.protectedBlocks} tone="orange" compact />
+        <StatCard label={t('Policy blocks')} value={stats.policyBlocks} tone="red" compact />
+        <StatCard label={t('Policy warnings')} value={stats.policyWarnings} tone="orange" compact />
+      </div>
+
+      {poeticNarrative && (
+        <Section
+          title={t('Diary')}
+          className="mb-5"
+        >
+          <div className="prose max-w-none">
+            <ReactMarkdown remarkPlugins={[remarkGfm]}>{poeticNarrative}</ReactMarkdown>
+          </div>
+        </Section>
+      )}
+
+      {audit && (
+        <DreamAuditSection audit={audit} showChangedNodesFallback={!entry.memory_changes?.length} t={t} />
+      )}
+
+      {(entry.status === 'running' || (entry.workflow_events && entry.workflow_events.length > 0)) && (
+        <AgentWorkflowSection
+          workflowEvents={entry.workflow_events || []}
+          defaultExpanded
+          t={t}
+        />
+      )}
+
+      {entry.memory_changes && entry.memory_changes.length > 0 && (
+        <MemoryChangesSection changes={entry.memory_changes} t={t} />
+      )}
+
+      {entry.summary && (
+        <Section title={t('Dream Summary')} className="mt-5">
+          <div className="flex gap-2 flex-wrap">
+            {getSummaryBadges(entry, t).map((badge) => (
+              <Badge key={badge.key} tone={badge.tone}>{badge.label}</Badge>
+            ))}
+          </div>
+        </Section>
+      )}
 
       {entry.error && (
-        <Notice tone="danger">
+        <Notice tone="danger" className="mt-5">
           <span className="font-mono">{entry.error}</span>
         </Notice>
       )}
-
-      <div className="grid gap-5 md:grid-cols-[minmax(0,1fr)_17rem] lg:grid-cols-[minmax(0,1fr)_20rem] lg:gap-6">
-        <main className="min-w-0 space-y-5">
-          {poeticNarrative && (
-            <Section title={t('Diary')}>
-              <div className="prose max-w-none">
-                <ReactMarkdown remarkPlugins={[remarkGfm]}>{poeticNarrative}</ReactMarkdown>
-              </div>
-            </Section>
-          )}
-
-          {entry.memory_changes && entry.memory_changes.length > 0 && (
-            <MemoryChangesSection changes={entry.memory_changes} t={t} />
-          )}
-
-          {(entry.status === 'running' || (entry.workflow_events && entry.workflow_events.length > 0)) && (
-            <AgentWorkflowSection
-              workflowEvents={entry.workflow_events || []}
-              defaultExpanded
-              t={t}
-            />
-          )}
-        </main>
-
-        <aside className="min-w-0 space-y-5 md:sticky md:top-28">
-          {audit && (
-            <DreamAuditSection audit={audit} showChangedNodesFallback={!entry.memory_changes?.length} t={t} />
-          )}
-
-          <Section title={t('Run overview')} compact>
-            <div className="space-y-3 text-sm">
-              <InlineInsight label={t('Outcome')} value={<Badge tone={statusTone(entry.status)}>{t(entry.status)}</Badge>} />
-              <InlineInsight label={t('Started')} value={fmtDate(entry.started_at)} />
-              <InlineInsight label={t('Duration')} value={fmtDuration(entry.duration_ms)} />
-              <InlineInsight label={t('Modified')} value={stats.modified} />
-              <InlineInsight label={t('Created')} value={stats.created} />
-              <InlineInsight label={t('Deleted')} value={stats.deleted} />
-              <InlineInsight label={t('Moved')} value={stats.moved} />
-              <InlineInsight label={t('Protected')} value={stats.protectedBlocks} />
-              <InlineInsight label={t('Policy blocks')} value={stats.policyBlocks} />
-            </div>
-          </Section>
-
-          {summaryBadges.length > 0 && (
-            <Section title={t('Dream Summary')} compact>
-              <div className="flex flex-wrap gap-2">
-                {summaryBadges.map((badge) => (
-                  <Badge key={badge.key} tone={badge.tone}>{badge.label}</Badge>
-                ))}
-              </div>
-            </Section>
-          )}
-        </aside>
-      </div>
-    </div>
-  );
-}
-
-function InlineInsight({ label, value }: { label: string; value: React.ReactNode }): React.JSX.Element {
-  return (
-    <div className="flex items-center justify-between gap-3 border-b border-separator-hairline pb-2 last:border-b-0 last:pb-0">
-      <span className="text-txt-tertiary">{label}</span>
-      <span className="min-w-0 text-right font-medium text-txt-primary">{value}</span>
-    </div>
+    </>
   );
 }
 
@@ -509,7 +451,7 @@ function DreamAuditSection({ audit, showChangedNodesFallback, t }: DreamAuditSec
   const evidence = audit.evidence || [];
 
   return (
-    <Section title={t('Dream Audit')} compact>
+    <Section title={t('Dream Audit')} className="mb-5">
       <div className="space-y-4">
         <div className="flex flex-wrap gap-2">
           {audit.primary_focus && <Badge tone="blue">{t('Primary focus')}: {audit.primary_focus}</Badge>}
@@ -605,7 +547,7 @@ function AgentWorkflowSection({ workflowEvents, defaultExpanded, t }: AgentWorkf
           <span aria-hidden>{expanded ? '▲' : '▼'}</span>
         </Button>
       }
-      compact
+      className="mb-5"
     >
       {expanded && (
         rows.length > 0 ? (
@@ -639,7 +581,7 @@ function MemoryChangesSection({ changes, t }: MemoryChangesSectionProps): React.
   const [expandedIdx, setExpandedIdx] = useState<number | null>(null);
 
   return (
-    <Section title={t('Memory Changes')} subtitle={`${changes.length}`} compact>
+    <Section title={t('Memory Changes')} subtitle={`${changes.length}`} className="mb-5">
       <div className="space-y-2">
         {changes.map((change, index) => (
           <div key={index} className="rounded-xl border border-separator-thin bg-bg-raised overflow-hidden">
