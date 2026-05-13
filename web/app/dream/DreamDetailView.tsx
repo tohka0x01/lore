@@ -31,7 +31,6 @@ function fmtDate(iso: string | null | undefined): string {
 
 type BadgeStatusTone = 'green' | 'red' | 'soft' | 'blue';
 type ChangeTone = 'green' | 'red' | 'orange' | 'blue';
-type BadgeTone = 'green' | 'red' | 'orange' | 'blue' | 'default' | 'soft';
 
 interface DreamAuditChange {
   uri?: string;
@@ -161,13 +160,6 @@ export function formatOriginalDreamNarrativeForView(rawNarrative: string, t: (ke
   if (audit.confidence) lines.push(`${t('Confidence')}: ${audit.confidence}`);
 
   return lines.join('\n');
-}
-
-function resultTone(result: string | undefined): BadgeTone {
-  if (result === 'success' || result === 'applied') return 'green';
-  if (result === 'skipped') return 'soft';
-  if (result === 'blocked' || result === 'failed' || result === 'error') return 'red';
-  return 'blue';
 }
 
 function getSummaryBadges(entry: DreamEntry, t: (key: string) => string): Array<{ key: string; label: string; tone: 'green' | 'red' | 'orange' | 'blue' | 'default' }> {
@@ -386,18 +378,11 @@ export function DreamDetailView({ entry, loading, canRollback, rollingBack, onBa
   const [showOriginalDiary, setShowOriginalDiary] = useState(false);
   const stats = useMemo(() => {
     const toolCalls = entry?.tool_calls || [];
-    const changes = entry?.memory_changes || [];
-    const workflowEvents = entry?.workflow_events || [];
-    const summaryStructure = entry?.summary?.structure;
     return {
       viewed: toolCalls.filter((call) => call.tool === 'get_node').length,
       modified: toolCalls.filter((call) => call.tool === 'update_node').length,
       created: toolCalls.filter((call) => call.tool === 'create_node').length,
       deleted: toolCalls.filter((call) => call.tool === 'delete_node').length,
-      moved: changes.filter((change) => change.type === 'move').length,
-      protectedBlocks: summaryStructure?.protected_blocks ?? workflowEvents.filter((event) => event.event_type === 'protected_node_blocked').length,
-      policyBlocks: summaryStructure?.policy_blocks ?? workflowEvents.filter((event) => event.event_type === 'policy_validation_blocked').length,
-      policyWarnings: summaryStructure?.policy_warnings ?? workflowEvents.filter((event) => event.event_type === 'policy_warning_emitted').length,
     };
   }, [entry]);
 
@@ -418,7 +403,6 @@ export function DreamDetailView({ entry, loading, canRollback, rollingBack, onBa
 
   const rawNarrative = entry.raw_narrative || entry.narrative || '';
   const poeticNarrative = entry.poetic_narrative || entry.narrative || rawNarrative;
-  const audit = parseDreamAudit(rawNarrative);
   const originalNarrative = formatOriginalDreamNarrativeForView(rawNarrative, t);
   const canToggleOriginalDiary = Boolean(rawNarrative && rawNarrative !== poeticNarrative);
   const displayedNarrative = showOriginalDiary ? originalNarrative : poeticNarrative;
@@ -438,15 +422,11 @@ export function DreamDetailView({ entry, loading, canRollback, rollingBack, onBa
         </div>
       </div>
 
-      <div className="animate-in stagger-1 mb-5 grid grid-cols-2 gap-3 md:grid-cols-8">
+      <div className="animate-in stagger-1 mb-5 grid grid-cols-2 gap-3 md:grid-cols-4">
         <StatCard label={t('Viewed')} value={stats.viewed} tone="blue" compact />
         <StatCard label={t('Modified')} value={stats.modified} tone="orange" compact />
         <StatCard label={t('Created')} value={stats.created} tone="green" compact />
         <StatCard label={t('Deleted')} value={stats.deleted} tone="red" compact />
-        <StatCard label={t('Moved')} value={stats.moved} tone="blue" compact />
-        <StatCard label={t('Protected')} value={stats.protectedBlocks} tone="orange" compact />
-        <StatCard label={t('Policy blocks')} value={stats.policyBlocks} tone="red" compact />
-        <StatCard label={t('Policy warnings')} value={stats.policyWarnings} tone="orange" compact />
       </div>
 
       {displayedNarrative && (
@@ -469,14 +449,11 @@ export function DreamDetailView({ entry, loading, canRollback, rollingBack, onBa
         </Section>
       )}
 
-      {audit && (
-        <DreamAuditSection audit={audit} showChangedNodesFallback={!entry.memory_changes?.length} t={t} />
-      )}
 
       {(entry.status === 'running' || (entry.workflow_events && entry.workflow_events.length > 0)) && (
         <AgentWorkflowSection
           workflowEvents={entry.workflow_events || []}
-          defaultExpanded
+          defaultExpanded={entry.status === 'running'}
           t={t}
         />
       )}
@@ -501,86 +478,6 @@ export function DreamDetailView({ entry, loading, canRollback, rollingBack, onBa
         </Notice>
       )}
     </>
-  );
-}
-
-interface DreamAuditSectionProps {
-  audit: DreamAudit;
-  showChangedNodesFallback: boolean;
-  t: (key: string) => string;
-}
-
-function DreamAuditSection({ audit, showChangedNodesFallback, t }: DreamAuditSectionProps): React.JSX.Element {
-  const changedNodes = showChangedNodesFallback ? audit.changed_nodes || [] : [];
-  const evidence = audit.evidence || [];
-
-  return (
-    <Section title={t('Dream Audit')} className="mb-5">
-      <div className="space-y-4">
-        <div className="flex flex-wrap gap-2">
-          {audit.primary_focus && <Badge tone="blue">{t('Primary focus')}: {audit.primary_focus}</Badge>}
-          {audit.confidence && <Badge tone="green">{t('Confidence')}: {audit.confidence}</Badge>}
-          {showChangedNodesFallback && <Badge tone="default">{t('Changed nodes')}: {changedNodes.length}</Badge>}
-          <Badge tone="default">{t('Evidence')}: {evidence.length}</Badge>
-        </div>
-
-        {changedNodes.length > 0 && (
-          <div>
-            <div className="mb-2 text-xs font-medium uppercase tracking-wide text-txt-tertiary">{t('Changed nodes')}</div>
-            <div className="space-y-2">
-              {changedNodes.map((node, index) => (
-                <div key={`${node.uri || 'node'}-${index}`} className="rounded-xl border border-separator-thin bg-bg-raised px-3 py-3">
-                  <div className="mb-2 flex flex-wrap items-center gap-2">
-                    {node.action && <Badge tone="blue">{node.action}</Badge>}
-                    {node.result && <Badge tone={resultTone(node.result)}>{node.result}</Badge>}
-                    {node.candidate_ids && node.candidate_ids.length > 0 && (
-                      <span className="text-[11px] text-txt-tertiary">{t('Candidates')}: {node.candidate_ids.join(', ')}</span>
-                    )}
-                  </div>
-                  {node.uri && <code className="block break-all text-xs font-mono text-txt-primary">{node.uri}</code>}
-                  {node.changes && node.changes.length > 0 && (
-                    <ul className="mt-2 list-disc space-y-1 pl-5 text-sm text-txt-secondary">
-                      {node.changes.map((change, changeIndex) => <li key={changeIndex}>{change}</li>)}
-                    </ul>
-                  )}
-                </div>
-              ))}
-            </div>
-          </div>
-        )}
-
-        {evidence.length > 0 && (
-          <div>
-            <div className="mb-2 text-xs font-medium uppercase tracking-wide text-txt-tertiary">{t('Evidence')}</div>
-            <div className="space-y-2">
-              {evidence.map((item, index) => (
-                <div key={`${item.query_id || 'evidence'}-${index}`} className="rounded-xl border border-separator-thin bg-bg-raised px-3 py-3">
-                  {item.query_id && <code className="block break-all text-[11px] font-mono text-txt-tertiary">{item.query_id}</code>}
-                  {item.reason && <p className="mt-1 text-sm text-txt-secondary">{item.reason}</p>}
-                </div>
-              ))}
-            </div>
-          </div>
-        )}
-
-        {(audit.why_not_more_changes || audit.expected_effect) && (
-          <div className="grid gap-3 md:grid-cols-2">
-            {audit.why_not_more_changes && (
-              <div className="rounded-xl border border-separator-thin bg-bg-raised px-3 py-3">
-                <div className="mb-1 text-xs font-medium uppercase tracking-wide text-txt-tertiary">{t('Why not more changes')}</div>
-                <p className="text-sm text-txt-secondary">{audit.why_not_more_changes}</p>
-              </div>
-            )}
-            {audit.expected_effect && (
-              <div className="rounded-xl border border-separator-thin bg-bg-raised px-3 py-3">
-                <div className="mb-1 text-xs font-medium uppercase tracking-wide text-txt-tertiary">{t('Expected effect')}</div>
-                <p className="text-sm text-txt-secondary">{audit.expected_effect}</p>
-              </div>
-            )}
-          </div>
-        )}
-      </div>
-    </Section>
   );
 }
 

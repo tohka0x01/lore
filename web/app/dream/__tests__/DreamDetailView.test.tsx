@@ -42,7 +42,7 @@ describe('DreamDetailView', () => {
     expect(text).not.toContain('{');
   });
 
-  it('shows the diary with an original diary toggle and structured audit', () => {
+  it('shows the diary with an original diary toggle and no audit card', () => {
     const audit = {
       primary_focus: 'tree_maintenance',
       changed_nodes: [
@@ -80,17 +80,13 @@ describe('DreamDetailView', () => {
     expect(html).toContain('View original diary');
     expect(html).not.toContain('Raw audit diary');
     expect(html).not.toContain('Original Diary');
-    expect(html).toContain('Dream Audit');
-    expect(html).toContain('tree_maintenance');
-    expect(html).toContain('project://lore_integration/dream_system/dream_prompt_workflow_review');
-    expect(html).toContain('absorbed新版 Dream 三层优先级');
-    expect(html).toContain('用户明确给出新版 Dream 定义与三层优先级。');
-    expect(html).toContain('今日候选均可归入既有节点。');
-    expect(html).toContain('后续查询新版 Dream 定义时更稳定命中。');
-    expect(html).toContain('high');
+    expect(html).not.toContain('Dream Audit');
+    expect(html).not.toContain('tree_maintenance');
+    expect(html).not.toContain('project://lore_integration/dream_system/dream_prompt_workflow_review');
+    expect(html).not.toContain('absorbed新版 Dream 三层优先级');
   });
 
-  it('shows final memory changes instead of repeating audit changed nodes', () => {
+  it('shows final memory changes without rendering the audit card', () => {
     const audit = {
       primary_focus: 'tree_maintenance',
       changed_nodes: [
@@ -127,7 +123,7 @@ describe('DreamDetailView', () => {
       />,
     );
 
-    expect(html).toContain('Dream Audit');
+    expect(html).not.toContain('Dream Audit');
     expect(html).toContain('Memory Changes');
     expect(html).not.toContain('audit duplicate summary');
     expect(html).not.toContain('Changed nodes');
@@ -135,6 +131,79 @@ describe('DreamDetailView', () => {
     expect(html.split(uri).length - 1).toBe(1);
   });
 
+
+
+  it('shows only the four key stat cards', () => {
+    const html = renderToStaticMarkup(
+      <DreamDetailView
+        entry={entry({
+          tool_calls: [
+            { tool: 'get_node' },
+            { tool: 'update_node' },
+            { tool: 'create_node' },
+            { tool: 'delete_node' },
+          ] as DreamEntry['tool_calls'],
+          memory_changes: [{ type: 'move', uri: 'project://old', before: {}, after: {} }],
+          workflow_events: [
+            { id: 1, diary_id: 1, event_type: 'protected_node_blocked', payload: {}, created_at: '2024-01-01T00:00:00Z' },
+            { id: 2, diary_id: 1, event_type: 'policy_validation_blocked', payload: {}, created_at: '2024-01-01T00:00:00Z' },
+            { id: 3, diary_id: 1, event_type: 'policy_warning_emitted', payload: {}, created_at: '2024-01-01T00:00:00Z' },
+          ],
+        })}
+        loading={false}
+        canRollback={false}
+        rollingBack={false}
+        onBack={() => undefined}
+        onRollback={() => undefined}
+        t={(key) => key}
+      />,
+    );
+
+    expect(html).toContain('Viewed');
+    expect(html).toContain('Modified');
+    expect(html).toContain('Created');
+    expect(html).toContain('Deleted');
+    expect(html).not.toContain('Moved');
+    expect(html).not.toContain('Protected');
+    expect(html).not.toContain('Policy blocks');
+    expect(html).not.toContain('Policy warnings');
+  });
+
+  it('collapses completed agent stages by default', () => {
+    const html = renderToStaticMarkup(
+      <DreamDetailView
+        entry={entry({
+          status: 'completed',
+          workflow_events: [
+            {
+              id: 1,
+              diary_id: 1,
+              event_type: 'phase_started',
+              payload: { phase: 'diagnose', label: 'Read-only diagnosis' },
+              created_at: '2024-01-01T00:00:00Z',
+            },
+            {
+              id: 2,
+              diary_id: 1,
+              event_type: 'phase_completed',
+              payload: { phase: 'diagnose', label: 'Read-only diagnosis', summary: { turns: 1, tool_calls: 1 } },
+              created_at: '2024-01-01T00:00:04Z',
+            },
+          ],
+        })}
+        loading={false}
+        canRollback={false}
+        rollingBack={false}
+        onBack={() => undefined}
+        onRollback={() => undefined}
+        t={(key) => key}
+      />,
+    );
+
+    expect(html).toContain('Agent Stages');
+    expect(html).toContain('Expand agent stages');
+    expect(html).not.toContain('Read-only diagnosis');
+  });
 
   it('normalizes legacy poetic stage labels to diary on the page', () => {
     const html = renderToStaticMarkup(
