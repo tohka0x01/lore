@@ -118,9 +118,9 @@ select_channels() {
     echo ""; return
   fi
 
-  if [[ "${LORE_UNINSTALL_NO_INTERACTIVE:-0}" == "1" ]]; then
+  if [[ "${LORE_UNINSTALL_NO_INTERACTIVE:-0}" == "1" ]] || ! [ -t 0 ]; then
     CHANNELS=("claudecode" "codex" "pi" "openclaw" "hermes")
-    echo "Non-interactive mode, uninstalling all channels."
+    echo "Non-interactive mode (stdin not a tty), uninstalling all channels."
     echo ""; return
   fi
 
@@ -129,6 +129,10 @@ select_channels() {
 
 confirm() {
   echo -e "${YELLOW}${BOLD}⚠  This will remove Lore from the selected channels.${NC}"
+  if ! [ -t 0 ]; then
+    echo "stdin not a tty, proceeding automatically."
+    echo ""; return
+  fi
   read -r -p "Continue? [y/N]: " answer
   [[ "$answer" =~ ^[Yy] ]] || { err "Aborted."; exit 1; }
   echo ""
@@ -392,20 +396,30 @@ cleanup_shared() {
 
   # Remove config file
   if [[ -f "$LORE_CONFIG_FILE" ]]; then
-    read -r -p "Remove Lore config ($LORE_CONFIG_FILE)? [y/N]: " ans
-    if [[ "$ans" =~ ^[Yy] ]]; then
+    if ! [ -t 0 ]; then
       rm -f "$LORE_CONFIG_FILE"
       ok "Removed $LORE_CONFIG_FILE"
+    else
+      read -r -p "Remove Lore config ($LORE_CONFIG_FILE)? [y/N]: " ans
+      if [[ "$ans" =~ ^[Yy] ]]; then
+        rm -f "$LORE_CONFIG_FILE"
+        ok "Removed $LORE_CONFIG_FILE"
+      fi
     fi
   fi
 
   # Remove docker dir
   local docker_dir="$LORE_HOME/docker"
   if [[ -d "$docker_dir" ]]; then
-    read -r -p "Remove Lore Docker config ($docker_dir)? [y/N]: " ans
-    if [[ "$ans" =~ ^[Yy] ]]; then
+    if ! [ -t 0 ]; then
       rm -rf "$docker_dir"
       ok "Removed $docker_dir"
+    else
+      read -r -p "Remove Lore Docker config ($docker_dir)? [y/N]: " ans
+      if [[ "$ans" =~ ^[Yy] ]]; then
+        rm -rf "$docker_dir"
+        ok "Removed $docker_dir"
+      fi
     fi
   fi
 
