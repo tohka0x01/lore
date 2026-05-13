@@ -73,9 +73,10 @@ export async function dispatchDreamTool(
       return await searchMemories({ query: args.query as string, limit: (args.limit as number) || 10 });
     case 'list_domains':
       return await listDomains();
-    case 'get_today_recall_metadata':
+    case 'get_recall_metadata':
       return await getDreamRecallReview({
         date: (args.date as string) || '',
+        days: (args.days as number) || 0,
         limit: (args.limit as number) || 100,
         offset: (args.offset as number) || 0,
       });

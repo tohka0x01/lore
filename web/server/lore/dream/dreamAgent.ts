@@ -51,7 +51,7 @@ export type DreamPhase = 'diagnose' | 'plan' | 'preflight' | 'apply' | 'audit';
 
 const DREAM_PHASE_TOOLS: Record<DreamPhase, string[]> = {
   diagnose: [
-    'get_today_recall_metadata',
+    'get_recall_metadata',
     'get_node',
     'search',
     'list_domains',
@@ -69,7 +69,7 @@ const DREAM_PHASE_TOOLS: Record<DreamPhase, string[]> = {
     'inspect_memory_node_for_dream',
   ],
   plan: [
-    'get_today_recall_metadata',
+    'get_recall_metadata',
     'get_node',
     'search',
     'get_query_recall_detail',
@@ -151,7 +151,7 @@ export function buildDreamTools(): ToolDefinition[] {
     { name: 'get_node', description: 'Read a memory node by URI', parameters: { type: 'object', properties: { uri: { type: 'string', description: 'Memory URI e.g. core://soul' } }, required: ['uri'] } },
     { name: 'search', description: 'Search memories by keyword', parameters: { type: 'object', properties: { query: { type: 'string' }, limit: { type: 'integer' } }, required: ['query'] } },
     { name: 'list_domains', description: 'List all memory domains', parameters: { type: 'object', properties: {} } },
-    { name: 'get_today_recall_metadata', description: 'Return bounded raw recall query metadata for one local date. No heuristic flags or algorithmic analysis.', parameters: { type: 'object', properties: { date: { type: 'string' }, limit: { type: 'integer' }, offset: { type: 'integer' } } } },
+    { name: 'get_recall_metadata', description: 'Return bounded raw recall query metadata for one local date, or for the last N days when days is set. No heuristic flags or algorithmic analysis.', parameters: { type: 'object', properties: { date: { type: 'string' }, days: { type: 'integer', description: 'Look back N days instead of a single date. Takes precedence over date.' }, limit: { type: 'integer' }, offset: { type: 'integer' } } } },
     { name: 'get_query_recall_detail', description: 'Inspect one problematic query by query_id or query_text, returning query counts and shown node URIs only', parameters: { type: 'object', properties: { query_id: { type: 'string' }, query_text: { type: 'string' }, days: { type: 'integer' }, limit: { type: 'integer' } } } },
     { name: 'get_query_candidates', description: 'Inspect candidate-level rollups for one recall query; use this after get_query_recall_detail when shown nodes are not enough', parameters: { type: 'object', properties: { query_id: { type: 'string' }, limit: { type: 'integer' }, selected_only: { type: 'boolean' }, used_only: { type: 'boolean' } }, required: ['query_id'] } },
     { name: 'get_query_path_breakdown', description: 'Inspect retrieval path and view-type aggregates for one recall query', parameters: { type: 'object', properties: { query_id: { type: 'string' } }, required: ['query_id'] } },

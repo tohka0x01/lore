@@ -247,7 +247,7 @@ describe('buildDreamTools', () => {
     expect(names).toContain('get_node');
     expect(names).toContain('search');
     expect(names).toContain('list_domains');
-    expect(names).toContain('get_today_recall_metadata');
+    expect(names).toContain('get_recall_metadata');
     expect(names).not.toContain('get_node_recall_detail');
     expect(names).toContain('get_query_recall_detail');
     expect(names).toContain('get_query_candidates');
@@ -380,10 +380,10 @@ describe('executeDreamTool', () => {
     expect(mockListDomains).toHaveBeenCalled();
   });
 
-  it('dispatches get_today_recall_metadata to raw recall metadata helper', async () => {
+  it('dispatches get_recall_metadata to raw recall metadata helper', async () => {
     mockGetDreamRecallReview.mockResolvedValue({ queries: [] } as any);
-    await executeDreamTool('get_today_recall_metadata', { date: '2026-05-07', limit: 100, offset: 10 });
-    expect(mockGetDreamRecallReview).toHaveBeenCalledWith({ date: '2026-05-07', limit: 100, offset: 10 });
+    await executeDreamTool('get_recall_metadata', { date: '2026-05-07', limit: 100, offset: 10 });
+    expect(mockGetDreamRecallReview).toHaveBeenCalledWith({ date: '2026-05-07', days: 0, limit: 100, offset: 10 });
   });
 
   it('dispatches get_query_recall_detail to dream-focused query detail', async () => {

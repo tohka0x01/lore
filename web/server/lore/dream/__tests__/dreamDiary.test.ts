@@ -400,7 +400,7 @@ describe('runDream', () => {
         eventContext: { source: 'dream:auto', session_id: 'dream:1' },
       }),
     );
-    expect(vi.mocked(recallAnalytics.getDreamRecallReview)).toHaveBeenCalledWith({ limit: 100 });
+    expect(vi.mocked(recallAnalytics.getDreamRecallReview)).toHaveBeenCalledWith({ days: 1, limit: 100 });
 
     const updateCall = mockSql.mock.calls.find((call) => String(call[0]).includes('UPDATE dream_diary SET status = \'completed\''));
     expect(updateCall).toBeTruthy();

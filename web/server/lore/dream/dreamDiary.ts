@@ -93,7 +93,7 @@ export async function runDream(): Promise<DreamResult> {
     const [boot, recallStats, recallReview, writeStats] = await Promise.all([
       bootView({ client_type: 'admin' }),
       getRecallStats({ days: 1, limit: 20 }),
-      getDreamRecallReview({ limit: 100 }),
+      getDreamRecallReview({ days: 1, limit: 100 }),
       getWriteEventStats({ days: 1, limit: 20 }),
     ]);
     const recallReviewRecord = recallReview as unknown as Record<string, unknown>;
