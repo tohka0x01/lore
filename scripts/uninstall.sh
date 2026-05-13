@@ -6,15 +6,44 @@ set -euo pipefail
 # =============================================================================
 #
 # Usage:
-#   curl -fsSL https://raw.githubusercontent.com/FFatTiger/lore/main/scripts/uninstall.sh | bash
+#   curl -fsSL https://raw.githubusercontent.com/FFatTiger/lore/main/scripts/uninstall.sh | bash -s -- [OPTIONS]
 #
-# Env vars:
-#   LORE_UNINSTALL_CHANNELS — comma-separated list: claudecode,codex,pi,openclaw,hermes
-#   LORE_UNINSTALL_NO_INTERACTIVE=1 — non-interactive mode (uninstall all)
-#   LORE_HOME              — override lore home dir (default: ~/.lore)
+# Options:
+#   --channels CH,...    Channels: claudecode,codex,pi,openclaw,hermes; default all
+#   --purge              Also remove config and Docker data
+#   -y                   Skip confirmation prompt
+#   -h, --help           Show help
+#
+# Examples:
+#   # Uninstall all channels
+#   curl -fsSL .../uninstall.sh | bash -s --
+#
+#   # Uninstall specific channels
+#   curl -fsSL .../uninstall.sh | bash -s -- --channels claudecode,codex
+#
+#   # Full purge (config + docker data)
+#   curl -fsSL .../uninstall.sh | bash -s -- --purge -y
+
+# ---- Args ----
+
+CHANNELS_RAW=""
+PURGE=0
+SKIP_CONFIRM=0
+SHOW_HELP=0
+
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --channels) CHANNELS_RAW="$2"; shift 2;;
+    --purge)    PURGE=1; shift;;
+    -y)         SKIP_CONFIRM=1; shift;;
+    -h|--help)  SHOW_HELP=1; shift;;
+    *) shift;;
+  esac
+done
 
 # ---- Constants ----
 
+ALL_CHANNELS=(claudecode codex pi openclaw hermes)
 LORE_HOME="${LORE_HOME:-$HOME/.lore}"
 LORE_CONFIG_FILE="$LORE_HOME/config.json"
 
@@ -31,111 +60,29 @@ section() { echo ""; echo -e "${BOLD}── $1${NC}"; }
 
 have_command() { command -v "$1" >/dev/null 2>&1; }
 
-# ---- Interactive multi-select ----
+# ---- Resolve channels ----
 
-multi_select() {
-  local channels=("claudecode" "codex" "pi" "openclaw" "hermes")
-  local labels=(
-    "Claude Code  (plugin + hooks + guidance)"
-    "Codex        (marketplace + MCP + hooks)"
-    "Pi           (extension symlink)"
-    "OpenClaw     (plugin + config)"
-    "Hermes       (env config)"
-  )
-  local n=${#channels[@]}
-
-  local selected=()
-  for i in $(seq 0 $((n - 1))); do selected+=("0"); done
-
-  local cursor=0
-  local old_tty
-  old_tty=$(stty -g 2>/dev/null || true)
-  stty -echo -icanon min 0 time 0 2>/dev/null || true
-  trap 'stty "$old_tty" 2>/dev/null || true' EXIT
-
-  _menu_drawn=0 _menu_lines=0
-
-  draw_menu() {
-    if [[ $_menu_drawn -gt 0 ]]; then printf '\033[%dA' "$((_menu_lines))"; fi
-    _menu_lines=$((n + 4))
-    echo ""
-    echo -e "${BOLD}Select channels to uninstall (Space=toggle, Enter=confirm):${NC}"
-    echo ""
-    for i in $(seq 0 $((n - 1))); do
-      local label="${labels[$i]}" sel="${selected[$i]}" prefix="○"
-      [[ "$sel" == "1" ]] && prefix="◉"
-      if [[ "$i" == "$cursor" ]]; then
-        if [[ "$sel" == "1" ]]; then
-          echo -e "  ${RED}${BOLD}> ${prefix} ${label}${NC}"
-        else
-          echo -e "  ${BOLD}> ${prefix} ${label}${NC}"
-        fi
-      else
-        if [[ "$sel" == "1" ]]; then
-          echo -e "  ${RED}  ${prefix} ${label}${NC}"
-        else
-          echo -e "    ${prefix} ${label}"
-        fi
-      fi
-    done
-    _menu_drawn=1
-  }
-
-  while true; do
-    draw_menu
-    local key
-    key=$(dd bs=3 count=1 2>/dev/null | xxd -p)
-    case "$key" in
-      6a|1b5b42) cursor=$(( (cursor + 1) % n )) ;;
-      6b|1b5b41) cursor=$(( (cursor - 1 + n) % n )) ;;
-      20) [[ "${selected[$cursor]}" == "1" ]] && selected[$cursor]="0" || selected[$cursor]="1" ;;
-      0a|0d) echo ""; echo ""; break ;;
-      61) for i in $(seq 0 $((n - 1))); do selected[$i]="1"; done ;;
-      71) stty "$old_tty" 2>/dev/null || true; echo ""; err "Aborted."; exit 1 ;;
-    esac
-  done
-
-  stty "$old_tty" 2>/dev/null || true; trap - EXIT
-
-  CHANNELS=()
-  for i in $(seq 0 $((n - 1))); do
-    [[ "${selected[$i]}" == "1" ]] && CHANNELS+=("${channels[$i]}")
-  done
-
-  if [[ ${#CHANNELS[@]} -eq 0 ]]; then err "No channels selected."; exit 1; fi
-
-  echo -ne "Channels to uninstall: "
-  for ch in "${CHANNELS[@]}"; do echo -ne "${RED}${ch}${NC} "; done
-  echo ""; echo ""
-}
-
-# ---- Channel selection ----
-
-select_channels() {
-  if [[ -n "${LORE_UNINSTALL_CHANNELS:-}" ]]; then
-    IFS=',' read -ra CHANNELS <<< "$LORE_UNINSTALL_CHANNELS"
-    echo -e "Using LORE_UNINSTALL_CHANNELS: ${LORE_UNINSTALL_CHANNELS}"
-    echo ""; return
+resolve_channels() {
+  if [[ -n "$CHANNELS_RAW" ]]; then
+    IFS=',' read -ra CHANNELS <<< "$CHANNELS_RAW"
+  else
+    CHANNELS=("${ALL_CHANNELS[@]}")
   fi
-
-  if [[ "${LORE_UNINSTALL_NO_INTERACTIVE:-0}" == "1" ]] || ! [ -t 0 ]; then
-    CHANNELS=("claudecode" "codex" "pi" "openclaw" "hermes")
-    echo "Non-interactive mode (stdin not a tty), uninstalling all channels."
-    echo ""; return
-  fi
-
-  multi_select
 }
 
 confirm() {
-  echo -e "${YELLOW}${BOLD}⚠  This will remove Lore from the selected channels.${NC}"
-  if ! [ -t 0 ]; then
-    echo "stdin not a tty, proceeding automatically."
-    echo ""; return
-  fi
-  read -r -p "Continue? [y/N]: " answer
-  [[ "$answer" =~ ^[Yy] ]] || { err "Aborted."; exit 1; }
   echo ""
+  echo -e "  Channels: ${RED}${CHANNELS[*]}${NC}"
+  [[ $PURGE -eq 1 ]] && echo -e "  ${YELLOW}--purge: will remove config + Docker data${NC}"
+  echo ""
+
+  if [[ $SKIP_CONFIRM -eq 1 ]] || ! [ -t 0 ]; then
+    info "Proceeding automatically."
+    return
+  fi
+
+  read -r -p "  Uninstall these channels? [y/N]: " answer
+  [[ "$answer" =~ ^[Yy] ]] || { err "Aborted."; exit 1; }
 }
 
 # ---- Uninstall: Claude Code ----
@@ -143,7 +90,6 @@ confirm() {
 uninstall_claudecode() {
   section "Claude Code"
 
-  # Remove plugin
   if have_command claude; then
     info "Removing lore plugin..."
     claude plugins uninstall lore@lore 2>/dev/null && \
@@ -158,12 +104,11 @@ uninstall_claudecode() {
   if [[ -f "$settings_file" ]] && have_command python3; then
     info "Removing Lore env vars from settings.json..."
     python3 - "$settings_file" <<'PY'
-import sys, json, os
+import sys, json
 path = sys.argv[1]
 try:
     with open(path, 'r') as f: data = json.load(f)
 except (json.JSONDecodeError, IOError): sys.exit(0)
-
 changed = False
 if isinstance(data, dict) and "env" in data:
     for key in ["LORE_BASE_URL", "LORE_API_TOKEN"]:
@@ -172,10 +117,8 @@ if isinstance(data, dict) and "env" in data:
             changed = True
     if not data["env"]:
         del data["env"]
-
 if changed:
     with open(path, 'w') as f: json.dump(data, f, indent=2, ensure_ascii=False)
-    print("ok")
 PY
     ok "Env vars removed from settings.json."
   fi
@@ -225,7 +168,7 @@ uninstall_codex() {
     info "codex CLI not found, skipping CLI-based removal."
   fi
 
-  # Remove plugin directory (both old and new paths)
+  # Remove plugin directories
   local plugin_dir="$codex_home/plugins/lore-local-marketplace"
   [[ -d "$plugin_dir" ]] && { rm -rf "$plugin_dir"; ok "Removed $plugin_dir"; }
 
@@ -241,12 +184,11 @@ uninstall_codex() {
   if [[ -f "$hooks_json" ]] && have_command python3; then
     info "Removing Lore hooks from hooks.json..."
     python3 - "$hooks_json" <<'PY'
-import sys, json, os
+import sys, json
 path = sys.argv[1]
 try:
     with open(path, 'r') as f: data = json.load(f)
 except (json.JSONDecodeError, IOError): sys.exit(0)
-
 changed = False
 if isinstance(data, dict) and "hooks" in data:
     for event_name in list(data["hooks"].keys()):
@@ -267,10 +209,8 @@ if isinstance(data, dict) and "hooks" in data:
                 del data["hooks"][event_name]
     if not data["hooks"]:
         del data["hooks"]
-
 if changed:
     with open(path, 'w') as f: json.dump(data, f, indent=2, ensure_ascii=False)
-    print("ok")
 PY
     ok "Hook entries removed from hooks.json."
   fi
@@ -283,7 +223,6 @@ PY
 import sys
 path = sys.argv[1]
 with open(path, "r", encoding="utf-8") as f: lines = f.read().splitlines()
-
 section = '[plugins."lore@lore"]'
 out = []
 skip = False
@@ -297,10 +236,8 @@ for line in lines:
         else:
             continue
     out.append(line)
-
 while out and out[-1].strip() == "": out.pop()
 with open(path, "w", encoding="utf-8") as f: f.write("\n".join(out) + "\n")
-print("ok")
 PY
     ok "Plugin config removed from config.toml."
   fi
@@ -318,12 +255,11 @@ uninstall_pi() {
     rm -f "$pi_ext"
     ok "Removed Pi extension symlink."
   elif [[ -d "$pi_ext" ]]; then
-    warn "$pi_ext exists but is not a symlink — skipping (remove manually if desired)."
+    warn "$pi_ext is not a symlink — skipping."
   else
     info "Pi extension not found."
   fi
 
-  # Remove downloaded plugin dir
   local pi_dir="$LORE_HOME/pi"
   [[ -d "$pi_dir" ]] && { rm -rf "$pi_dir"; ok "Removed $pi_dir"; }
 
@@ -338,7 +274,6 @@ uninstall_openclaw() {
   if have_command openclaw; then
     info "Disabling Lore plugin..."
     openclaw plugins disable lore 2>/dev/null || true
-
     info "Uninstalling Lore plugin..."
     openclaw plugins uninstall lore 2>/dev/null && \
       ok "Plugin uninstalled." || info "Plugin not found."
@@ -346,7 +281,6 @@ uninstall_openclaw() {
     info "openclaw CLI not found, skipping CLI-based removal."
   fi
 
-  # Remove config from openclaw.json
   local oc_config="$HOME/.openclaw/openclaw.json"
   if [[ -f "$oc_config" ]] && have_command python3; then
     info "Removing Lore config from openclaw.json..."
@@ -362,12 +296,10 @@ if isinstance(data, dict):
         changed = True
 if changed:
     with open(path, 'w') as f: json.dump(data, f, indent=2, ensure_ascii=False)
-    print("ok")
 PY
     ok "Config removed from openclaw.json."
   fi
 
-  # Remove downloaded plugin dir
   local oc_dir="$LORE_HOME/openclaw"
   [[ -d "$oc_dir" ]] && { rm -rf "$oc_dir"; ok "Removed $oc_dir"; }
 
@@ -380,48 +312,25 @@ uninstall_hermes() {
   section "Hermes"
 
   info "Hermes install was manual (env vars + symlink)."
-  info "Remove the lore_memory symlink and LORE_* env vars from your Hermes config manually."
+  info "Remove the lore_memory symlink and LORE_* env vars manually."
 
-  # Remove downloaded plugin dir
   local hermes_dir="$LORE_HOME/hermes"
   [[ -d "$hermes_dir" ]] && { rm -rf "$hermes_dir"; ok "Removed $hermes_dir"; }
 
-  ok "Hermes uninstall info printed."
+  ok "Hermes uninstall complete."
 }
 
 # ---- Cleanup shared resources ----
 
 cleanup_shared() {
-  section "Shared resources"
+  [[ $PURGE -eq 1 ]] || return
 
-  # Remove config file
-  if [[ -f "$LORE_CONFIG_FILE" ]]; then
-    if ! [ -t 0 ]; then
-      rm -f "$LORE_CONFIG_FILE"
-      ok "Removed $LORE_CONFIG_FILE"
-    else
-      read -r -p "Remove Lore config ($LORE_CONFIG_FILE)? [y/N]: " ans
-      if [[ "$ans" =~ ^[Yy] ]]; then
-        rm -f "$LORE_CONFIG_FILE"
-        ok "Removed $LORE_CONFIG_FILE"
-      fi
-    fi
-  fi
+  section "Purge shared resources"
 
-  # Remove docker dir
+  [[ -f "$LORE_CONFIG_FILE" ]] && { rm -f "$LORE_CONFIG_FILE"; ok "Removed $LORE_CONFIG_FILE"; }
+
   local docker_dir="$LORE_HOME/docker"
-  if [[ -d "$docker_dir" ]]; then
-    if ! [ -t 0 ]; then
-      rm -rf "$docker_dir"
-      ok "Removed $docker_dir"
-    else
-      read -r -p "Remove Lore Docker config ($docker_dir)? [y/N]: " ans
-      if [[ "$ans" =~ ^[Yy] ]]; then
-        rm -rf "$docker_dir"
-        ok "Removed $docker_dir"
-      fi
-    fi
-  fi
+  [[ -d "$docker_dir" ]] && { rm -rf "$docker_dir"; ok "Removed $docker_dir"; }
 
   # Remove LORE_HOME if empty
   if [[ -d "$LORE_HOME" ]] && [[ -z "$(ls -A "$LORE_HOME" 2>/dev/null)" ]]; then
@@ -450,6 +359,17 @@ summary() {
 # ---- Main ----
 
 main() {
+  if [[ $SHOW_HELP -eq 1 ]]; then
+    echo "Usage: curl -fsSL .../uninstall.sh | bash -s -- [OPTIONS]"
+    echo ""
+    echo "Options:"
+    echo "  --channels CH,...  Channels to uninstall (default: all)"
+    echo "  --purge            Also remove config and Docker data"
+    echo "  -y                 Skip confirmation prompt"
+    echo "  -h, --help         Show this help"
+    exit 0
+  fi
+
   echo ""
   echo -e "${RED}${BOLD} _     ____  ____  _____ ${NC}"
   echo -e "${RED}${BOLD}/ \   /  _ \/  __\/  __/ ${NC}  Lore — uninstall"
@@ -458,7 +378,7 @@ main() {
   echo -e "${RED}${BOLD}\____/\____/\_/\_\\____\ ${NC}"
   echo ""
 
-  select_channels
+  resolve_channels
   confirm
 
   for ch in "${CHANNELS[@]}"; do
