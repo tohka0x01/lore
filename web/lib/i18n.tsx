@@ -500,7 +500,7 @@ const DICT: Record<'zh' | 'en', Record<string, string>> = {
     'Preflight validation': '预检验证',
     'Bounded apply': '限量执行',
     'Structured audit': '结构化审计',
-    'Poetic diary rewrite': '诗性日记重写',
+    'Poetic diary rewrite': '日记',
     'Moved': '已移动',
     'Disclosure changed': '披露已变更',
     '(none)': '（无）',

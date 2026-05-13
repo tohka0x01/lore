@@ -128,6 +128,41 @@ function parseDreamAudit(rawNarrative: string): DreamAudit | null {
   };
 }
 
+
+export function formatOriginalDreamNarrativeForView(rawNarrative: string, t: (key: string) => string): string {
+  const audit = parseDreamAudit(rawNarrative);
+  if (!audit) return rawNarrative;
+
+  const lines: string[] = [];
+  if (audit.primary_focus) lines.push(`${t('Primary focus')}: ${audit.primary_focus}`);
+
+  const changedNodes = audit.changed_nodes || [];
+  if (changedNodes.length > 0) {
+    lines.push(`${t('Changed nodes')}: ${changedNodes.length}`);
+    for (const node of changedNodes) {
+      const header = [node.action, node.result].filter(Boolean).join(' · ');
+      const details = [header, node.uri].filter(Boolean).join(' — ');
+      if (details) lines.push(`- ${details}`);
+      for (const change of node.changes || []) lines.push(`  - ${change}`);
+    }
+  }
+
+  const evidence = audit.evidence || [];
+  if (evidence.length > 0) {
+    lines.push(`${t('Evidence')}: ${evidence.length}`);
+    for (const item of evidence) {
+      const details = [item.query_id, item.reason].filter(Boolean).join(' — ');
+      if (details) lines.push(`- ${details}`);
+    }
+  }
+
+  if (audit.why_not_more_changes) lines.push(`${t('Why not more changes')}: ${audit.why_not_more_changes}`);
+  if (audit.expected_effect) lines.push(`${t('Expected effect')}: ${audit.expected_effect}`);
+  if (audit.confidence) lines.push(`${t('Confidence')}: ${audit.confidence}`);
+
+  return lines.join('\n');
+}
+
 function resultTone(result: string | undefined): BadgeTone {
   if (result === 'success' || result === 'applied') return 'green';
   if (result === 'skipped') return 'soft';
@@ -171,6 +206,10 @@ function getSummaryBadges(entry: DreamEntry, t: (key: string) => string): Array<
     badges.push({ key: 'tool_calls', label: `${summary.agent.tool_calls} ${t('calls')}`, tone: 'blue' });
   }
   return badges;
+}
+
+function normalizeWorkflowStageLabel(label: string): string {
+  return label === 'Poetic diary rewrite' ? 'Diary' : label;
 }
 
 function workflowEventLabel(eventType: string): string {
@@ -318,7 +357,7 @@ function buildWorkflowStageRows(
     const existing = rowsByPhase.get(key);
     rowsByPhase.set(key, {
       key,
-      label: String(event.payload?.label || existing?.label || workflowEventLabel(event.event_type)),
+      label: normalizeWorkflowStageLabel(String(event.payload?.label || existing?.label || workflowEventLabel(event.event_type))),
       tone: workflowEventTone(event.event_type),
       detail: event.event_type === 'phase_completed' ? formatStageSummary(event.payload?.summary, t) : existing?.detail || '',
       conclusion: conclusionsByPhase.get(key) || existing?.conclusion || '',
@@ -344,6 +383,7 @@ interface DreamDetailViewProps {
 }
 
 export function DreamDetailView({ entry, loading, canRollback, rollingBack, onBack, onRollback, t }: DreamDetailViewProps): React.JSX.Element {
+  const [showOriginalDiary, setShowOriginalDiary] = useState(false);
   const stats = useMemo(() => {
     const toolCalls = entry?.tool_calls || [];
     const changes = entry?.memory_changes || [];
@@ -361,6 +401,10 @@ export function DreamDetailView({ entry, loading, canRollback, rollingBack, onBa
     };
   }, [entry]);
 
+  useEffect(() => {
+    setShowOriginalDiary(false);
+  }, [entry?.id]);
+
   if (loading || !entry) {
     return (
       <>
@@ -375,6 +419,9 @@ export function DreamDetailView({ entry, loading, canRollback, rollingBack, onBa
   const rawNarrative = entry.raw_narrative || entry.narrative || '';
   const poeticNarrative = entry.poetic_narrative || entry.narrative || rawNarrative;
   const audit = parseDreamAudit(rawNarrative);
+  const originalNarrative = formatOriginalDreamNarrativeForView(rawNarrative, t);
+  const canToggleOriginalDiary = Boolean(rawNarrative && rawNarrative !== poeticNarrative);
+  const displayedNarrative = showOriginalDiary ? originalNarrative : poeticNarrative;
 
   return (
     <>
@@ -402,13 +449,22 @@ export function DreamDetailView({ entry, loading, canRollback, rollingBack, onBa
         <StatCard label={t('Policy warnings')} value={stats.policyWarnings} tone="orange" compact />
       </div>
 
-      {poeticNarrative && (
+      {displayedNarrative && (
         <Section
-          title={t('Diary')}
+          title={showOriginalDiary ? t('Original Diary') : t('Diary')}
+          right={canToggleOriginalDiary ? (
+            <Button
+              variant="ghost"
+              aria-pressed={showOriginalDiary}
+              onClick={() => setShowOriginalDiary((current) => !current)}
+            >
+              {showOriginalDiary ? t('View diary') : t('View original diary')}
+            </Button>
+          ) : null}
           className="mb-5"
         >
           <div className="prose max-w-none">
-            <ReactMarkdown remarkPlugins={[remarkGfm]}>{poeticNarrative}</ReactMarkdown>
+            <ReactMarkdown remarkPlugins={[remarkGfm]}>{displayedNarrative}</ReactMarkdown>
           </div>
         </Section>
       )}

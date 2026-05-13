@@ -176,20 +176,20 @@ export async function runDream(): Promise<DreamResult> {
     let poeticNarrative = rawNarrative;
     if (llmConfig) {
       currentPhase = 'poetic_rewrite';
-      console.log('[dream] step 3: poetic diary rewrite');
-      await appendDreamWorkflowEvent(diaryId, 'phase_started', { phase: 'poetic_rewrite', label: 'Poetic diary rewrite' });
+      console.log('[dream] step 3: diary rewrite');
+      await appendDreamWorkflowEvent(diaryId, 'phase_started', { phase: 'poetic_rewrite', label: 'Diary' });
       try {
         poeticNarrative = await rewriteDreamNarrative(llmConfig, rawNarrative);
         await appendDreamWorkflowEvent(diaryId, 'phase_completed', {
           phase: 'poetic_rewrite',
-          label: 'Poetic diary rewrite',
+          label: 'Diary',
           summary: { fallback: false },
         });
       } catch (rewriteError: unknown) {
         poeticNarrative = rawNarrative;
         await appendDreamWorkflowEvent(diaryId, 'phase_completed', {
           phase: 'poetic_rewrite',
-          label: 'Poetic diary rewrite',
+          label: 'Diary',
           summary: { fallback: true, error: (rewriteError as Error).message },
         });
       }

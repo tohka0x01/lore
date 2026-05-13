@@ -481,6 +481,7 @@ describe('runDream', () => {
     expect(result.narrative).toBe('done');
     expect(mockAppendDreamWorkflowEvent).toHaveBeenCalledWith(2, 'phase_completed', expect.objectContaining({
       phase: 'poetic_rewrite',
+      label: 'Diary',
       summary: expect.objectContaining({ fallback: true, error: 'rewrite down' }),
     }));
   });

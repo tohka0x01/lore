@@ -1,7 +1,7 @@
 import React from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it } from 'vitest';
-import { DreamDetailView } from '../DreamDetailView';
+import { DreamDetailView, formatOriginalDreamNarrativeForView } from '../DreamDetailView';
 import type { DreamEntry } from '../useDreamPageController';
 
 function entry(overrides: Partial<DreamEntry> = {}): DreamEntry {
@@ -11,9 +11,9 @@ function entry(overrides: Partial<DreamEntry> = {}): DreamEntry {
     started_at: '2024-01-01T00:00:00Z',
     duration_ms: 1000,
     summary: {},
-    narrative: 'Poetic diary',
+    narrative: 'Diary entry',
     raw_narrative: 'Raw audit diary',
-    poetic_narrative: 'Poetic diary',
+    poetic_narrative: 'Diary entry',
     tool_calls: [],
     workflow_events: [],
     memory_changes: [],
@@ -22,7 +22,27 @@ function entry(overrides: Partial<DreamEntry> = {}): DreamEntry {
 }
 
 describe('DreamDetailView', () => {
-  it('shows the diary and structured audit without the legacy original diary toggle', () => {
+
+  it('formats structured audit JSON into a readable original diary', () => {
+    const audit = {
+      primary_focus: 'recall_repair',
+      changed_nodes: [{ uri: 'project://node', action: 'update_node', result: 'success', changes: ['补充 glossary'] }],
+      evidence: [{ query_id: 'q1', reason: '召回缺少目标节点' }],
+      why_not_more_changes: '证据只支持一次更新。',
+      expected_effect: '后续召回更稳。',
+      confidence: 'high',
+    };
+
+    const text = formatOriginalDreamNarrativeForView(JSON.stringify(audit), (key) => key);
+
+    expect(text).toContain('Primary focus: recall_repair');
+    expect(text).toContain('project://node');
+    expect(text).toContain('补充 glossary');
+    expect(text).toContain('召回缺少目标节点');
+    expect(text).not.toContain('{');
+  });
+
+  it('shows the diary with an original diary toggle and structured audit', () => {
     const audit = {
       primary_focus: 'tree_maintenance',
       changed_nodes: [
@@ -45,7 +65,7 @@ describe('DreamDetailView', () => {
     };
     const html = renderToStaticMarkup(
       <DreamDetailView
-        entry={entry({ raw_narrative: JSON.stringify(audit), poetic_narrative: 'Poetic diary' })}
+        entry={entry({ raw_narrative: JSON.stringify(audit), poetic_narrative: 'Diary entry' })}
         loading={false}
         canRollback={false}
         rollingBack={false}
@@ -56,8 +76,9 @@ describe('DreamDetailView', () => {
     );
 
     expect(html).toContain('Diary');
-    expect(html).toContain('Poetic diary');
-    expect(html).not.toContain('View original diary');
+    expect(html).toContain('Diary entry');
+    expect(html).toContain('View original diary');
+    expect(html).not.toContain('Raw audit diary');
     expect(html).not.toContain('Original Diary');
     expect(html).toContain('Dream Audit');
     expect(html).toContain('tree_maintenance');
@@ -112,6 +133,41 @@ describe('DreamDetailView', () => {
     expect(html).not.toContain('Changed nodes');
     const uri = 'project://lore_integration/dream_system/dream_prompt_workflow_review';
     expect(html.split(uri).length - 1).toBe(1);
+  });
+
+
+  it('normalizes legacy poetic stage labels to diary on the page', () => {
+    const html = renderToStaticMarkup(
+      <DreamDetailView
+        entry={entry({
+          workflow_events: [
+            {
+              id: 1,
+              diary_id: 1,
+              event_type: 'phase_started',
+              payload: { phase: 'poetic_rewrite', label: 'Poetic diary rewrite' },
+              created_at: '2024-01-01T00:00:00Z',
+            },
+            {
+              id: 2,
+              diary_id: 1,
+              event_type: 'phase_completed',
+              payload: { phase: 'poetic_rewrite', label: 'Poetic diary rewrite', summary: {} },
+              created_at: '2024-01-01T00:00:01Z',
+            },
+          ],
+        })}
+        loading={false}
+        canRollback={false}
+        rollingBack={false}
+        onBack={() => undefined}
+        onRollback={() => undefined}
+        t={(key) => key}
+      />,
+    );
+
+    expect(html).toContain('Diary');
+    expect(html).not.toContain('Poetic diary rewrite');
   });
 
   it('shows agent stages without detailed tool workflow events', () => {
