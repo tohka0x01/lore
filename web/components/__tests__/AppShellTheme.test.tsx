@@ -11,6 +11,10 @@ vi.mock('@lobehub/ui', () => ({
   ConfigProvider: ({ children }: { children: React.ReactNode }) => <div data-lobe-config-provider="true">{children}</div>,
 }));
 
+vi.mock('@lobehub/ui/awesome', () => ({
+  AuroraBackground: ({ children }: { children?: React.ReactNode }) => <div data-aurora-background="true">{children}</div>,
+}));
+
 vi.mock('@lobehub/ui/es/ThemeProvider/index', () => ({
   default: ({ appearance, children }: { appearance?: string; children: React.ReactNode }) => (
     <div data-lobe-theme-provider="true" data-appearance={appearance}>{children}</div>
@@ -43,7 +47,7 @@ vi.mock('../../lib/i18n', () => ({
 }));
 
 vi.mock('../../lib/theme', () => ({
-  useTheme: () => ({ theme: 'light', toggleTheme: vi.fn() }),
+  useTheme: () => ({ auroraBackgroundEnabled: false, setAuroraBackgroundEnabled: vi.fn(), theme: 'light', toggleAuroraBackground: vi.fn(), toggleTheme: vi.fn() }),
 }));
 
 vi.mock('../ui', () => ({
