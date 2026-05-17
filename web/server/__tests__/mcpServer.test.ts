@@ -125,6 +125,17 @@ describe('embedded MCP contract projections', () => {
     });
   });
 
+  it('exposes glossary mutations on update without full replacement', () => {
+    const server = createMcpServer();
+    const tool = (server as any)._registeredTools.lore_update_node;
+    const shape = tool.inputSchema._def.shape();
+
+    expect(shape.glossary).toBeUndefined();
+    expect(shape.glossary_add).toBeDefined();
+    expect(shape.glossary_remove).toBeDefined();
+    expect(tool.description).not.toContain('glossary fields');
+  });
+
   it('passes glossary mutations into the canonical update operation', async () => {
     mockUpdateNodeByPath.mockResolvedValueOnce({
       success: true,
@@ -157,7 +168,7 @@ describe('embedded MCP contract projections', () => {
     });
   });
 
-  it('passes glossary replacement into the canonical update operation', async () => {
+  it('ignores glossary replacement arguments on update', async () => {
     mockUpdateNodeByPath.mockResolvedValueOnce({
       success: true,
       operation: 'update',
@@ -170,20 +181,20 @@ describe('embedded MCP contract projections', () => {
     const result = await handler({
       uri: 'core://agent/profile',
       glossary: ['alpha', ' alpha ', 'beta'],
+      glossary_add: ['gamma'],
     });
 
     expect(mockUpdateNodeByPath).toHaveBeenCalledWith(
       {
         domain: 'core',
         path: 'agent/profile',
-        glossary: ['alpha', 'beta'],
-        glossaryAdd: [],
+        glossaryAdd: ['gamma'],
         glossaryRemove: [],
       },
       { source: 'mcp:lore_update_node', client_type: null },
     );
     expect(result).toEqual({
-      content: [{ type: 'text', text: 'Updated core://agent/profile\nglossary= alpha, beta' }],
+      content: [{ type: 'text', text: 'Updated core://agent/profile\nglossary+ gamma' }],
     });
   });
 

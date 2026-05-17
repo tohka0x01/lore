@@ -181,7 +181,6 @@ export async function dispatchDreamTool(
             content: args.content as string | undefined,
             priority: args.priority as number | undefined,
             disclosure: args.disclosure as string | undefined,
-            glossary: Array.isArray(args.glossary) ? args.glossary as string[] : undefined,
             glossaryAdd: Array.isArray(args.glossary_add) ? args.glossary_add as string[] : [],
             glossaryRemove: Array.isArray(args.glossary_remove) ? args.glossary_remove as string[] : [],
           },

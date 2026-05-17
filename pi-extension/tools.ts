@@ -247,14 +247,13 @@ export function registerTools(pi: any, pluginCfg: any) {
   pi.registerTool({
     name: 'lore_update_node',
     label: 'Lore update node',
-    description: 'Revise an existing long-term memory node. Any provided content, metadata, and glossary fields are applied as one node update event; omitted fields are left unchanged.',
+    description: 'Revise an existing long-term memory node. Omitted content, metadata, and glossary mutation fields are left unchanged.',
     parameters: Type.Object({
       uri: Type.String({ description: 'Full memory URI for the node you want to revise.' }),
       content: Type.Optional(Type.String({ description: 'New content to replace the existing content; omit to leave content unchanged.' })),
       priority: Type.Optional(Type.Number({ minimum: 0, description: 'New priority level; omit to leave priority unchanged.' })),
       disclosure: Type.Optional(Type.String({ description: 'New disclosure / trigger condition; omit to leave disclosure unchanged.' })),
       session_id: Type.Optional(Type.String({ description: 'Session ID for read-before-update validation.' })),
-      glossary: Type.Optional(Type.Array(Type.String({ description: 'Search keyword.' }), { description: 'Full replacement list for this node glossary. Omit to leave glossary unchanged; pass [] to clear it.' })),
       glossary_add: Type.Optional(Type.Array(Type.String({ description: 'Search keyword.' }), { description: 'Keywords to add as part of this same node update event.' })),
       glossary_remove: Type.Optional(Type.Array(Type.String({ description: 'Search keyword.' }), { description: 'Keywords to remove as part of this same node update event.' })),
     }),
@@ -262,12 +261,10 @@ export function registerTools(pi: any, pluginCfg: any) {
       const body: any = {};
       const glossaryAdd = normalizeKeywordList(params?.glossary_add);
       const glossaryRemove = normalizeKeywordList(params?.glossary_remove);
-      const glossary = Array.isArray(params?.glossary) ? normalizeKeywordList(params.glossary) : undefined;
       if (typeof params?.content === 'string') body.content = params.content;
       if (Number.isFinite(params?.priority)) body.priority = params.priority;
       if (typeof params?.disclosure === 'string') body.disclosure = params.disclosure;
       if (typeof params?.session_id === 'string' && params.session_id.trim()) body.session_id = params.session_id.trim();
-      if (glossary) body.glossary = glossary;
       if (glossaryAdd.length > 0) body.glossary_add = glossaryAdd;
       if (glossaryRemove.length > 0) body.glossary_remove = glossaryRemove;
       let domain = pluginCfg.defaultDomain;
@@ -277,11 +274,10 @@ export function registerTools(pi: any, pluginCfg: any) {
         const qs = new URLSearchParams({ domain, path });
         const data = await fetchJson(pluginCfg, `/browse/node?${qs.toString()}`, { method: 'PUT', body: JSON.stringify(body) });
         const suffixParts: string[] = [];
-        if (glossary) suffixParts.push(`glossary= ${glossary.join(', ')}`);
         if (glossaryAdd.length > 0) suffixParts.push(`glossary+ ${glossaryAdd.join(', ')}`);
         if (glossaryRemove.length > 0) suffixParts.push(`glossary- ${glossaryRemove.join(', ')}`);
         const suffix = suffixParts.length > 0 ? `\n${suffixParts.join('\n')}` : '';
-        return textResult(`Updated ${data?.uri || `${domain}://${path}`}${suffix}`, { ok: true, result: data, glossary, glossary_add: glossaryAdd, glossary_remove: glossaryRemove });
+        return textResult(`Updated ${data?.uri || `${domain}://${path}`}${suffix}`, { ok: true, result: data, glossary_add: glossaryAdd, glossary_remove: glossaryRemove });
       } catch (error: any) {
         return textResult(`Lore update failed: ${error.message}`, { ok: false, error: error.message, domain, path, glossary_add: glossaryAdd, glossary_remove: glossaryRemove });
       }

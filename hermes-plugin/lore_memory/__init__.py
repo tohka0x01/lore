@@ -412,7 +412,7 @@ class LoreMemoryProvider(MemoryProvider):
             },
             {
                 "name": "lore_update_node",
-                "description": "Revise an existing long-term memory node. Any provided content, metadata, and glossary fields are applied as one node update event; omitted fields are left unchanged",
+                "description": "Revise an existing long-term memory node. Omitted content, metadata, and glossary mutation fields are left unchanged",
                 "parameters": {
                     "type": "object",
                     "additionalProperties": False,
@@ -421,7 +421,6 @@ class LoreMemoryProvider(MemoryProvider):
                         "content": {"type": "string", "description": "New content to replace the existing content; omit to leave content unchanged"},
                         "priority": {"type": "integer", "minimum": 0, "description": "New priority level; omit to leave priority unchanged"},
                         "disclosure": {"type": "string", "description": "New disclosure / trigger condition; omit to leave disclosure unchanged"},
-                        "glossary": {"type": "array", "items": {"type": "string"}, "description": "Full replacement list for this node glossary. Omit to leave glossary unchanged; pass [] to clear it"},
                         "glossary_add": {"type": "array", "items": {"type": "string"}, "description": "Keywords to add as part of this same node update event"},
                         "glossary_remove": {"type": "array", "items": {"type": "string"}, "description": "Keywords to remove as part of this same node update event"},
                         "session_id": {"type": "string", "description": "Session identifier from the <recall session_id=\"...\"> tag"},
@@ -597,7 +596,6 @@ class LoreMemoryProvider(MemoryProvider):
             domain=domain, path=path, content=args.get("content"),
             priority=args.get("priority"), disclosure=args.get("disclosure"),
             session_id=args.get("session_id") or self._session_id,
-            glossary=args.get("glossary"),
             glossary_add=args.get("glossary_add"),
             glossary_remove=args.get("glossary_remove")
         )

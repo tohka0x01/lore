@@ -82,6 +82,14 @@ describe('tool parameter schemas', () => {
     expect(tools.lore_update_node.parameters.required).toContain('uri');
   });
 
+  it('lore_update_node exposes glossary mutations without full replacement', () => {
+    const props = tools.lore_update_node.parameters.properties;
+    expect(props.glossary).toBeUndefined();
+    expect(props.glossary_add).toBeDefined();
+    expect(props.glossary_remove).toBeDefined();
+    expect(tools.lore_update_node.description).not.toContain('glossary fields');
+  });
+
   it('lore_delete_node requires uri', () => {
     expect(tools.lore_delete_node.parameters.required).toContain('uri');
   });
@@ -256,7 +264,10 @@ describe('tool response formatting', () => {
     expect(result.content[0].text).toContain('Updated core://agent/profile-renamed');
     expect((fetch as any).mock.calls).toHaveLength(1);
     expect((fetch as any).mock.calls.map((call: any[]) => call[1].method)).not.toContain('GET');
-    expect(JSON.parse((fetch as any).mock.calls[0][1].body)).toMatchObject({ content: 'updated', glossary: ['fresh'], glossary_add: ['memory'] });
+    const body = JSON.parse((fetch as any).mock.calls[0][1].body);
+    expect(body).toMatchObject({ content: 'updated', glossary_add: ['memory'] });
+    expect(body).not.toHaveProperty('glossary');
+    expect(result.content[0].text).not.toContain('glossary=');
   });
 
   it('lore_delete_node prefers canonical delete receipts', async () => {

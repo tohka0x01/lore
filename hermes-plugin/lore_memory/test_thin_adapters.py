@@ -73,12 +73,15 @@ class LoreClientThinAdapterTests(unittest.TestCase):
 
         self.assertEqual(result["uri"], "core://agent/profile-renamed")
         self.assertEqual(len(requests), 1)
-        self.assertEqual(requests[0][1]["data"]["glossary"], ["fresh"])
+        self.assertNotIn("glossary", requests[0][1]["data"])
         self.assertEqual(requests[0][1]["data"]["glossary_add"], ["memory"])
         self.assertEqual(requests[0][1]["data"]["glossary_remove"], ["archive"])
 
 
 class FakeClient:
+    def __init__(self):
+        self.last_update_kwargs = None
+
     def parse_uri(self, uri):
         return uri.split("://", 1)[0], uri.split("://", 1)[1]
 
@@ -89,6 +92,7 @@ class FakeClient:
         return {"uri": "core://agent/profile", "node_uuid": "uuid-create"}
 
     def update_node(self, **kwargs):
+        self.last_update_kwargs = kwargs
         return {"uri": "core://agent/profile-renamed", "node_uuid": "uuid-update"}
 
     def delete_node(self, *args, **kwargs):
@@ -123,6 +127,26 @@ class LoreProviderThinAdapterTests(unittest.TestCase):
         })
 
         self.assertEqual(result, "Updated: core://agent/profile-renamed")
+
+    def test_update_tool_does_not_expose_glossary_replacement(self):
+        schemas = {tool["name"]: tool for tool in self.provider.get_tool_schemas()}
+        props = schemas["lore_update_node"]["parameters"]["properties"]
+
+        self.assertNotIn("glossary", props)
+        self.assertIn("glossary_add", props)
+        self.assertIn("glossary_remove", props)
+        self.assertNotIn("glossary fields", schemas["lore_update_node"]["description"])
+
+    def test_update_tool_ignores_glossary_replacement_argument(self):
+        result = self.provider._tool_lore_update_node({
+            "uri": "core://agent/profile",
+            "glossary": ["fresh"],
+            "glossary_add": ["memory"],
+        })
+
+        self.assertEqual(result, "Updated: core://agent/profile-renamed")
+        self.assertNotIn("glossary", self.provider._client.last_update_kwargs)
+        self.assertEqual(self.provider._client.last_update_kwargs["glossary_add"], ["memory"])
 
     def test_delete_tool_formats_canonical_delete_receipt(self):
         result = self.provider._tool_lore_delete_node({"uri": "core://legacy/profile"})

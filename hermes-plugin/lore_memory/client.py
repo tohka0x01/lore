@@ -168,8 +168,6 @@ class LoreClient:
             data["disclosure"] = disclosure
         if session_id is not None:
             data["session_id"] = session_id
-        if glossary is not None:
-            data["glossary"] = glossary
         if glossary_add:
             data["glossary_add"] = glossary_add
         if glossary_remove:

@@ -275,10 +275,11 @@ describe('buildDreamTools', () => {
   it('exposes glossary changes through update_node only', () => {
     const updateTool = buildDreamTools().find((tool) => tool.name === 'update_node');
     expect(updateTool?.parameters.properties).toMatchObject({
-      glossary: { type: 'array', items: { type: 'string' } },
       glossary_add: { type: 'array', items: { type: 'string' } },
       glossary_remove: { type: 'array', items: { type: 'string' } },
     });
+    expect(updateTool?.parameters.properties).not.toHaveProperty('glossary');
+    expect(updateTool?.description).not.toContain('glossary fields');
   });
 
   it('each tool has required parameters field', () => {
@@ -724,7 +725,6 @@ describe('executeDreamTool', () => {
         domain: 'core',
         path: 'test',
         content: 'updated',
-        glossary: ['alpha', 'beta'],
         glossaryAdd: ['gamma'],
         glossaryRemove: ['old'],
       }),

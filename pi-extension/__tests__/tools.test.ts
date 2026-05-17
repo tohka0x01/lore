@@ -126,11 +126,23 @@ describe('Pi extension tools', () => {
 
     expect(result.details.ok).toBe(true);
     expect((fetch as any).mock.calls).toHaveLength(1);
-    expect(JSON.parse((fetch as any).mock.calls[0][1].body)).toMatchObject({
+    const body = JSON.parse((fetch as any).mock.calls[0][1].body);
+    expect(body).toMatchObject({
       content: 'updated',
-      glossary: ['fresh'],
       glossary_add: ['memory'],
       glossary_remove: ['archive'],
     });
+    expect(body).not.toHaveProperty('glossary');
+    expect(result.content[0].text).not.toContain('glossary=');
+  });
+
+  it('update exposes glossary mutations without full replacement', () => {
+    const pi = makeMockPi();
+    registerTools(pi as any, makePluginCfg());
+    const props = pi.tools.lore_update_node.parameters.properties;
+    expect(props.glossary).toBeUndefined();
+    expect(props.glossary_add).toBeDefined();
+    expect(props.glossary_remove).toBeDefined();
+    expect(pi.tools.lore_update_node.description).not.toContain('glossary fields');
   });
 });

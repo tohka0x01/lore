@@ -42,7 +42,7 @@ export function createMcpServer(context: McpServerContext = {}): InstanceType<ty
   const server = new McpServer(
     {
       name: 'lore',
-      version: '1.3.3',
+      version: '1.3.4',
     },
     guidance ? { instructions: guidance } : undefined,
   );
@@ -264,13 +264,12 @@ export function createMcpServer(context: McpServerContext = {}): InstanceType<ty
   // ── lore_update_node ─────────────────────────────────────────
   server.tool(
     'lore_update_node',
-    'Revise an existing long-term memory node. Any provided content, metadata, and glossary fields are applied as one node update event; omitted fields are left unchanged.',
+    'Revise an existing long-term memory node. Omitted content, metadata, and glossary mutation fields are left unchanged.',
     {
       uri: z.string().describe('Full memory URI for the node you want to revise.'),
       content: z.string().optional().describe('New content to replace the existing content; omit to leave content unchanged.'),
       priority: z.number().int().min(0).optional().describe('New priority level; omit to leave priority unchanged.'),
       disclosure: z.string().optional().describe('New disclosure / trigger condition; omit to leave disclosure unchanged.'),
-      glossary: z.array(z.string()).optional().describe('Full replacement list for this node glossary. Omit to leave glossary unchanged; pass [] to clear it.'),
       glossary_add: z.array(z.string()).optional().describe('Keywords to add as part of this same node update event.'),
       glossary_remove: z.array(z.string()).optional().describe('Keywords to remove as part of this same node update event.'),
       session_id: z.string().optional().describe('Session identifier from the <recall session_id="..."> tag.'),
@@ -298,18 +297,15 @@ export function createMcpServer(context: McpServerContext = {}): InstanceType<ty
 
         const glossaryAdd = normalizeKeywordList(args?.glossary_add);
         const glossaryRemove = normalizeKeywordList(args?.glossary_remove);
-        const glossary = Array.isArray(args?.glossary) ? normalizeKeywordList(args.glossary) : undefined;
         const result = await updateNodeByPath({
           domain,
           path,
           ...body,
-          ...(glossary ? { glossary } : {}),
           glossaryAdd,
           glossaryRemove,
         }, eventContext);
 
         const suffixParts: string[] = [];
-        if (glossary) suffixParts.push(`glossary= ${glossary.join(', ')}`);
         if (glossaryAdd.length > 0) suffixParts.push(`glossary+ ${glossaryAdd.join(', ')}`);
         if (glossaryRemove.length > 0) suffixParts.push(`glossary- ${glossaryRemove.join(', ')}`);
         const suffix = suffixParts.length > 0 ? `\n${suffixParts.join('\n')}` : '';
