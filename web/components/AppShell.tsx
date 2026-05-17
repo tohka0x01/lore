@@ -34,6 +34,30 @@ export const navIndicatorClassName = 'bg-fill-primary shadow-none';
 
 const appContentClassName = 'relative z-10 h-full w-full max-w-full overflow-x-hidden md:pt-[80px]';
 
+function LoreLogoMark({ className }: { className?: string }): React.JSX.Element {
+  return (
+    <svg
+      aria-hidden="true"
+      className={className}
+      fill="none"
+      preserveAspectRatio="xMidYMid meet"
+      shapeRendering="geometricPrecision"
+      viewBox="126 130 260 260"
+      xmlns="http://www.w3.org/2000/svg"
+    >
+      <path
+        className="fill-current"
+        d="M310.3 144.5A124 124 0 1 0 368.4 203.6L339.4 217.1A92 92 0 1 1 296.3 173.3Z"
+      />
+      <path
+        className="fill-current"
+        d="M224 160H270V276C270 286 276 292 286 292H356L337 321H250C234 321 224 311 224 294Z"
+      />
+      <circle cx="336" cy="172" r="18" className="fill-sys-orange" />
+    </svg>
+  );
+}
+
 interface IndicatorState {
   x: number;
   w: number;
@@ -95,11 +119,8 @@ export function NavDock(): React.JSX.Element {
           onClick={() => router.push('/memory')}
           className="press hidden md:flex items-center gap-2 rounded-full pl-1 pr-2.5 py-1 hover:bg-fill-quaternary transition-colors"
         >
-          <div className="flex h-7 w-7 md:h-7 md:w-7 items-center justify-center rounded-lg md:rounded-xl bg-gradient-to-br from-sys-blue to-sys-indigo">
-            <svg width="16" height="16" viewBox="0 0 14 14" fill="none" className="text-white">
-              <circle cx="7" cy="7" r="5" stroke="currentColor" strokeWidth="1.6" />
-              <circle cx="9.5" cy="5" r="1.5" fill="currentColor" />
-            </svg>
+          <div className="flex h-7 w-8 shrink-0 items-center justify-center overflow-visible text-txt-primary">
+            <LoreLogoMark className="h-7 w-7" />
           </div>
           <span className="hidden md:inline text-[14px] font-semibold tracking-tight text-txt-primary">Lore</span>
           {version && (

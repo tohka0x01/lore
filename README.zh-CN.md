@@ -1,4 +1,8 @@
-# Lore（一个打通所有 agent 的记忆系统）
+<p align="center">
+  <img src="docs/assets/lore-logo.svg" alt="Lore logo" width="96">
+</p>
+
+<h1 align="center">Lore（一个打通所有 agent 的记忆系统）</h1>
 
 [English README](./README.md) · [Quick Start](#3-quick-start) · [手动安装](#4-手动安装) · [接入 agent](#5-接入-agent) · [CLI 选项](#cli-选项) · [日常使用](#6-日常使用) · [开发](#7-开发)
 

@@ -1,4 +1,8 @@
-# Lore — one memory system across all your agents
+<p align="center">
+  <img src="docs/assets/lore-logo.svg" alt="Lore logo" width="96">
+</p>
+
+<h1 align="center">Lore — one memory system across all your agents</h1>
 
 [中文 README](./README.zh-CN.md) · [Quick Start](#3-quick-start) · [Manual Setup](#4-manual-setup) · [Connect Agents](#5-connect-agents) · [CLI Options](#cli-options) · [Daily Use](#6-daily-use) · [Development](#7-development)
 
