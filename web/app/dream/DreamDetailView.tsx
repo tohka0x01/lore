@@ -69,6 +69,23 @@ function changeTone(type: string): ChangeTone {
   return 'blue';
 }
 
+function reviewStatusLabel(status: MemoryChange['review_status']): string {
+  if (status === 'approved') return 'Approved';
+  if (status === 'dismissed') return 'Dismissed';
+  return 'Pending review';
+}
+
+function reviewStatusTone(status: MemoryChange['review_status']): 'green' | 'orange' | 'soft' {
+  if (status === 'approved') return 'green';
+  if (status === 'dismissed') return 'soft';
+  return 'orange';
+}
+
+function editableUriForChange(change: MemoryChange): string {
+  if (change.type === 'delete') return '';
+  return change.after?.uri || change.uri || '';
+}
+
 function isRecord(value: unknown): value is Record<string, unknown> {
   return Boolean(value && typeof value === 'object' && !Array.isArray(value));
 }
@@ -369,12 +386,26 @@ interface DreamDetailViewProps {
   loading: boolean;
   canRollback: boolean;
   rollingBack: boolean;
+  reviewingChangeId?: number | null;
   onBack: () => void;
   onRollback: () => void;
+  onReviewChange?: (changeId: number, status: 'approved' | 'dismissed') => void;
+  onEditChange?: (uri: string) => void;
   t: (key: string) => string;
 }
 
-export function DreamDetailView({ entry, loading, canRollback, rollingBack, onBack, onRollback, t }: DreamDetailViewProps): React.JSX.Element {
+export function DreamDetailView({
+  entry,
+  loading,
+  canRollback,
+  rollingBack,
+  reviewingChangeId = null,
+  onBack,
+  onRollback,
+  onReviewChange,
+  onEditChange,
+  t,
+}: DreamDetailViewProps): React.JSX.Element {
   const [showOriginalDiary, setShowOriginalDiary] = useState(false);
   const stats = useMemo(() => {
     const toolCalls = entry?.tool_calls || [];
@@ -459,7 +490,13 @@ export function DreamDetailView({ entry, loading, canRollback, rollingBack, onBa
       )}
 
       {entry.memory_changes && entry.memory_changes.length > 0 && (
-        <MemoryChangesSection changes={entry.memory_changes} t={t} />
+        <MemoryChangesSection
+          changes={entry.memory_changes}
+          reviewingChangeId={reviewingChangeId}
+          onReviewChange={onReviewChange}
+          onEditChange={onEditChange}
+          t={t}
+        />
       )}
 
       {entry.summary && (
@@ -535,31 +572,57 @@ function AgentWorkflowSection({ workflowEvents, defaultExpanded, t }: AgentWorkf
 
 interface MemoryChangesSectionProps {
   changes: MemoryChange[];
+  reviewingChangeId: number | null;
+  onReviewChange?: (changeId: number, status: 'approved' | 'dismissed') => void;
+  onEditChange?: (uri: string) => void;
   t: (key: string) => string;
 }
 
-function MemoryChangesSection({ changes, t }: MemoryChangesSectionProps): React.JSX.Element {
+function MemoryChangesSection({ changes, reviewingChangeId, onReviewChange, onEditChange, t }: MemoryChangesSectionProps): React.JSX.Element {
   const [expandedIdx, setExpandedIdx] = useState<number | null>(null);
 
   return (
     <Section title={t('Memory Changes')} subtitle={`${changes.length}`} className="mb-5">
       <div className="space-y-2">
-        {changes.map((change, index) => (
-          <div key={index} className="rounded-xl border border-separator-thin bg-bg-raised overflow-hidden">
-            <div
-              className="flex cursor-pointer items-center gap-2 px-3 py-2 transition-colors hover:bg-fill-quaternary"
-              onClick={() => setExpandedIdx(expandedIdx === index ? null : index)}
-            >
-              <Badge tone={changeTone(change.type)}>{t(change.type)}</Badge>
-              <code className="text-xs font-mono text-txt-primary flex-1 truncate">{change.uri}</code>
-              {change.before?.priority !== undefined && change.after?.priority !== undefined && change.before.priority !== change.after.priority && (
-                <span className="text-xs text-txt-tertiary">P{change.before.priority}→P{change.after.priority}</span>
-              )}
-              {change.type === 'move' && change.before?.uri && change.after?.uri && (
-                <span className="max-w-[16rem] truncate text-xs text-txt-tertiary">{change.before.uri} → {change.after.uri}</span>
-              )}
-              <span className="text-[11px] text-txt-quaternary">{expandedIdx === index ? '▲' : '▼'}</span>
-            </div>
+        {changes.map((change, index) => {
+          const reviewStatus = change.review_status || 'pending';
+          const changeId = Number(change.id || 0);
+          const reviewing = changeId > 0 && reviewingChangeId === changeId;
+          const editableUri = editableUriForChange(change);
+          return (
+            <div key={change.id || index} className="rounded-xl border border-separator-thin bg-bg-raised overflow-hidden">
+              <div
+                className="flex cursor-pointer items-center gap-2 px-3 py-2 transition-colors hover:bg-fill-quaternary"
+                onClick={() => setExpandedIdx(expandedIdx === index ? null : index)}
+              >
+                <Badge tone={changeTone(change.type)}>{t(change.type)}</Badge>
+                <Badge tone={reviewStatusTone(reviewStatus)}>{t(reviewStatusLabel(reviewStatus))}</Badge>
+                <code className="min-w-0 flex-1 truncate text-xs font-mono text-txt-primary">{change.uri}</code>
+                {change.before?.priority !== undefined && change.after?.priority !== undefined && change.before.priority !== change.after.priority && (
+                  <span className="text-xs text-txt-tertiary">P{change.before.priority}→P{change.after.priority}</span>
+                )}
+                {change.type === 'move' && change.before?.uri && change.after?.uri && (
+                  <span className="hidden max-w-[16rem] truncate text-xs text-txt-tertiary sm:inline">{change.before.uri} → {change.after.uri}</span>
+                )}
+                <div className="flex shrink-0 items-center gap-1" onClick={(event) => event.stopPropagation()}>
+                  {changeId > 0 && onReviewChange && reviewStatus !== 'approved' && (
+                    <Button size="sm" variant="ghost" onClick={() => onReviewChange(changeId, 'approved')} disabled={reviewing}>
+                      {reviewing ? t('Saving…') : t('Approve')}
+                    </Button>
+                  )}
+                  {changeId > 0 && onReviewChange && reviewStatus !== 'dismissed' && (
+                    <Button size="sm" variant="ghost" onClick={() => onReviewChange(changeId, 'dismissed')} disabled={reviewing}>
+                      {t('Dismiss')}
+                    </Button>
+                  )}
+                  {editableUri && onEditChange && (
+                    <Button size="sm" variant="ghost" onClick={() => onEditChange(editableUri)}>
+                      {t('Edit')}
+                    </Button>
+                  )}
+                  <span className="text-[11px] text-txt-quaternary">{expandedIdx === index ? '▲' : '▼'}</span>
+                </div>
+              </div>
             {expandedIdx === index && (
               <div className="space-y-2 border-t border-separator-thin px-3 py-3">
                 {change.type === 'update' && change.before?.content !== undefined && change.after?.content !== undefined ? (
@@ -592,8 +655,9 @@ function MemoryChangesSection({ changes, t }: MemoryChangesSectionProps): React.
                 )}
               </div>
             )}
-          </div>
-        ))}
+            </div>
+          );
+        })}
       </div>
     </Section>
   );

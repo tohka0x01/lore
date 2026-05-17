@@ -351,6 +351,13 @@ export const SETTINGS_SCHEMA: SettingDef[] = [
     type: 'string', default: '0 3 * * *',
     description: '定时做梦的 5 段 cron 表达式（分 时 日 月 周，按时区设置）',
   },
+  {
+    key: 'dream.auto_approve_changes',
+    section: 'dream',
+    label: '自动通过 Dream 变更',
+    type: 'boolean', default: false,
+    description: '开启后 Dream 产生的记忆变更会自动标记为已通过；关闭时变更保留为待审核。',
+  },
   // -- Backup schedule ------------------------------------------------------
   {
     key: 'backup.enabled',

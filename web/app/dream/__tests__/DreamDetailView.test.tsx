@@ -107,10 +107,12 @@ describe('DreamDetailView', () => {
           raw_narrative: JSON.stringify(audit),
           memory_changes: [
             {
+              id: 22,
               type: 'update',
               uri: 'project://lore_integration/dream_system/dream_prompt_workflow_review',
               before: { content: 'before' },
               after: { content: 'after' },
+              review_status: 'pending',
             },
           ],
         })}
@@ -119,12 +121,18 @@ describe('DreamDetailView', () => {
         rollingBack={false}
         onBack={() => undefined}
         onRollback={() => undefined}
+        onReviewChange={() => undefined}
+        onEditChange={() => undefined}
         t={(key) => key}
       />,
     );
 
     expect(html).not.toContain('Dream Audit');
     expect(html).toContain('Memory Changes');
+    expect(html).toContain('Pending review');
+    expect(html).toContain('Approve');
+    expect(html).toContain('Dismiss');
+    expect(html).toContain('Edit');
     expect(html).not.toContain('audit duplicate summary');
     expect(html).not.toContain('Changed nodes');
     const uri = 'project://lore_integration/dream_system/dream_prompt_workflow_review';
