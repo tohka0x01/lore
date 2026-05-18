@@ -94,15 +94,13 @@ class LoreClientThinAdapterTests(unittest.TestCase):
             include_guidance=True,
         )
         client.bridge_recall(session_id="sess-1", prompt="hello")
-        client.bridge_session_end(session_id="sess-1")
 
         self.assertEqual(requests[0][0], ("POST", "/bridge/startup"))
         self.assertEqual(requests[0][1]["data"]["session_id"], "sess-1")
         self.assertEqual(requests[0][1]["data"]["channel"], "hermes")
         self.assertEqual(requests[1][0], ("POST", "/bridge/recall"))
         self.assertEqual(requests[1][1]["data"], {"session_id": "sess-1", "prompt": "hello"})
-        self.assertEqual(requests[2][0], ("POST", "/bridge/session/end"))
-        self.assertEqual(requests[2][1]["data"], {"session_id": "sess-1"})
+        self.assertEqual(len(requests), 2)
 
 
 class FakeClient:
@@ -134,10 +132,6 @@ class FakeClient:
 
     def bridge_recall(self, **kwargs):
         return {"context": "<recall session_id=\"sess-1\" query_id=\"q1\">\n0.70 | core://project\n</recall>"}
-
-    def bridge_session_end(self, session_id):
-        self.ended_session_id = session_id
-        return {"ok": True, "session_id": session_id}
 
 
 class LoreProviderThinAdapterTests(unittest.TestCase):
@@ -192,9 +186,15 @@ class LoreProviderThinAdapterTests(unittest.TestCase):
         result = self.provider.prefetch("hello", session_id="sess-1")
         self.assertIn("core://project", result)
 
-    def test_session_end_uses_bridge_session_end(self):
+    def test_session_end_is_noop(self):
         self.provider.on_session_end([])
-        self.assertEqual(self.provider._client.ended_session_id, "sess-1")
+        self.assertIsNone(self.provider._client.ended_session_id)
+
+
+    def test_session_read_tools_are_not_exposed(self):
+        schemas = {tool["name"]: tool for tool in self.provider.get_tool_schemas()}
+        self.assertNotIn("lore_list_session_reads", schemas)
+        self.assertNotIn("lore_clear_session_reads", schemas)
 
     def test_get_node_tool_uses_unified_recall_identifier_descriptions(self):
         schemas = {tool["name"]: tool for tool in self.provider.get_tool_schemas()}

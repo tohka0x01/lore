@@ -24,19 +24,6 @@ export function extractAssistantText(messages: any) {
   return extractMessageText(lastAssistant);
 }
 
-// ---- Session read helpers ----
-
-export async function markSessionRead(pluginCfg: any, { sessionId, sessionKey, uri, nodeUuid, source = "tool:get_node" }: { sessionId: string; sessionKey?: string; uri: string; nodeUuid?: string; source?: string }) {
-  if (!sessionId || !uri) return;
-  const body: any = { session_id: sessionId, session_key: sessionKey, uri, source };
-  if (nodeUuid) body.node_uuid = nodeUuid;
-  try {
-    await fetchJson(pluginCfg, "/browse/session/read", { method: "POST", body: JSON.stringify(body) });
-  } catch {
-    // best effort only
-  }
-}
-
 // ---- Project context detection ----
 
 interface ProjectInfo {
@@ -82,15 +69,6 @@ async function fetchPromptRecallBridge(pluginCfg: any, prompt: string, sessionId
     method: "POST",
     body: JSON.stringify({ session_id: sessionId, prompt }),
   });
-}
-
-async function endBridgeSession(pluginCfg: any, sessionId: string | undefined) {
-  if (!sessionId) return;
-  try {
-    await fetchJson(pluginCfg, "/bridge/session/end", { method: "POST", body: JSON.stringify({ session_id: sessionId }) });
-  } catch {
-    // best effort only
-  }
 }
 
 // ---- Prompt guidance ----
@@ -142,14 +120,6 @@ export function registerHooks(api: any, pluginCfg: any, _GUIDANCE: string) {
       } catch (error: any) {
         api.logger.warn(`lore: startup health check failed (${pluginCfg.baseUrl}): ${error.message}`);
       }
-    },
-    { priority: 50 },
-  );
-
-  api.on(
-    "session_end",
-    async (event: any) => {
-      await endBridgeSession(pluginCfg, event?.sessionId);
     },
     { priority: 50 },
   );

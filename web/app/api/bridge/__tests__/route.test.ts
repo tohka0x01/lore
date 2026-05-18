@@ -11,24 +11,18 @@ vi.mock('../../../../server/lore/recall/recall', () => ({
   recallMemories: vi.fn(),
   loadRecallSafetyConfig: vi.fn(),
 }));
-vi.mock('../../../../server/lore/memory/session', () => ({
-  clearSessionReads: vi.fn(),
-}));
 
 import { normalizeClientType, requireBearerAuth } from '../../../../server/auth';
 import { bootView } from '../../../../server/lore/memory/boot';
-import { clearSessionReads } from '../../../../server/lore/memory/session';
 import { loadRecallSafetyConfig, recallMemories } from '../../../../server/lore/recall/recall';
 import * as startupRoute from '../startup/route';
 import * as recallRoute from '../recall/route';
-import * as sessionEndRoute from '../session/end/route';
 
 const mockRequireBearerAuth = vi.mocked(requireBearerAuth);
 const mockNormalizeClientType = vi.mocked(normalizeClientType);
 const mockBootView = vi.mocked(bootView);
 const mockRecallMemories = vi.mocked(recallMemories);
 const mockLoadRecallSafetyConfig = vi.mocked(loadRecallSafetyConfig);
-const mockClearSessionReads = vi.mocked(clearSessionReads);
 
 describe('bridge route contracts', () => {
   beforeEach(() => {
@@ -50,7 +44,6 @@ describe('bridge route contracts', () => {
       items: [{ uri: 'project://lore', score_display: 0.82, cues: ['bridge'] }],
       event_log: { query_id: 'q-start' },
     } as any);
-    mockClearSessionReads.mockResolvedValue({ ok: true } as any);
   });
 
   it('builds startup context from boot, guidance, and startup recall queries', async () => {
@@ -84,7 +77,7 @@ describe('bridge route contracts', () => {
 
   it('builds prompt recall context with query id and node uris', async () => {
     mockRecallMemories.mockResolvedValueOnce({
-      items: [{ uri: 'core://agent', score_display: 0.8, cues: ['agent'], read: true }],
+      items: [{ uri: 'core://agent', score_display: 0.8, cues: ['agent'] }],
       event_log: { query_id: 'q-prompt' },
     } as any);
 
@@ -99,7 +92,8 @@ describe('bridge route contracts', () => {
 
     expect(response.status).toBe(200);
     expect(body.context).toContain('<recall session_id="sess-1" query_id="q-prompt">');
-    expect(body.context).toContain('read · agent');
+    expect(body.context).toContain('0.80 | core://agent | agent');
+    expect(body.context).not.toContain('read ·');
     expect(body.query_id).toBe('q-prompt');
     expect(body.node_uris).toEqual(['core://agent']);
     expect(body.has_recall).toBe(true);
@@ -121,18 +115,4 @@ describe('bridge route contracts', () => {
     expect(mockRecallMemories).not.toHaveBeenCalled();
   });
 
-  it('clears session reads through the session end bridge', async () => {
-    const request = new Request('http://localhost/api/bridge/session/end?client_type=pi', {
-      method: 'POST',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ session_id: 'sess-1' }),
-    }) as any;
-
-    const response = await sessionEndRoute.POST(request);
-    const body = await response.json();
-
-    expect(response.status).toBe(200);
-    expect(mockClearSessionReads).toHaveBeenCalledWith('sess-1');
-    expect(body).toEqual({ ok: true, session_id: 'sess-1' });
-  });
 });

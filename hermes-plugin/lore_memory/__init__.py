@@ -378,14 +378,7 @@ class LoreMemoryProvider(MemoryProvider):
     # -- Session end -------------------------------------------------------
 
     def on_session_end(self, messages: List[Dict[str, Any]]) -> None:
-        if self._client and self._session_id:
-            try:
-                self._client.bridge_session_end(self._session_id)
-            except Exception:
-                try:
-                    self._client.clear_session_reads(self._session_id)
-                except Exception:
-                    pass
+        pass
 
     # -- Shutdown ----------------------------------------------------------
 
@@ -454,7 +447,6 @@ class LoreMemoryProvider(MemoryProvider):
                         "disclosure": {"type": "string", "description": "New disclosure / trigger condition; omit to leave disclosure unchanged"},
                         "glossary_add": {"type": "array", "items": {"type": "string"}, "description": "Keywords to add as part of this same node update event"},
                         "glossary_remove": {"type": "array", "items": {"type": "string"}, "description": "Keywords to remove as part of this same node update event"},
-                        "session_id": {"type": "string", "description": "Session identifier from the <recall session_id=\"...\"> tag"},
                     },
                     "required": ["uri"],
                 },
@@ -467,7 +459,6 @@ class LoreMemoryProvider(MemoryProvider):
                     "additionalProperties": False,
                     "properties": {
                         "uri": {"type": "string", "description": "Full memory URI for the path you want to remove"},
-                        "session_id": {"type": "string", "description": "Session identifier from the <recall session_id=\"...\"> tag"},
                     },
                     "required": ["uri"],
                 },
@@ -505,30 +496,6 @@ class LoreMemoryProvider(MemoryProvider):
                 "description": "Browse the top-level memory domains available in the memory system",
                 "parameters": {"type": "object", "properties": {}, "required": []},
             },
-            {
-                "name": "lore_list_session_reads",
-                "description": "Show which memory nodes have already been opened in this session",
-                "parameters": {
-                    "type": "object",
-                    "additionalProperties": False,
-                    "properties": {
-                        "session_id": {"type": "string", "description": "Session identifier"},
-                    },
-                    "required": ["session_id"],
-                },
-            },
-            {
-                "name": "lore_clear_session_reads",
-                "description": "Reset per-session memory read tracking",
-                "parameters": {
-                    "type": "object",
-                    "additionalProperties": False,
-                    "properties": {
-                        "session_id": {"type": "string", "description": "Session identifier"},
-                    },
-                    "required": ["session_id"],
-                },
-            },
         ]
 
     # -- Tool dispatch -----------------------------------------------------
@@ -565,16 +532,6 @@ class LoreMemoryProvider(MemoryProvider):
         domain, path = self._client.parse_uri(uri)
         data = self._client.get_node(domain, path, nav_only)
         node = data.get("node", {})
-
-        # Session read tracking
-        if session_id and node.get("uri"):
-            try:
-                self._client.mark_session_read(
-                    session_id=session_id, uri=node["uri"],
-                    node_uuid=node.get("node_uuid"), source="tool:lore_get_node"
-                )
-            except Exception:
-                pass
 
         # Recall usage tracking
         if query_id and node.get("uri"):
@@ -626,7 +583,6 @@ class LoreMemoryProvider(MemoryProvider):
         data = self._client.update_node(
             domain=domain, path=path, content=args.get("content"),
             priority=args.get("priority"), disclosure=args.get("disclosure"),
-            session_id=args.get("session_id") or self._session_id,
             glossary_add=args.get("glossary_add"),
             glossary_remove=args.get("glossary_remove")
         )
@@ -636,7 +592,7 @@ class LoreMemoryProvider(MemoryProvider):
     def _tool_lore_delete_node(self, args: Dict) -> str:
         uri = args.get("uri", "")
         domain, path = self._client.parse_uri(uri)
-        data = self._client.delete_node(domain, path, session_id=args.get("session_id") or self._session_id)
+        data = self._client.delete_node(domain, path)
         deleted_uri = data.get("deleted_uri") or data.get("uri") or uri
         canonical_uri = data.get("uri") or deleted_uri
         if canonical_uri != deleted_uri:
@@ -669,15 +625,6 @@ class LoreMemoryProvider(MemoryProvider):
     def _tool_lore_list_domains(self, args: Dict) -> str:
         data = self._client.list_domains()
         return formatters.format_domains(data)
-
-    def _tool_lore_list_session_reads(self, args: Dict) -> str:
-        data = self._client.list_session_reads(args.get("session_id", ""))
-        return formatters.format_session_reads(data)
-
-    def _tool_lore_clear_session_reads(self, args: Dict) -> str:
-        self._client.clear_session_reads(args.get("session_id", ""))
-        return f"Cleared read tracking for session: {args.get('session_id', '')}"
-
 
 # ---------------------------------------------------------------------------
 # Plugin registration entry point

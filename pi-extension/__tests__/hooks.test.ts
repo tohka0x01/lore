@@ -32,7 +32,7 @@ describe('Pi extension hooks', () => {
     expect(pi.events.session_start).toBeTypeOf('function');
     expect(pi.events.before_agent_start).toBeTypeOf('function');
     expect(pi.events.tool_call).toBeUndefined();
-    expect(pi.events.session_shutdown).toBeTypeOf('function');
+    expect(pi.events.session_shutdown).toBeUndefined();
   });
 
   it('before_agent_start injects guidance and recall as a message', async () => {
@@ -71,21 +71,6 @@ describe('Pi extension hooks', () => {
     const urls = (fetch as any).mock.calls.map((call: any[]) => String(call[0]));
     expect(urls.some((url: string) => url.includes('/browse/boot'))).toBe(false);
     expect(urls.some((url: string) => url.includes('/browse/recall'))).toBe(false);
-  });
-
-  it('session_shutdown clears through bridge session end', async () => {
-    const pi = makeMockPi();
-    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
-      ok: true,
-      status: 200,
-      statusText: 'OK',
-      text: async () => '{}',
-    }));
-
-    registerHooks(pi as any, { baseUrl: 'http://host', timeoutMs: 1000, injectPromptGuidance: false, recallEnabled: false, startupHealthcheck: false }, '');
-    await pi.events.session_shutdown({}, { sessionManager: { sessionId: 'sess-clear' } });
-    expect((fetch as any).mock.calls[0][0]).toContain('/api/bridge/session/end?client_type=pi');
-    expect(JSON.parse((fetch as any).mock.calls[0][1].body)).toMatchObject({ session_id: 'sess-clear' });
   });
 
   it('loads prompt guidance text', () => {

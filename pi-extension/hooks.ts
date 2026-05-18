@@ -18,19 +18,6 @@ export function extractMessageText(message: any) {
     .trim();
 }
 
-// ---- Session read helpers ----
-
-export async function markSessionRead(pluginCfg: any, { sessionId, uri, nodeUuid, source = 'tool:get_node' }: { sessionId: string; uri: string; nodeUuid?: string; source?: string }) {
-  if (!sessionId || !uri) return;
-  const body: any = { session_id: sessionId, uri, source };
-  if (nodeUuid) body.node_uuid = nodeUuid;
-  try {
-    await fetchJson(pluginCfg, '/browse/session/read', { method: 'POST', body: JSON.stringify(body) });
-  } catch {
-    // best effort only
-  }
-}
-
 // ---- Project context detection ----
 
 interface ProjectInfo {
@@ -78,15 +65,6 @@ async function fetchPromptRecallBridge(pluginCfg: any, prompt: string, sessionId
   });
 }
 
-async function endBridgeSession(pluginCfg: any, sessionId: string | undefined) {
-  if (!sessionId) return;
-  try {
-    await fetchJson(pluginCfg, '/bridge/session/end', { method: 'POST', body: JSON.stringify({ session_id: sessionId }) });
-  } catch {
-    // best effort only
-  }
-}
-
 // ---- Prompt guidance ----
 
 export const DEFAULT_GUIDANCE = [
@@ -126,11 +104,6 @@ export function registerHooks(pi: any, pluginCfg: any, _guidance: string) {
     } catch (error: any) {
       pi.logger?.warn?.(`lore: startup health check failed (${pluginCfg.baseUrl}): ${error.message}`);
     }
-  });
-
-  pi.on('session_shutdown', async (_event: any, ctx: any) => {
-    const sessionId = getSessionId(ctx);
-    await endBridgeSession(pluginCfg, sessionId);
   });
 
   pi.on('before_agent_start', async (event: any, ctx: any) => {

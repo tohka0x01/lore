@@ -112,24 +112,10 @@ describe('registerHooks', () => {
     expect('lore.status' in api.gatewayMethods).toBe(true);
     expect('gateway_start' in api.events).toBe(true);
     expect('before_tool_call' in api.events).toBe(false);
-    expect('session_end' in api.events).toBe(true);
+    expect('session_end' in api.events).toBe(false);
     expect('before_prompt_build' in api.events).toBe(true);
   });
 
-  it('session_end hook clears pending recall for session', async () => {
-    const api = makeMockApi();
-    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
-      ok: true,
-      status: 200,
-      text: async () => '{}',
-    }));
-    registerHooks(api as any, { startupHealthcheck: false, injectPromptGuidance: false, recallEnabled: false, baseUrl: 'http://localhost' }, '');
-    const hook = api.events.session_end;
-    await hook.handler({ sessionId: 'sess-end' });
-    expect((fetch as any).mock.calls[0][0]).toContain('/api/bridge/session/end?client_type=openclaw');
-    expect(JSON.parse((fetch as any).mock.calls[0][1].body)).toMatchObject({ session_id: 'sess-end' });
-    vi.unstubAllGlobals();
-  });
 
   it('before_prompt_build injects bridge startup context and prompt recall', async () => {
     const api = makeMockApi();
