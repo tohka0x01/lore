@@ -19,18 +19,18 @@ vi.mock('@modelcontextprotocol/sdk/types.js', async () => {
   return actual;
 });
 
-vi.mock('../../../server/mcpServer', () => ({
+vi.mock('../mcpServer', () => ({
   createMcpServer: vi.fn(() => ({
     connect: mockConnect,
   })),
 }));
 
-vi.mock('../../../server/auth', async () => {
-  const actual = await vi.importActual<typeof import('../../../server/auth')>('../../../server/auth');
+vi.mock('../auth', async () => {
+  const actual = await vi.importActual<typeof import('../auth')>('../auth');
   return actual;
 });
 
-import handler from '../mcp';
+import handler from '../../pages/api/mcp';
 
 function makeReq({ method = 'POST', sessionId, body }: { method?: string; sessionId?: string; body?: unknown }) {
   const req = Readable.from(body === undefined ? [] : [Buffer.from(JSON.stringify(body))]) as any;
