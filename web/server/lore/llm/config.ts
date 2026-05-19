@@ -60,8 +60,52 @@ function buildAnthropicProvider(config: ResolvedViewLlmConfig): ReturnType<typeo
     apiKey: config.api_key,
     headers: config.api_version ? { 'anthropic-version': config.api_version } : undefined,
     name: 'lore-anthropic',
-    fetch: globalThis.fetch,
+    fetch: createAnthropicFetchPatch(config),
   });
+}
+
+function createAnthropicFetchPatch(config: ResolvedViewLlmConfig): typeof globalThis.fetch {
+  const basePath = normalizeBaseUrl(config.base_url);
+  return async (input, init) => {
+    const response = await globalThis.fetch(input, init);
+    if (!response.ok || !isMessagesUrl(input, basePath)) return response;
+
+    const contentType = response.headers.get('content-type') || '';
+    if (!contentType.includes('application/json')) return response;
+
+    const text = await response.text();
+    let data: unknown;
+    try { data = JSON.parse(text); } catch { return response; }
+
+    if (data == null || typeof data !== 'object') return response;
+    const obj = data as Record<string, unknown>;
+    if (!Array.isArray(obj.content)) return response;
+
+    let modified = false;
+    for (const block of obj.content) {
+      if (block != null && typeof block === 'object' && (block as Record<string, unknown>).type === 'thinking' && (block as Record<string, unknown>).signature === undefined) {
+        (block as Record<string, unknown>).signature = '';
+        modified = true;
+      }
+    }
+    if (!modified) return response;
+
+    return new Response(JSON.stringify(obj), {
+      status: response.status,
+      statusText: response.statusText,
+      headers: response.headers,
+    });
+  };
+}
+
+function isMessagesUrl(input: RequestInfo | URL, basePath: string): boolean {
+  if (typeof input === 'string') return input.includes('/messages');
+  if (input instanceof URL) return input.href.includes('/messages') || input.pathname.includes('/messages');
+  if (input instanceof Request) {
+    const url = input.url;
+    return url.includes('/messages') || url.includes(basePath + '/messages');
+  }
+  return false;
 }
 
 export function createLanguageModel(config: ResolvedViewLlmConfig): LanguageModel {
