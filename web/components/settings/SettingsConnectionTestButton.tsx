@@ -58,8 +58,6 @@ export function SettingsConnectionTestButton({
         section: sectionId,
         patch: buildSettingsConnectionTestPatch(sectionId, data, draft),
       });
-      const detail = (response.data as { detail?: unknown })?.detail;
-      setErrorText(typeof detail === 'string' ? detail : null);
       setStatus('ok');
       timerRef.current = setTimeout(() => {
         setStatus('idle');
@@ -76,10 +74,15 @@ export function SettingsConnectionTestButton({
     }
   }, [data, draft, sectionId, t]);
 
-  const label = status === 'testing' ? t('Testing…')
-    : status === 'ok' ? (sectionId === 'embedding' ? t('Embedding OK') : t('View LLM OK'))
-    : status === 'fail' ? t('Connection failed')
+  const label = status === 'testing'
+    ? t('Testing…')
+    : status !== 'idle'
+    ? ''
     : t('Test connection');
+
+  const prefix = status === 'ok' ? '✅ '
+    : status === 'fail' ? '❌ '
+    : '';
 
   return (
     <span className="inline-flex items-center gap-2">
@@ -92,8 +95,7 @@ export function SettingsConnectionTestButton({
           status === 'fail' && '!border-red-500 !text-red-500',
         )}
       >
-        {status === 'ok' ? '✅ ' : status === 'fail' ? '❌ ' : ''}
-        {label}
+        {prefix}{label}
       </Button>
       {status === 'fail' && errorText && (
         <span className="text-xs text-red-500 max-w-[200px] truncate">{errorText}</span>
