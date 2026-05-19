@@ -1,4 +1,6 @@
-The fastest path is the installer script. It downloads the current release assets, starts Docker Compose unless you point it at an existing server, writes `~/.lore/config.json`, and configures selected agent channels.
+Use the installer when you want the shortest path to a working Lore server and local agent integrations.
+
+The default install starts Lore with Docker Compose, writes local client config, and sets up supported agent channels on this machine.
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/FFatTiger/lore/main/scripts/install.sh | bash
@@ -10,30 +12,38 @@ Chinese installer output:
 curl -fsSL https://raw.githubusercontent.com/FFatTiger/lore/main/scripts/install.zh.sh | bash
 ```
 
-Common options are implemented by `scripts/install.sh`:
+## Common options
 
-| Option | Use when |
+| Option | Use it when |
 | --- | --- |
-| `--channels claudecode,codex` | install only selected integrations instead of all supported channels |
-| `--base-url http://host:18901` | connect clients to an existing Lore server; this skips Docker startup |
-| `--api-token TOKEN` | configure clients for a server protected by `API_TOKEN` |
-| `--skip-docker` | install client integrations without running Docker Compose |
-| `--pre` | use the `pre-latest` release channel |
-| `--dev` | use the `dev-latest` release channel |
-| `--force` | reinstall even if the installed version is already current |
+| `--channels claudecode,codex` | You only want selected integrations. |
+| `--base-url http://host:18901` | Lore is already running somewhere else. This skips server startup. |
+| `--api-token TOKEN` | The server is protected by `API_TOKEN`. |
+| `--skip-docker` | You only want local client integrations. |
+| `--pre` | You want the `pre-latest` release channel. |
+| `--dev` | You want the `dev-latest` release channel. |
+| `--force` | You want to reinstall even if the version looks current. |
 
-Examples:
+## Examples
+
+Install only Codex and Claude Code integrations:
 
 ```bash
-# Install only Codex and Claude Code integrations
 curl -fsSL https://raw.githubusercontent.com/FFatTiger/lore/main/scripts/install.sh | bash -s -- --channels codex,claudecode
+```
 
-# Connect this machine's agents to a Lore server already running elsewhere
+Point this machine's agents at an existing Lore server:
+
+```bash
 curl -fsSL https://raw.githubusercontent.com/FFatTiger/lore/main/scripts/install.sh | bash -s -- --base-url http://192.168.1.100:18901 --api-token YOUR_TOKEN
 ```
 
-Default Docker install uses `docker-compose.yml` from the repository. It starts PostgreSQL, Redis, and the Lore Web server. The default Web port is `18901`; after install, open `http://127.0.0.1:18901/setup`.
+## After the installer finishes
 
-After installing integrations, restart the agent runtimes. Codex users should also open `/hooks` and trust Lore hooks if prompted. If `/plugins` still lists Lore as installable, install it manually there; the installer already configures MCP and hooks.
+1. Open `http://127.0.0.1:18901/setup` unless you connected to an existing server.
+2. Complete embedding, View LLM, and boot memory setup.
+3. Restart the agent runtimes you installed.
+4. For Codex, open `/hooks` and trust the Lore hooks if prompted.
+5. Send a realistic prompt and confirm a recall block appears.
 
-If you do not use the script, follow [Manual configuration](/documents/installation/manual-configuration). That page lists the exact server `.env`, `~/.lore/config.json`, and per-agent config shapes.
+If you do not want the installer to manage the server or clients, use [Manual configuration](/documents/installation/manual-configuration).
