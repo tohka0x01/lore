@@ -361,6 +361,8 @@ const DICT: Record<'zh' | 'en', Record<string, string>> = {
     'Add': '添加',
     'Switch to light': '切换到亮色',
     'Switch to dark': '切换到暗色',
+    'Enable Aurora Background': '打开流光背景',
+    'Disable Aurora Background': '关闭流光背景',
     'Tree': '目录',
     'Hide tree': '收起目录',
     'Agent memory graph': '代理记忆图谱',
