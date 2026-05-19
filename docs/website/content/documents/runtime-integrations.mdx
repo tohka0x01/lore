@@ -1,5 +1,17 @@
 Connect agents after the server is healthy and `/setup` is complete.
 
+## Supported runtimes
+
+| Runtime | Integration | What agents get |
+| --- | --- | --- |
+| Claude Code | MCP tools, session-start hooks, `CLAUDE.md` guidance | Boot context, per-prompt recall, memory read/write tools |
+| Codex | MCP tools, plugin hooks, skill registration | Boot context, per-prompt recall, memory management |
+| Pi | Extension hooks | Startup guidance, per-prompt recall |
+| OpenClaw | Plugin tools | Boot guidance, recall injection, health check |
+| Hermes | Python skill/provider | Boot, recall, memory tools |
+
+All channels share the same Lore server and memory graph. A rule saved through Claude Code is visible to Codex, Pi, OpenClaw, and Hermes.
+
 ## Connection paths
 
 Supported installer channels are `claudecode`, `codex`, `pi`, `openclaw`, and `hermes`. You can install all channels, select a subset, skip Docker, or point local agents at a Lore server running elsewhere.

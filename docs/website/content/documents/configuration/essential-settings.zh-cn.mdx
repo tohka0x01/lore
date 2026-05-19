@@ -43,7 +43,7 @@ Docker Compose 还会使用 `POSTGRES_DATA_DIR`、`REDIS_DATA_DIR`、`SNAPSHOT_D
 
 | 现象 | 先检查 |
 | --- | --- |
-| 服务器无法启动 | `DATABASE_URL`、数据库连通性、数据库权限 |
+| 服务器无法启动 | 在 `docker-compose.yml` 所在目录执行 `docker compose ps` 和 `docker compose logs web` |
 | Web Console 正常但 MCP 失败 | `API_TOKEN`、MCP URL、`client_type`、Agent 环境变量 |
 | 召回结果弱 | 记忆内容、disclosure、glossary，然后才是召回阈值 |
 | Dream 建议质量差 | View LLM 设置和记忆质量 |

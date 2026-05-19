@@ -1,5 +1,13 @@
 服务器启动后，在 Lore Web 服务器上打开 `/setup`。
 
+Web Console 是 Lore 的浏览器管理界面，地址为 `http://127.0.0.1:18901`。`/setup` 是其中的首次配置页面。
+
+## 开始前准备
+
+你需要一个 **OpenAI 兼容的 API key** 用于 embedding。任何暴露 `/v1/embeddings` 端点的服务都可以：OpenAI、DeepSeek、本地 Ollama 实例或自建 embedding 服务。你还需要一个**聊天模型 API key** 用于 View LLM（生成可搜索记忆视图和 Dream 建议）。
+
+如果你只有一个同时支持 embedding 和聊天的 key，可以在 `/setup` 的两个字段中复用。
+
 ## 设置流程
 
 设置流程会把运行时设置写入 `app_settings` 表。它不是在编辑服务器 `.env` 文件。

@@ -27,7 +27,7 @@ Do not keep repeated product rules, user preferences, project deploy commands, o
 | OpenClaw-only behavior | `core://agent/openclaw` |
 | Hermes-only behavior | `core://agent/hermes` |
 
-This matches the boot code in `web/server/lore/memory/boot.ts`: runtime boot loads the global boot nodes `core://agent`, `core://soul`, and `preferences://user`, plus the active client-specific node such as `core://agent/codex` or `core://agent/claudecode`.
+This matches how Lore's boot system works: at startup, the runtime loads the global boot nodes `core://agent`, `core://soul`, and `preferences://user`, plus the active client-specific node such as `core://agent/codex` or `core://agent/claudecode`.
 
 ## Files to audit first
 

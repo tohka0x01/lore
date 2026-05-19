@@ -13,3 +13,5 @@ Tune settings after memory content is reasonably clean.
 | exclude boot nodes | keeps fixed startup context from repeating in prompt recall |
 
 Start conservative: show a small number of candidates and improve memory shape when important context is missing. Raising item counts can make agents overfit weak memories.
+
+Recommended starting values: display threshold `0.4`, max display items `3`. These keep the recall block short enough that agents read it, while still surfacing the most relevant memory.

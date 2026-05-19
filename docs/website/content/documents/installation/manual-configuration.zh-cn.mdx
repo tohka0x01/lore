@@ -77,6 +77,17 @@ LORE_DB_POOL_SIZE=10
 
 首次启动时，数据库角色需要能创建 schema 和必要扩展。如果生产环境角色权限较低，可以先用有迁移权限的角色完成首次启动，再切换到受限角色。
 
+启动 Lore（仍然用 Docker Compose 运行 Web 和 Redis 容器，指向外部数据库）：
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/FFatTiger/lore/main/docker-compose.yml -o docker-compose.yml
+# 在 docker-compose.yml 中删除或注释掉 postgres 服务块，
+# 或者保持 DATABASE_URL 指向外部数据库即可。
+docker compose up -d
+docker compose ps
+curl -fsS http://127.0.0.1:18901/api/health
+```
+
 Lore 还需要可写存储，用于备份和待审阅变更。Docker Compose 会通过 `SNAPSHOT_DATA_DIR` 提供这块存储；自定义部署时，请为容器镜像使用的存储路径挂载持久卷。
 
 ## 完成 `/setup`
@@ -153,13 +164,16 @@ Claude Code 和 Codex hooks 可以读取同一个本机配置。在运行 Agent 
 ${LORE_BASE_URL:-http://127.0.0.1:18901}/api/mcp?client_type=claudecode
 ```
 
-如果手动安装 Claude Code 插件，复制 guidance 文件，并从 `~/.claude/CLAUDE.md` 导入：
+如果手动安装 Claude Code 插件，克隆 Lore 仓库并复制 guidance 文件，然后从 `~/.claude/CLAUDE.md` 导入：
 
 ```bash
+git clone https://github.com/FFatTiger/lore.git /tmp/lore-plugin
 mkdir -p ~/.claude
-cp /path/to/claudecode-plugin/rules/lore-guidance.md ~/.claude/lore-guidance.md
+cp /tmp/lore-plugin/packages/claudecode-plugin/rules/lore-guidance.md ~/.claude/lore-guidance.md
 printf '@~/.claude/lore-guidance.md\n' >> ~/.claude/CLAUDE.md
 ```
+
+插件具体路径可能随版本变化，请以 Lore 仓库中的实际布局为准。
 
 修改 settings、插件文件或 `CLAUDE.md` 后，重启 Claude Code。
 
@@ -190,12 +204,12 @@ codex mcp remove lore || true
 codex mcp add lore --url "http://127.0.0.1:18901/api/mcp?client_type=codex" --bearer-token-env-var LORE_API_TOKEN
 ```
 
-如果需要启动记忆和每次 prompt 召回，从插件包安装 Codex hooks：
+如果需要启动记忆和每次 prompt 召回，从插件包安装 Codex hooks。从克隆的 Lore 仓库执行：
 
 ```bash
 export LORE_BASE_URL="http://127.0.0.1:18901"
 export LORE_API_TOKEN="YOUR_TOKEN_IF_USED"
-bash /path/to/codex-plugin/scripts/install-hooks.sh
+bash /tmp/lore-plugin/packages/codex-plugin/scripts/install-hooks.sh
 ```
 
 重启 Codex，打开 `/hooks`，如果 Codex 要求确认，信任 Lore hooks。
@@ -233,10 +247,10 @@ OpenClaw 使用 `~/.openclaw/openclaw.json` 里的插件 entry：
 
 ## 连接 Pi
 
-把 Lore 扩展安装或 symlink 到 Pi 扩展目录：
+把 Lore 扩展安装或 symlink 到 Pi 扩展目录。从克隆的 Lore 仓库执行：
 
 ```bash
-PI_CODING_AGENT_DIR="$HOME/.pi/agent" bash /path/to/pi-extension/scripts/install-local.sh
+PI_CODING_AGENT_DIR="$HOME/.pi/agent" bash /tmp/lore-plugin/packages/pi-extension/scripts/install-local.sh
 ```
 
 如果 Pi 运行时支持扩展配置，使用：
@@ -264,11 +278,11 @@ export LORE_BASE_URL="http://127.0.0.1:18901"
 export LORE_API_TOKEN="YOUR_TOKEN_IF_USED"
 ```
 
-然后把插件包链接到 Hermes 插件目录：
+然后把插件包链接到 Hermes 插件目录。从克隆的 Lore 仓库执行：
 
 ```bash
 mkdir -p ~/.hermes/skills
-ln -s /path/to/hermes-plugin/lore_memory ~/.hermes/skills/lore_memory
+ln -s /tmp/lore-plugin/packages/hermes-plugin/lore_memory ~/.hermes/skills/lore_memory
 ```
 
 链接插件后重启 Hermes。

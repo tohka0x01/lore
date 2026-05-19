@@ -1,5 +1,9 @@
 Use your own PostgreSQL when you already operate a database service, need managed backups, or do not want the installer-managed PostgreSQL container.
 
+You have two paths with external PostgreSQL:
+- **Still use Docker Compose** for the Lore Web and Redis containers, but point `DATABASE_URL` at your external database. This path is covered below in "Compose Web container with external PostgreSQL."
+- **Run Lore Web without Docker** entirely. This requires building or running the Lore Web container image directly with your own orchestrator. The `DATABASE_URL` and `SNAPSHOT_DATA_DIR` requirements are the same.
+
 Lore only needs one server environment variable to point at it:
 
 ```env

@@ -23,3 +23,32 @@
 | 不确定应该如何使用 Lore | [常见问题](/zh-cn/documents/reference/common-questions) |
 
 排障证据要具体：URL、`client_type`、token 状态、页面名称、查询文本、召回 URI，以及 Agent 是否打开了记忆节点。
+
+## 卸载
+
+从机器上完全移除 Lore：
+
+```bash
+# 停止并删除容器、网络和卷
+docker compose down -v
+
+# 删除本地 Lore 状态
+rm -rf ~/.lore
+
+# 移除 Claude Code Lore 集成
+rm -f ~/.claude/lore-guidance.md
+# 从 ~/.claude/CLAUDE.md 中删除 @~/.claude/lore-guidance.md 导入行
+
+# 移除 Codex MCP 注册
+codex mcp remove lore || true
+
+# 从 ~/.openclaw/openclaw.json 中移除 OpenClaw 插件 entry
+
+# 移除 Pi 扩展
+rm -rf "${PI_CODING_AGENT_DIR:-$HOME/.pi/agent}/extensions/lore"
+
+# 移除 Hermes 插件 symlink
+rm -f ~/.hermes/skills/lore_memory
+```
+
+如果你在 shell profile 中添加过 `LORE_BASE_URL` 和 `LORE_API_TOKEN`，也一并移除。

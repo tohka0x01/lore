@@ -45,7 +45,7 @@ Configure these in `/setup` first, then adjust them later in `/settings`:
 
 | Symptom | Check first |
 | --- | --- |
-| Server does not start | `DATABASE_URL`, database reachability, database permissions |
+| Server does not start | `docker compose ps` and `docker compose logs web` from the directory with `docker-compose.yml` |
 | Web Console works but MCP fails | `API_TOKEN`, MCP URL, `client_type`, agent environment |
 | Recall returns weak results | memory content, disclosure, glossary, then recall thresholds |
 | Dream cannot generate useful suggestions | View LLM settings and memory quality |

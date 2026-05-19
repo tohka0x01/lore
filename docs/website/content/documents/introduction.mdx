@@ -1,6 +1,6 @@
 Lore gives AI agents one shared long-term memory system.
 
-Use the concept pages after installation to understand what Lore stores, how agents receive memory, and how to decide whether a note belongs in durable memory.
+It replaces the pattern of copying rules into every local `CLAUDE.md`, `AGENTS.md`, and plugin file. Instead, agents read and write a single memory graph that survives sessions, runtimes, and machines.
 
 ## The short version
 
@@ -9,6 +9,16 @@ Use the concept pages after installation to understand what Lore stores, how age
 - **Agents should open recalled nodes** before treating them as facts.
 - **Durable changes should be written back into Lore**, not copied into every local agent file.
 - **Dream** helps review and improve memory quality, but important changes still need human review.
+
+## How agents use Lore
+
+```text
+Startup  →  Load boot context (core rules, preferences, channel rules)
+Prompt   →  Receive recall candidates for the current task
+Work     →  Open relevant nodes, use them as context
+Write    →  Save durable facts, decisions, and rules back to Lore
+Review   →  Dream checks memory quality, suggests improvements
+```
 
 ## What to read next
 

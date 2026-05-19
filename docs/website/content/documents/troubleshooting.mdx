@@ -23,3 +23,32 @@ Do not tune recall thresholds first. Most problems are caused by setup, auth, st
 | unsure how Lore should be used | [Common questions](/documents/reference/common-questions) |
 
 Keep troubleshooting evidence concrete: URL, `client_type`, token state, page name, query text, recalled URI, and whether the agent opened the memory node.
+
+## Uninstall
+
+To fully remove Lore from your machine:
+
+```bash
+# Stop and remove containers, networks, and volumes
+docker compose down -v
+
+# Remove local Lore state
+rm -rf ~/.lore
+
+# Remove Claude Code Lore integration
+rm -f ~/.claude/lore-guidance.md
+# Remove the @~/.claude/lore-guidance.md import line from ~/.claude/CLAUDE.md
+
+# Remove Codex MCP registration
+codex mcp remove lore || true
+
+# Remove OpenClaw plugin entry from ~/.openclaw/openclaw.json
+
+# Remove Pi extension
+rm -rf "${PI_CODING_AGENT_DIR:-$HOME/.pi/agent}/extensions/lore"
+
+# Remove Hermes plugin symlink
+rm -f ~/.hermes/skills/lore_memory
+```
+
+Also remove `LORE_BASE_URL` and `LORE_API_TOKEN` from your shell profile if you added them.

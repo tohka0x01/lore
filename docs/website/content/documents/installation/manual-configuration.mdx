@@ -77,6 +77,17 @@ LORE_DB_POOL_SIZE=10
 
 The database role should be allowed to create the schema and required extensions during first startup. If your production role is restricted, run the first startup with a migration-capable role, then switch to the restricted role after the schema exists.
 
+Start Lore (still using Docker Compose for the Web and Redis containers, pointing at your external database):
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/FFatTiger/lore/main/docker-compose.yml -o docker-compose.yml
+# Remove or comment out the postgres service block in docker-compose.yml,
+# or leave your DATABASE_URL pointing at the external host.
+docker compose up -d
+docker compose ps
+curl -fsS http://127.0.0.1:18901/api/health
+```
+
 Lore also needs writable storage for backups and review changesets. In Docker Compose this is provided by `SNAPSHOT_DATA_DIR`. In a custom deployment, mount persistent storage at the path used by the container image.
 
 ## Complete `/setup`
@@ -153,13 +164,16 @@ Register the Lore MCP endpoint in the Claude runtime or plugin configuration:
 ${LORE_BASE_URL:-http://127.0.0.1:18901}/api/mcp?client_type=claudecode
 ```
 
-If you install the Claude Code plugin by hand, copy its guidance file and import it from `~/.claude/CLAUDE.md`:
+If you install the Claude Code plugin by hand, clone the Lore repository and copy its guidance file, then import it from `~/.claude/CLAUDE.md`:
 
 ```bash
+git clone https://github.com/FFatTiger/lore.git /tmp/lore-plugin
 mkdir -p ~/.claude
-cp /path/to/claudecode-plugin/rules/lore-guidance.md ~/.claude/lore-guidance.md
+cp /tmp/lore-plugin/packages/claudecode-plugin/rules/lore-guidance.md ~/.claude/lore-guidance.md
 printf '@~/.claude/lore-guidance.md\n' >> ~/.claude/CLAUDE.md
 ```
+
+The exact plugin path may differ by release. Check the Lore repository for the current plugin layout.
 
 Restart Claude Code after changing settings, plugin files, or `CLAUDE.md`.
 
@@ -190,12 +204,12 @@ codex mcp remove lore || true
 codex mcp add lore --url "http://127.0.0.1:18901/api/mcp?client_type=codex" --bearer-token-env-var LORE_API_TOKEN
 ```
 
-Install Codex hooks from the plugin package when you need startup boot memory and per-prompt recall:
+Install Codex hooks from the plugin package when you need startup boot memory and per-prompt recall. From the cloned Lore repository:
 
 ```bash
 export LORE_BASE_URL="http://127.0.0.1:18901"
 export LORE_API_TOKEN="YOUR_TOKEN_IF_USED"
-bash /path/to/codex-plugin/scripts/install-hooks.sh
+bash /tmp/lore-plugin/packages/codex-plugin/scripts/install-hooks.sh
 ```
 
 Restart Codex, open `/hooks`, and trust the Lore hooks if Codex asks for approval.
@@ -233,10 +247,10 @@ Restart OpenClaw after editing the plugin entry.
 
 ## Connect Pi
 
-Install or symlink the Lore extension into the Pi extension directory:
+Install or symlink the Lore extension into the Pi extension directory. From the cloned Lore repository:
 
 ```bash
-PI_CODING_AGENT_DIR="$HOME/.pi/agent" bash /path/to/pi-extension/scripts/install-local.sh
+PI_CODING_AGENT_DIR="$HOME/.pi/agent" bash /tmp/lore-plugin/packages/pi-extension/scripts/install-local.sh
 ```
 
 If your Pi runtime supports extension config, use:
@@ -264,11 +278,11 @@ export LORE_BASE_URL="http://127.0.0.1:18901"
 export LORE_API_TOKEN="YOUR_TOKEN_IF_USED"
 ```
 
-Then link the plugin package into the Hermes plugin directory:
+Then link the plugin package into the Hermes plugin directory. From the cloned Lore repository:
 
 ```bash
 mkdir -p ~/.hermes/skills
-ln -s /path/to/hermes-plugin/lore_memory ~/.hermes/skills/lore_memory
+ln -s /tmp/lore-plugin/packages/hermes-plugin/lore_memory ~/.hermes/skills/lore_memory
 ```
 
 Restart Hermes after linking the plugin.

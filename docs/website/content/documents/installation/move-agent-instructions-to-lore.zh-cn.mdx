@@ -27,7 +27,7 @@
 | 仅 OpenClaw 需要的行为 | `core://agent/openclaw` |
 | 仅 Hermes 需要的行为 | `core://agent/hermes` |
 
-这与 `web/server/lore/memory/boot.ts` 中的启动代码一致：运行时启动会加载全局启动节点 `core://agent`、`core://soul`、`preferences://user`，以及当前客户端专属节点，例如 `core://agent/codex` 或 `core://agent/claudecode`。
+这与 Lore 的启动机制一致：运行时启动会加载全局启动节点 `core://agent`、`core://soul`、`preferences://user`，以及当前客户端专属节点，例如 `core://agent/codex` 或 `core://agent/claudecode`。
 
 ## 先审计哪些文件
 

@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "defaultPath": "installation",
+  "defaultPath": "introduction",
   "contentRoot": "content/documents",
   "locales": [
     "en",
@@ -8,50 +8,6 @@
   ],
   "source": "Lore public documentation for LoreHub.",
   "parents": [
-    {
-      "category": "Install",
-      "description": "Install Lore, choose the right database shape, complete setup, and verify that the server is ready before connecting agents.",
-      "path": "installation",
-      "navTitle": "Install",
-      "title": "Install Lore",
-      "children": [
-        {
-          "path": "installation/install-lore",
-          "title": "Quick install",
-          "description": "Use the installer to start Lore with Docker or connect clients to an existing Lore server."
-        },
-        {
-          "path": "installation/manual-configuration",
-          "title": "Manual configuration",
-          "description": "Configure the Lore server and agent integrations by hand when you do not use the installer script."
-        },
-        {
-          "path": "installation/use-your-own-postgresql",
-          "title": "Use your own PostgreSQL",
-          "description": "Run Lore against an existing PostgreSQL instance with pgvector and optional Chinese full-text search extensions."
-        },
-        {
-          "path": "installation/first-run-setup",
-          "title": "First-run setup",
-          "description": "Open /setup, configure model endpoints, bootstrap memory, and restart connected runtimes."
-        },
-        {
-          "path": "configuration/essential-settings",
-          "title": "Essential settings",
-          "description": "Set server auth, embedding, View LLM, Redis cache, and backup defaults used by daily operation."
-        },
-        {
-          "path": "installation/verify-the-install",
-          "title": "Verify the install",
-          "description": "Check health, migrations, Web Console access, recall, and agent connection after setup."
-        },
-        {
-          "path": "installation/move-agent-instructions-to-lore",
-          "title": "Move local agent docs into Lore",
-          "description": "Move duplicated CLAUDE.md and AGENTS.md knowledge into shared, project-specific, and channel-specific Lore memories."
-        }
-      ]
-    },
     {
       "category": "Concepts",
       "description": "Understand the model Lore uses for long-term memory: durable paths, disclosure triggers, recall, and Dream maintenance.",
@@ -108,6 +64,50 @@
           "path": "dream",
           "title": "Dream",
           "description": "Understand Dream as a review workflow for cleaning up and improving memory quality."
+        }
+      ]
+    },
+    {
+      "category": "Install",
+      "description": "Install Lore, choose the right database shape, complete setup, and verify that the server is ready before connecting agents.",
+      "path": "installation",
+      "navTitle": "Install",
+      "title": "Install Lore",
+      "children": [
+        {
+          "path": "installation/install-lore",
+          "title": "Quick install",
+          "description": "Use the installer to start Lore with Docker or connect clients to an existing Lore server."
+        },
+        {
+          "path": "installation/manual-configuration",
+          "title": "Manual configuration",
+          "description": "Configure the Lore server and agent integrations by hand when you do not use the installer script."
+        },
+        {
+          "path": "installation/use-your-own-postgresql",
+          "title": "Use your own PostgreSQL",
+          "description": "Run Lore against an existing PostgreSQL instance with pgvector and optional Chinese full-text search extensions."
+        },
+        {
+          "path": "installation/first-run-setup",
+          "title": "First-run setup",
+          "description": "Open /setup, configure model endpoints, bootstrap memory, and restart connected runtimes."
+        },
+        {
+          "path": "configuration/essential-settings",
+          "title": "Essential settings",
+          "description": "Set server auth, embedding, View LLM, Redis cache, and backup defaults used by daily operation."
+        },
+        {
+          "path": "installation/verify-the-install",
+          "title": "Verify the install",
+          "description": "Check health, migrations, Web Console access, recall, and agent connection after setup."
+        },
+        {
+          "path": "installation/move-agent-instructions-to-lore",
+          "title": "Move local agent docs into Lore",
+          "description": "Move duplicated CLAUDE.md and AGENTS.md knowledge into shared, project-specific, and channel-specific Lore memories."
         }
       ]
     },
@@ -257,8 +257,8 @@
     {
       "title": "Docs",
       "paths": [
-        "installation",
         "introduction",
+        "installation",
         "runtime-integrations",
         "web-ui",
         "troubleshooting"

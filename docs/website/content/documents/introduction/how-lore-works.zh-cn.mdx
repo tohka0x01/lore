@@ -9,3 +9,21 @@ Lore 的日常循环由五步组成。
 5. **写回**：当事实、规则或流程发生持久变化时，Agent 或用户把变更写回 Lore。
 
 这个循环的重点是可追溯性。召回结果只是线索；真正可信的是被打开并读过的记忆节点。
+
+启动基线是确定性的，集成会加载如下全局节点：
+
+```text
+core://agent
+core://soul
+preferences://user
+```
+
+同时加载渠道专属节点：
+
+```text
+core://agent/codex
+core://agent/claudecode
+core://agent/openclaw
+core://agent/pi
+core://agent/hermes
+```

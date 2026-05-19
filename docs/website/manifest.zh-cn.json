@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "defaultPath": "installation",
+  "defaultPath": "introduction",
   "contentRoot": "content/documents",
   "locales": [
     "en",
@@ -8,50 +8,6 @@
   ],
   "source": "LoreHub 使用的 Lore 公共中文文档。",
   "parents": [
-    {
-      "category": "安装",
-      "description": "安装 Lore，选择合适的数据库形态，完成设置，并在连接 Agent 前验证服务器可用。",
-      "path": "installation",
-      "navTitle": "安装",
-      "title": "安装 Lore",
-      "children": [
-        {
-          "path": "installation/install-lore",
-          "title": "快速安装",
-          "description": "使用安装器通过 Docker 启动 Lore，或把客户端连接到已有的 Lore 服务器。"
-        },
-        {
-          "path": "installation/manual-configuration",
-          "title": "手动配置",
-          "description": "不使用安装脚本时，手动配置 Lore 服务器和 Agent 集成。"
-        },
-        {
-          "path": "installation/use-your-own-postgresql",
-          "title": "使用自己的 PostgreSQL",
-          "description": "让 Lore 连接已有 PostgreSQL 实例，并配置 pgvector 与可选中文全文搜索扩展。"
-        },
-        {
-          "path": "installation/first-run-setup",
-          "title": "首次运行设置",
-          "description": "打开 /setup，配置模型端点，初始化启动记忆，并重启已连接的运行时。"
-        },
-        {
-          "path": "configuration/essential-settings",
-          "title": "关键设置",
-          "description": "配置日常运行需要的服务器认证、Embedding、View LLM、Redis 缓存和备份默认值。"
-        },
-        {
-          "path": "installation/verify-the-install",
-          "title": "验证安装",
-          "description": "设置完成后检查健康状态、迁移、Web Console、召回和 Agent 连接。"
-        },
-        {
-          "path": "installation/move-agent-instructions-to-lore",
-          "title": "把本地 Agent 文档迁移到 Lore",
-          "description": "把重复的 CLAUDE.md 与 AGENTS.md 内容迁移到共享、项目专属和渠道专属的 Lore 记忆。"
-        }
-      ]
-    },
     {
       "category": "概念",
       "description": "理解 Lore 的长期记忆模型：持久路径、披露触发条件、召回和 Dream 维护。",
@@ -108,6 +64,50 @@
           "path": "dream",
           "title": "Dream",
           "description": "把 Dream 理解为清理和提升记忆质量的审阅流程。"
+        }
+      ]
+    },
+    {
+      "category": "安装",
+      "description": "安装 Lore，选择合适的数据库形态，完成设置，并在连接 Agent 前验证服务器可用。",
+      "path": "installation",
+      "navTitle": "安装",
+      "title": "安装 Lore",
+      "children": [
+        {
+          "path": "installation/install-lore",
+          "title": "快速安装",
+          "description": "使用安装器通过 Docker 启动 Lore，或把客户端连接到已有的 Lore 服务器。"
+        },
+        {
+          "path": "installation/manual-configuration",
+          "title": "手动配置",
+          "description": "不使用安装脚本时，手动配置 Lore 服务器和 Agent 集成。"
+        },
+        {
+          "path": "installation/use-your-own-postgresql",
+          "title": "使用自己的 PostgreSQL",
+          "description": "让 Lore 连接已有 PostgreSQL 实例，并配置 pgvector 与可选中文全文搜索扩展。"
+        },
+        {
+          "path": "installation/first-run-setup",
+          "title": "首次运行设置",
+          "description": "打开 /setup，配置模型端点，初始化启动记忆，并重启已连接的运行时。"
+        },
+        {
+          "path": "configuration/essential-settings",
+          "title": "关键设置",
+          "description": "配置日常运行需要的服务器认证、Embedding、View LLM、Redis 缓存和备份默认值。"
+        },
+        {
+          "path": "installation/verify-the-install",
+          "title": "验证安装",
+          "description": "设置完成后检查健康状态、迁移、Web Console、召回和 Agent 连接。"
+        },
+        {
+          "path": "installation/move-agent-instructions-to-lore",
+          "title": "把本地 Agent 文档迁移到 Lore",
+          "description": "把重复的 CLAUDE.md 与 AGENTS.md 内容迁移到共享、项目专属和渠道专属的 Lore 记忆。"
         }
       ]
     },
@@ -257,8 +257,8 @@
     {
       "title": "文档",
       "paths": [
-        "installation",
         "introduction",
+        "installation",
         "runtime-integrations",
         "web-ui",
         "troubleshooting"

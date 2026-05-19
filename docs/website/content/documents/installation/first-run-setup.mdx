@@ -1,5 +1,13 @@
 After the server starts, open `/setup` on the Lore Web server.
 
+The Web Console is the browser-based UI for Lore at `http://127.0.0.1:18901`. `/setup` is part of it — the first-run configuration page.
+
+## Before you begin
+
+You need an **OpenAI-compatible API key** for embeddings. Any provider that exposes an `/v1/embeddings` endpoint works: OpenAI, DeepSeek, a local Ollama instance, or a self-hosted embedding service. You will also need a **chat model API key** for the View LLM (used to generate searchable memory views and Dream suggestions).
+
+If you only have one key that works for both embeddings and chat, you can reuse it across both fields in `/setup`.
+
 ## Setup flow
 
 The setup flow writes runtime settings into the `app_settings` table. It is not the same thing as editing the server `.env` file.

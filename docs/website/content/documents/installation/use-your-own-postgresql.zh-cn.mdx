@@ -1,5 +1,9 @@
 当你已经维护数据库服务、需要托管备份，或不想使用安装器管理的 PostgreSQL 容器时，可以使用自己的 PostgreSQL。
 
+使用外部 PostgreSQL 有两条路径：
+- **仍然使用 Docker Compose** 运行 Lore Web 和 Redis 容器，但把 `DATABASE_URL` 指向你的外部数据库。这条路径在下面的"使用外部 PostgreSQL 运行 Compose Web 容器"中说明。
+- **完全不使用 Docker 运行 Lore Web**。这需要你用自己的编排工具构建或运行 Lore Web 容器镜像。`DATABASE_URL` 和 `SNAPSHOT_DATA_DIR` 要求不变。
+
 Lore 只需要一个服务器环境变量指向它：
 
 ```env
