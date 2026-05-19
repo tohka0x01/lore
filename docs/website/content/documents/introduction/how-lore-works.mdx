@@ -1,0 +1,18 @@
+Lore has a simple loop:
+
+1. Start a session and load the fixed boot memories.
+2. Ask a question or assign a task.
+3. Lore recalls related memory candidates.
+4. The agent opens the useful memories and uses the full content.
+5. Durable new decisions get written back into Lore.
+
+The key idea is addressable memory. Every memory has a path such as:
+
+```text
+preferences://user
+core://agent/codex
+project://lore_integration
+project://my_app/release_process
+```
+
+Those paths make memory easy to browse, link, move, and reuse.

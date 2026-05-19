@@ -1,0 +1,13 @@
+The installer can configure selected channels:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/FFatTiger/lore/main/scripts/install.sh | bash -s -- --channels codex,claudecode
+```
+
+For an existing Lore server, pass its URL and token:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/FFatTiger/lore/main/scripts/install.sh | bash -s -- --base-url http://127.0.0.1:18901 --api-token YOUR_TOKEN
+```
+
+After connecting, restart the runtime so hooks, plugins, or MCP config are reloaded.

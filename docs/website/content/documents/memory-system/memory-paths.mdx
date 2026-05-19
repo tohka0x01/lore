@@ -1,0 +1,24 @@
+A memory path is the stable address of a memory.
+
+```yaml
+core://agent
+preferences://user
+project://my_app/auth
+project://my_app/deployment
+```
+
+Use domains by purpose:
+
+| Domain | Use for |
+|---|---|
+| `core://` | agent-wide operating rules and identity rules |
+| `preferences://` | user preferences and stable personal context |
+| `project://` | project-specific facts, decisions, and workflows |
+
+Good paths are short, lowercase, and specific. Use one topic per memory:
+
+```yaml
+project://my_app/auth
+project://my_app/release_process
+project://my_app/cloudflare_pages
+```

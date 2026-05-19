@@ -1,0 +1,17 @@
+In supported runtimes, Lore can add a compact recall block to the agent context.
+
+Example:
+
+```text
+<recall session_id="..." query_id="...">
+0.82 | project://my_app/auth | jwt · refresh token
+0.74 | preferences://user | concise replies · timezone
+</recall>
+```
+
+Treat the block as pointers. The useful workflow is:
+
+1. Read the recalled paths.
+2. Open the memories that look relevant.
+3. Use the full memory content in the answer.
+4. Write back durable decisions after the task changes something worth remembering.

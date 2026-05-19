@@ -1,0 +1,310 @@
+{
+  "schemaVersion": 1,
+  "defaultPath": "introduction",
+  "contentRoot": "content/documents",
+  "source": "Lore public documentation for LoreHub.",
+  "parents": [
+    {
+      "category": "Start Here",
+      "description": "A practical overview of Lore and the basic workflow for agent memory.",
+      "path": "introduction",
+      "href": "/documents",
+      "title": "Introduction",
+      "children": [
+        {
+          "path": "introduction/what-lore-is-for",
+          "title": "What Lore is for",
+          "description": "Learn which facts, preferences, decisions, and rules should become durable memory."
+        },
+        {
+          "path": "introduction/how-lore-works",
+          "title": "How Lore works",
+          "description": "Understand the daily loop: boot context, recall, reading memories, and writing durable changes."
+        },
+        {
+          "path": "introduction/when-to-use-it",
+          "title": "When to use it",
+          "description": "Decide which information is worth saving and which short-lived notes can stay out of memory."
+        }
+      ]
+    },
+    {
+      "category": "Start Here",
+      "description": "Learn the core memory concepts: paths, domains, priority, disclosure, glossary terms, and healthy memory shape.",
+      "path": "memory-system",
+      "navTitle": "Memory Basics",
+      "title": "Memory Basics",
+      "children": [
+        {
+          "path": "memory-system/memory-paths",
+          "title": "Memory paths",
+          "description": "Use stable memory paths and domains to keep memory easy to browse, link, and move."
+        },
+        {
+          "path": "memory-system/disclosure-triggers",
+          "title": "Disclosure triggers",
+          "description": "Write concrete triggers so Lore knows when a memory should appear."
+        },
+        {
+          "path": "memory-system/priority-levels",
+          "title": "Priority levels",
+          "description": "Use priority levels to mark importance without making recall noisy."
+        },
+        {
+          "path": "memory-system/glossary-terms",
+          "title": "Glossary terms",
+          "description": "Add product names, aliases, and acronyms that help recall find the right memory."
+        }
+      ]
+    },
+    {
+      "category": "Start Here",
+      "description": "Use recall to bring the right memories into an agent session and inspect why a memory appeared.",
+      "path": "recall",
+      "title": "Recall",
+      "children": [
+        {
+          "path": "recall/what-recall-does",
+          "title": "What recall does",
+          "description": "Learn what recall is matching and why it returns a small set of candidate memories."
+        },
+        {
+          "path": "recall/use-recall-in-chat",
+          "title": "Use recall in chat",
+          "description": "Read the recall block as memory pointers and open useful memories before relying on them."
+        },
+        {
+          "path": "recall/read-recall-results",
+          "title": "Read recall results",
+          "description": "Interpret scores, candidates, query details, and usage state in the Recall UI."
+        },
+        {
+          "path": "recall/improve-recall-quality",
+          "title": "Improve recall quality",
+          "description": "Tune glossary terms, disclosure triggers, priority, and memory shape."
+        }
+      ]
+    },
+    {
+      "category": "Start Here",
+      "description": "Run Dream to review, clean up, and improve long-term memories with human approval.",
+      "path": "dream",
+      "title": "Dream",
+      "children": [
+        {
+          "path": "dream/what-dream-does",
+          "title": "What Dream does",
+          "description": "Understand Dream as a memory maintenance assistant."
+        },
+        {
+          "path": "dream/run-dream-safely",
+          "title": "Run Dream safely",
+          "description": "Run Dream manually, review output, and keep maintenance controlled."
+        },
+        {
+          "path": "dream/review-changes",
+          "title": "Review changes",
+          "description": "Evaluate Dream suggestions by scope, trigger quality, glossary terms, safety, and traceability."
+        }
+      ]
+    },
+    {
+      "category": "Start Here",
+      "description": "Navigate the Lore Web console for memories, recall analysis, Dream runs, setup, and settings.",
+      "path": "web-ui",
+      "navTitle": "Web Console",
+      "title": "Web Console",
+      "children": [
+        {
+          "path": "web-ui/main-pages",
+          "title": "Main pages",
+          "description": "Learn what each main page in the Lore Web console is used for."
+        },
+        {
+          "path": "web-ui/recommended-routine",
+          "title": "Recommended routine",
+          "description": "Follow a simple routine for memory review, recall checks, Dream, and backups."
+        },
+        {
+          "path": "web-ui/what-to-check-first",
+          "title": "What to check first",
+          "description": "Open the right Web page based on the symptom you are seeing."
+        }
+      ]
+    },
+    {
+      "category": "Setup",
+      "description": "Install Lore, start the Web console, and complete the first-run setup.",
+      "path": "installation",
+      "title": "Installation",
+      "children": [
+        {
+          "path": "installation/install-lore",
+          "title": "Install Lore",
+          "description": "Run the installer and choose the install mode that matches your environment."
+        },
+        {
+          "path": "installation/first-run-setup",
+          "title": "First-run setup",
+          "description": "Configure model endpoints, boot memories, settings, and runtime restarts."
+        },
+        {
+          "path": "installation/verify-the-install",
+          "title": "Verify the install",
+          "description": "Check the Web console, health status, setup completion, recall, and agent connection."
+        }
+      ]
+    },
+    {
+      "category": "Setup",
+      "description": "Connect Codex, Claude Code, Pi, OpenClaw, Hermes, or any MCP client to the same Lore memory graph.",
+      "path": "runtime-integrations",
+      "navTitle": "Connect Agents",
+      "title": "Connect Agents",
+      "children": [
+        {
+          "path": "runtime-integrations/choose-runtimes",
+          "title": "Choose runtimes",
+          "description": "Pick the agent runtimes that should share the same Lore memory graph."
+        },
+        {
+          "path": "runtime-integrations/connect-an-agent",
+          "title": "Connect an agent",
+          "description": "Use the installer with selected channels, server URL, and API token."
+        },
+        {
+          "path": "runtime-integrations/what-agents-receive",
+          "title": "What agents receive",
+          "description": "Understand boot memory, recall candidates, MCP tools, and usage tracking."
+        }
+      ]
+    },
+    {
+      "category": "Setup",
+      "description": "Configure the minimum settings that affect daily use: model endpoints, recall behavior, Dream, backup, and auth.",
+      "path": "configuration",
+      "title": "Configuration",
+      "children": [
+        {
+          "path": "configuration/essential-settings",
+          "title": "Essential settings",
+          "description": "Set server URL, auth, embedding, View LLM, and backup basics."
+        },
+        {
+          "path": "configuration/recall-settings",
+          "title": "Recall settings",
+          "description": "Tune display threshold, item count, match weights, query limits, and timeout."
+        },
+        {
+          "path": "configuration/dream-and-backup",
+          "title": "Dream and backup",
+          "description": "Choose safe Dream and backup defaults before heavier memory maintenance."
+        }
+      ]
+    },
+    {
+      "category": "Daily Use",
+      "description": "Follow practical workflows for writing memories, checking recall, running maintenance, and keeping Lore useful.",
+      "path": "operating-playbooks",
+      "navTitle": "Playbooks",
+      "title": "Playbooks",
+      "children": [
+        {
+          "path": "operating-playbooks/write-a-durable-memory",
+          "title": "Write a durable memory",
+          "description": "Save one useful memory with path, priority, disclosure, glossary, and content."
+        },
+        {
+          "path": "operating-playbooks/check-recall-quality",
+          "title": "Check recall quality",
+          "description": "Run realistic queries and inspect why memories appear or stay hidden."
+        },
+        {
+          "path": "operating-playbooks/clean-up-old-memory",
+          "title": "Clean up old memory",
+          "description": "Split, move, delete, and review memories that have become stale or broad."
+        },
+        {
+          "path": "operating-playbooks/prepare-a-new-project",
+          "title": "Prepare a new project",
+          "description": "Create a project memory branch with overview, commands, constraints, and glossary terms."
+        }
+      ]
+    },
+    {
+      "category": "Daily Use",
+      "description": "Fix common setup, recall, Dream, login, and agent-connection issues.",
+      "path": "troubleshooting",
+      "title": "Troubleshooting",
+      "children": [
+        {
+          "path": "troubleshooting/setup-issues",
+          "title": "Setup issues",
+          "description": "Check server address, setup status, health, and auth problems."
+        },
+        {
+          "path": "troubleshooting/recall-issues",
+          "title": "Recall issues",
+          "description": "Fix missing memories, noisy results, slow recall, and confusing query output."
+        },
+        {
+          "path": "troubleshooting/agent-issues",
+          "title": "Agent issues",
+          "description": "Fix boot context, recall hooks, MCP tools, and stale agent memory."
+        }
+      ]
+    },
+    {
+      "category": "Daily Use",
+      "description": "Short answers for common Lore concepts, memory-writing choices, and daily operating decisions.",
+      "path": "reference",
+      "navTitle": "FAQ",
+      "title": "FAQ",
+      "children": [
+        {
+          "path": "reference/common-questions",
+          "title": "Common questions",
+          "description": "Short answers for everyday Lore usage decisions."
+        },
+        {
+          "path": "reference/memory-writing-tips",
+          "title": "Memory writing tips",
+          "description": "Use a practical checklist and example for durable memory shape."
+        },
+        {
+          "path": "reference/glossary",
+          "title": "Glossary",
+          "description": "Understand the core terms used across Lore docs."
+        }
+      ]
+    }
+  ],
+  "navSections": [
+    {
+      "title": "Start Here",
+      "paths": [
+        "introduction",
+        "memory-system",
+        "recall",
+        "dream",
+        "web-ui"
+      ]
+    },
+    {
+      "title": "Setup",
+      "paths": [
+        "installation",
+        "runtime-integrations",
+        "configuration"
+      ]
+    },
+    {
+      "title": "Daily Use",
+      "paths": [
+        "operating-playbooks",
+        "troubleshooting",
+        "reference"
+      ]
+    }
+  ]
+}
