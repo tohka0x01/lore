@@ -110,21 +110,19 @@ export default function SettingsPage(): React.JSX.Element {
   }, [data, draft, handleRebuild, notify, rebuilding, saving, t, weightSum]);
 
   return (
-    <PageCanvas maxWidth="6xl">
+    <PageCanvas maxWidth="5xl">
       {dirtyKeys.length > 0 && (
-        <div className="sticky top-0 z-30 -mx-4 px-4 md:-mx-6 md:px-6">
-          <div className="flex items-center justify-between gap-3 rounded-lg border border-separator-thin bg-surface-primary/95 px-4 py-3 shadow-lg backdrop-blur-sm">
-            <span className="text-sm text-txt-secondary">
+        <div className="sticky top-0 z-30 flex justify-end mb-4">
+          <div className="flex items-center gap-2 rounded-lg bg-surface-primary/95 px-2 py-1.5 shadow backdrop-blur-sm">
+            <span className="text-xs text-txt-tertiary tabular-nums">
               {dirtyKeys.length === 1 ? t('1 unsaved change') : `${dirtyKeys.length} ${t('unsaved changes')}`}
             </span>
-            <div className="flex gap-2">
-              <Button variant="ghost" onClick={clearDraft} disabled={saving}>
-                {t('Discard')}
-              </Button>
-              <Button variant="primary" onClick={() => void handleSave()} disabled={saving}>
-                {saving ? t('Saving…') : `${t('Save')} ${dirtyKeys.length}`}
-              </Button>
-            </div>
+            <Button variant="ghost" size="sm" onClick={clearDraft} disabled={saving}>
+              {t('Discard')}
+            </Button>
+            <Button variant="primary" size="sm" onClick={() => void handleSave()} disabled={saving}>
+              {saving ? t('Saving…') : t('Save')}
+            </Button>
           </div>
         </div>
       )}
