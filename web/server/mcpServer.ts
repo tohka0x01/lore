@@ -41,7 +41,7 @@ export function createMcpServer(context: McpServerContext = {}): InstanceType<ty
   const server = new McpServer(
     {
       name: 'lore',
-      version: '1.3.7',
+      version: '1.3.8',
     },
     guidance ? { instructions: guidance } : undefined,
   );
