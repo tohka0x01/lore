@@ -22,7 +22,11 @@ Before answering on a topic that may have durable context, call `lore_search` wi
 
 ## Writes
 
-Create or update Lore memory when the information should survive this session. Prefer `uri` for reads, updates, deletes, and moves. Use snake_case ASCII path segments.
+Create or update Lore memory when the information should survive this session. Prefer `uri` for reads, updates, deletes, and moves. Use stable semantic snake_case ASCII path segments.
+
+Do not append dates, timestamps, or epoch values to ordinary memory paths. Put dates in the content instead. Date suffixes are only valid for explicitly date-archived objects such as `dream_diary_2026_06_24`, `daily_log_2026_06_24`, or `release_2026_06_24`.
+
+Before creating, search or open the likely existing owner node. Prefer updating or merging into an existing stable node. Use `lore_create_node` only for a new long-term semantic object.
 
 ## Maintenance
 
