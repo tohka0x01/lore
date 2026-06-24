@@ -230,8 +230,44 @@ PY
 }
 
 install_user_hooks() {
-  # Compatibility path: Codex currently executes config-layer hooks, not plugin-local hooks.
+  # Legacy compatibility path for Codex builds that cannot execute plugin-bundled hooks.
   "$INSTALLED_PLUGIN_ROOT/scripts/install-hooks.sh"
+}
+
+remove_legacy_user_hooks() {
+  local hooks_json="$CODEX_HOME/hooks.json"
+  [ -f "$hooks_json" ] || return 0
+  cp "$hooks_json" "$hooks_json.bak.$(date +%Y%m%d%H%M%S)"
+  node - "$hooks_json" <<'NODE'
+const fs = require('node:fs');
+const hooksJson = process.argv[2];
+let data = { hooks: {} };
+try {
+  const raw = fs.readFileSync(hooksJson, 'utf8').trim();
+  if (raw) data = JSON.parse(raw);
+} catch {
+  process.exit(0);
+}
+if (!data || typeof data !== 'object' || Array.isArray(data) || !data.hooks || typeof data.hooks !== 'object') {
+  process.exit(0);
+}
+const isLoreHookEntry = (entry) => {
+  const hooks = Array.isArray(entry?.hooks) ? entry.hooks : [];
+  return hooks.some((hook) => {
+    const command = String(hook?.command || '');
+    return command.includes('/hooks/lore/hooks/rules-inject.')
+      || command.includes('/hooks/lore/hooks/recall-inject.')
+      || (command.includes('LORE_CODEX_PLUGIN_ROOT=') && command.includes('rules-inject.'))
+      || (command.includes('LORE_CODEX_PLUGIN_ROOT=') && command.includes('recall-inject.'));
+  });
+};
+for (const eventName of Object.keys(data.hooks)) {
+  if (Array.isArray(data.hooks[eventName])) {
+    data.hooks[eventName] = data.hooks[eventName].filter((entry) => !isLoreHookEntry(entry));
+  }
+}
+fs.writeFileSync(hooksJson, JSON.stringify(data, null, 2) + '\n');
+NODE
 }
 
 require_command codex
@@ -259,7 +295,10 @@ register_marketplace
 enable_plugin_config
 enable_codex_hooks_feature
 configure_mcp
-install_user_hooks
+remove_legacy_user_hooks
+if [ "${LORE_CODEX_INSTALL_USER_HOOKS:-}" = "1" ]; then
+  install_user_hooks
+fi
 
 echo ""
 echo "Lore Codex plugin installed."
@@ -268,6 +307,6 @@ echo "Plugin: $PLUGIN_ID enabled in $CODEX_CONFIG"
 echo "MCP: ${LORE_BASE_URL%/}/api/mcp?client_type=codex"
 echo "Installed plugin: $INSTALLED_PLUGIN_ROOT"
 echo "Hooks: bundled in $INSTALLED_PLUGIN_ROOT/hooks/hooks.json"
-echo "User hooks: $CODEX_HOME/hooks.json"
-echo "Open /hooks and trust the Lore user hooks if Codex asks for review."
+echo "Legacy user hooks: removed from $CODEX_HOME/hooks.json unless LORE_CODEX_INSTALL_USER_HOOKS=1"
+echo "Open /hooks and trust the Lore plugin hooks if Codex asks for review."
 echo "Restart Codex for plugin and hook changes to take effect."

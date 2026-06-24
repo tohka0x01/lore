@@ -9,6 +9,8 @@ HOOKS_JSON="$CODEX_HOME/hooks.json"
 mkdir -p "$HOOK_ROOT/hooks" "$HOOK_ROOT/rules"
 cp "$PLUGIN_ROOT/hooks/rules-inject.ts" "$HOOK_ROOT/hooks/rules-inject.ts"
 cp "$PLUGIN_ROOT/hooks/recall-inject.ts" "$HOOK_ROOT/hooks/recall-inject.ts"
+cp "$PLUGIN_ROOT/hooks/rules-inject.mjs" "$HOOK_ROOT/hooks/rules-inject.mjs"
+cp "$PLUGIN_ROOT/hooks/recall-inject.mjs" "$HOOK_ROOT/hooks/recall-inject.mjs"
 cp "$PLUGIN_ROOT/rules/lore-guidance.md" "$HOOK_ROOT/rules/lore-guidance.md"
 
 if [[ -f "$HOOKS_JSON" ]]; then
@@ -32,16 +34,16 @@ if (!data || typeof data !== 'object' || Array.isArray(data)) data = { hooks: {}
 if (!data.hooks || typeof data.hooks !== 'object' || Array.isArray(data.hooks)) data.hooks = {};
 
 const commandFor = (script) =>
-  `LORE_CODEX_PLUGIN_ROOT="${hookRoot}" LORE_BASE_URL=\${LORE_BASE_URL:-http://127.0.0.1:18901} npx tsx "${hookRoot}/hooks/${script}"`;
+  `LORE_CODEX_PLUGIN_ROOT="${hookRoot}" LORE_BASE_URL=\${LORE_BASE_URL:-http://127.0.0.1:18901} node "${hookRoot}/hooks/${script}"`;
 
 const entries = {
   SessionStart: {
     matcher: "",
-    hooks: [{ type: "command", command: commandFor('rules-inject.ts'), timeout: 10 }],
+    hooks: [{ type: "command", command: commandFor('rules-inject.mjs'), timeout: 10 }],
   },
   UserPromptSubmit: {
     matcher: "",
-    hooks: [{ type: "command", command: commandFor('recall-inject.ts'), timeout: 10 }],
+    hooks: [{ type: "command", command: commandFor('recall-inject.mjs'), timeout: 10 }],
   },
 };
 
@@ -49,7 +51,7 @@ for (const [eventName, entry] of Object.entries(entries)) {
   const current = Array.isArray(data.hooks[eventName]) ? data.hooks[eventName] : [];
   const filtered = current.filter((item) => {
     const commands = Array.isArray(item?.hooks) ? item.hooks.map((hook) => String(hook?.command || '')) : [];
-    return !commands.some((command) => command.includes('/hooks/lore/hooks/rules-inject.ts') || command.includes('/hooks/lore/hooks/recall-inject.ts'));
+    return !commands.some((command) => command.includes('/hooks/lore/hooks/rules-inject.') || command.includes('/hooks/lore/hooks/recall-inject.'));
   });
   filtered.push(entry);
   data.hooks[eventName] = filtered;

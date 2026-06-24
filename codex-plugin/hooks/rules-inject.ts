@@ -31,7 +31,8 @@ function pickString(value: unknown): string {
 
 function loadConfig() {
   const config = readLoreConfig();
-  const baseUrl = pickString(config.base_url)
+  const baseUrl = pickString(process.env.LORE_CODEX_HOOK_BASE_URL)
+    || pickString(config.base_url)
     || pickString(process.env.LORE_BASE_URL)
     || DEFAULT_BASE_URL;
   return {

@@ -46,14 +46,18 @@ The installer reads that file, configures Codex MCP with a standard `Authorizati
 
 ## Prompt Injection Hooks
 
-Lore ships plugin-bundled lifecycle hooks through `hooks/hooks.json`, referenced by `.codex-plugin/plugin.json`. As of Codex CLI 0.130, plugin-local hooks are visible in the package but are not executed by the runtime; the installer therefore also writes equivalent user-level hooks to `~/.codex/hooks.json`. The installer enables the official Codex hooks feature in `~/.codex/config.toml`:
+Lore ships plugin-bundled lifecycle hooks through `hooks/hooks.json`, referenced by `.codex-plugin/plugin.json`. Modern Codex builds execute those plugin hooks directly. The installer enables the official Codex hooks feature in `~/.codex/config.toml` and removes older Lore user-level hook entries from `~/.codex/hooks.json` so one prompt creates one recall query:
 
 ```toml
 [features]
 hooks = true
 ```
 
+Set `LORE_CODEX_INSTALL_USER_HOOKS=1` only for legacy Codex builds that require `~/.codex/hooks.json` compatibility entries.
+
 The hooks add:
 
 - `SessionStart`: Lore guidance plus boot baseline from `client_type=codex`
 - `UserPromptSubmit`: `<recall>` context for the current prompt
+
+Hook commands run plain `node` `.mjs` files instead of `npx tsx`, avoiding per-prompt package runner startup cost.
