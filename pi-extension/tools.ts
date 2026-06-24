@@ -184,15 +184,15 @@ export function registerTools(pi: any, pluginCfg: any) {
   pi.registerTool({
     name: 'lore_create_node',
     label: 'Lore create node',
-    description: 'Create a new long-term memory node only when no existing stable node should own the fact. Use stable semantic snake_case URI/title segments. A multi-segment path is a semantic memory tree; every intermediate segment must be a real abstraction parent node with memory content, disclosure, and glossary, so create parents first. Do not append dates, timestamps, or epoch values to ordinary memory paths; put dates in content instead. Date suffixes are only for explicit diary/log/release/archive nodes. Prefer lore_update_node after search/get_node.',
+    description: 'Create a new long-term memory concept in the Lore living semantic tree. A URI path names the concept identity with durable snake_case segments; event time belongs in the node narrative or in explicit archive, diary, release, or incident concepts. For multi-segment paths, first make the parent abstraction real with content, disclosure, and glossary, then place the child under that conceptual home. Prefer update or merge when an existing concept already owns the fact.',
     parameters: Type.Object({
       content: Type.String({ description: 'Memory text body.' }),
       priority: Type.Number({ minimum: 0, description: 'Importance tier: 0=core identity (max 5), 1=key facts (max 15), 2+=general.' }),
       glossary: Type.Array(Type.String({ description: 'Search keyword.' }), { description: 'Initial glossary keywords written with this node create event for later retrieval.' }),
-      uri: Type.Optional(Type.String({ description: 'Optional final stable semantic memory URI. Do not append dates, timestamps, or epoch values for ordinary memories. Intermediate paths must already exist as real abstraction parent nodes with content.' })),
+      uri: Type.Optional(Type.String({ description: 'Optional final memory URI. It names a durable concept identity; event time belongs in content or in explicit archive, diary, release, or incident concepts. Intermediate paths grow from real parent abstractions with content.' })),
       domain: Type.Optional(Type.String({ description: 'Target memory domain when not using uri.' })),
-      parent_path: Type.Optional(Type.String({ description: 'Parent location inside the chosen domain.' })),
-      title: Type.Optional(Type.String({ description: 'Final stable semantic path segment for the new memory; ordinary memories must not end with dates or timestamps.' })),
+      parent_path: Type.Optional(Type.String({ description: 'Parent concept path inside the chosen domain; for multi-segment paths this parent abstraction explains why the children belong together and carries content, disclosure, and glossary.' })),
+      title: Type.Optional(Type.String({ description: 'Final concept segment for the new memory; name the reusable idea, module, decision, preference, or archive concept.' })),
       disclosure: Type.Optional(Type.String({ description: 'When this memory should be recalled.' })),
     }),
     async execute(_toolCallId: string, params: any = {}, _signal?: AbortSignal, _onUpdate?: unknown, _ctx?: any) {
@@ -303,10 +303,10 @@ export function registerTools(pi: any, pluginCfg: any) {
   pi.registerTool({
     name: 'lore_move_node',
     label: 'Lore move node',
-    description: 'Move or rename a memory node to a new URI path. A multi-segment path is a semantic memory tree; the target parent must already be a real abstraction parent node with memory content. The operation reparents the moved node to that parent and updates all child paths automatically.',
+    description: 'Move or rename a memory concept inside the semantic memory tree. The target parent represents the conceptual home; it must already be a real parent abstraction with memory content so the move can reparent the node and its subtree into that abstraction.',
     parameters: Type.Object({
       old_uri: Type.String({ description: 'Current memory URI to move from.' }),
-      new_uri: Type.String({ description: 'New memory URI to move to. For multi-segment paths, the target parent must already be a real abstraction node with content.' }),
+      new_uri: Type.String({ description: 'New memory URI. For multi-segment paths, the target parent is the parent abstraction that becomes the node conceptual home.' }),
     }),
     async execute(_toolCallId: string, params: any = {}, _signal?: AbortSignal, _onUpdate?: unknown, _ctx?: any) {
       const body = {

@@ -488,7 +488,7 @@ export function buildDreamSystemPrompt(initialContext: DreamInitialContext): str
     ? 'Read the guidance first and apply it to every write decision and to the final diary. Use the loaded boot baseline as always-available key memories throughout the review.'
     : 'Use the loaded boot baseline as always-available key memories throughout the review.';
 
-  const rules = `你是 Lore 的夜间记忆消化系统。第一目标是让现有记忆树更成熟：减少重复、提高密度、修正边界、提炼高层认知。第二目标是从今日用户内容中抽取值得长期保存的记忆。第三目标是根据 recall metadata 发现 glossary / disclosure / view / priority 问题。
+  const rules = `你是 Lore 的夜间记忆消化系统。Lore 是一棵会自我生长的语义记忆树。你的工作是让这棵树更成熟：概念更清晰、密度更高、边界更准、未来更容易想起。第二目标是从今日用户内容中抽取值得长期保存的记忆。第三目标是根据 recall metadata 发现 glossary / disclosure / view / priority 问题。
 
 ## 阶段流程
 
@@ -496,30 +496,32 @@ Phase 1 collect：系统已收集 boot baseline、guidance、今日 recall metad
 Phase 2 diagnose：只读诊断。先看树，再考虑写。允许 search、get_node、inspect_tree、inspect_neighbors、inspect_views、refresh_or_inspect_views、get_query_detail 系列工具。输出结构化诊断。
 Phase 3 plan：输出候选变更 JSON，字段为 tree_maintenance_candidates、daily_memory_extraction_candidates、recall_repair_candidates、skip_reasons。
 Phase 4 preflight：对候选逐个跑 validate_memory_change。
-Phase 5 apply：默认最多 1-2 个写入。优先更新 / 提炼 / 合并现有节点；其次拆分已有节点；再次 glossary / disclosure 微调；最后才是 create_node。
+Phase 5 apply：默认最多 1-2 个写入。像园丁修剪树：先滋养已有概念，再提炼 / 合并；概念过载时拆分；召回弱时调 glossary / disclosure；出现新的长期概念时 create_node。
 Phase 6 audit：raw diary 输出结构化 audit JSON。诗性日记只消费这个 audit，不参与事实判断。
 
 ## 记忆树消化
 
-第一目标是让现有记忆树更成熟。重点审视现有树结构：抽取、提炼、合并、拆分、降格、删除、移动。目标是让节点总数趋稳，信息密度变高，避免横向扩张。
+第一目标是让现有记忆树更成熟。重点审视现有树结构：抽取、提炼、合并、拆分、降格、删除、移动。目标是让节点总数趋稳，信息密度变高，概念边界更清楚。
 
-核心规则：
-- 先看树，再考虑写。
-- 优先更新 / 提炼 / 合并现有节点。
-- 新建节点要更严格：必须有明确父节点、明确 disclosure、明确长期价值。
-- 禁止为了单条 query 横向新建很多项目碎片。
-- 结构维护必须参考 guidance：过长拆分，多概念拆分，三条以上相似记忆提炼，缺背景补 why / 条件，成熟网络节点数趋稳甚至下降。
+核心观念：
+- 先看树，再考虑写。写入是一种消化，目标是让树更会生长。
+- 现有节点是优先滋养的概念容器。把新证据放回它真正归属的概念。
+- 新节点代表新的长期概念。它需要清晰的父抽象、召回语境和未来复用价值。
+- path 是概念在树中的位置。它回答“未来的我会回到哪个概念？”。
+- 父节点是抽象，不是目录。父节点沉淀下层共同背景、边界、索引词和未来生长方向。
+- 结构维护参考 guidance：过长拆分，多概念拆分，三条以上相似记忆提炼，缺背景补 why / 条件，成熟网络节点数趋稳甚至下降。
 
 树结构属于核心证据。对可疑分支先用 inspect_tree 或 inspect_memory_node_for_dream 看父节点、兄弟节点、子节点、views、write history，再判断更新、拆分、合并、降格、删除、移动。
 
+## 概念身份与时间线
+
+Memory URI/path 是概念身份。日期描述事件发生时间。日期属于节点正文里的时间线、历史段落、event metadata，或明确的 diary / log / release / archive / incident 概念。
+
+从今日用户内容中抽取长期事实时，把“今天发生了什么”转化为“哪个长期概念获得了新证据”。项目、工作记录、架构决策、偏好节点用稳定概念命名；事件发生日期写进正文第一句或历史段落。
+
 ## 今日用户内容抽取
 
-今日用户内容来自 recall_queries.query_text。这里没有完整 assistant reply。只能总结 query_text 暴露出来的长期信息。
-用户一次性的操作请求默认跳过。
-明确项目状态、偏好、架构决策、长期约束，可以记。
-能归入已有项目节点就更新已有节点。
-没有稳定复用价值就跳过。
-新建节点必须说明为什么更新旧节点不足够。
+今日用户内容来自 recall_queries.query_text。这里没有完整 assistant reply。只总结 query_text 暴露出来的长期信息。把一次性操作请求当成短暂水流，把明确项目状态、偏好、架构决策、长期约束当成能滋养记忆树的养分。能归入已有项目节点就更新已有节点；新的长期概念出现时，再创建新的节点并说明它的边界。
 
 ## recall 修复
 

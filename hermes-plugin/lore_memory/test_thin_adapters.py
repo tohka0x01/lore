@@ -239,7 +239,8 @@ class LoreProviderThinAdapterTests(unittest.TestCase):
 
     def test_format_boot_view_warns_recent_memories_not_uri_examples(self):
         text = format_boot_view({"recent_memories": [{"uri": "core://foo_2026_06_24", "priority": 2}]})
-        self.assertIn("not URI naming examples", text)
+        self.assertIn("context hints", text)
+        self.assertIn("event time", text)
 
     def test_create_tool_formats_top_level_uri(self):
         result = self.provider._tool_lore_create_node({
@@ -261,22 +262,24 @@ class LoreProviderThinAdapterTests(unittest.TestCase):
 
         self.assertEqual(result, "Updated: core://agent/profile-renamed")
 
-    def test_create_schema_warns_against_date_suffixes(self):
+    def test_create_schema_explains_semantic_tree_identity_and_date_meaning(self):
         schemas = {tool["name"]: tool for tool in self.provider.get_tool_schemas()}
         create = schemas["lore_create_node"]
-        self.assertIn("stable semantic", create["description"])
-        self.assertIn("Do not append dates", create["description"])
-        self.assertIn("real abstraction parent node", create["description"])
-        self.assertIn("Do not append dates", create["parameters"]["properties"]["uri"]["description"])
-        self.assertIn("real abstraction parent nodes", create["parameters"]["properties"]["uri"]["description"])
+        self.assertIn("living semantic tree", create["description"])
+        self.assertIn("concept identity", create["description"])
+        self.assertIn("event time", create["description"])
+        self.assertIn("parent abstraction", create["description"])
+        self.assertIn("concept identity", create["parameters"]["properties"]["uri"]["description"])
+        self.assertIn("event time", create["parameters"]["properties"]["uri"]["description"])
+        self.assertNotIn("Do not append dates", create["description"])
 
     def test_move_schema_requires_real_parent_nodes(self):
         schemas = {tool["name"]: tool for tool in self.provider.get_tool_schemas()}
         move = schemas["lore_move_node"]
         self.assertIn("semantic memory tree", move["description"])
-        self.assertIn("real abstraction parent node", move["description"])
-        self.assertIn("reparents", move["description"])
-        self.assertIn("real abstraction node", move["parameters"]["properties"]["new_uri"]["description"])
+        self.assertIn("parent abstraction", move["description"])
+        self.assertIn("conceptual home", move["description"])
+        self.assertIn("parent abstraction", move["parameters"]["properties"]["new_uri"]["description"])
 
     def test_update_tool_does_not_expose_glossary_replacement(self):
         schemas = {tool["name"]: tool for tool in self.provider.get_tool_schemas()}

@@ -1112,7 +1112,8 @@ describe('buildDreamSystemPrompt', () => {
   it('establishes memory digestion identity and priorities', () => {
     const prompt = buildDreamSystemPrompt(makeInitialContext());
     expect(prompt).toContain('你是 Lore 的夜间记忆消化系统');
-    expect(prompt).toContain('第一目标是让现有记忆树更成熟');
+    expect(prompt).toContain('Lore 是一棵会自我生长的语义记忆树');
+    expect(prompt).toContain('概念更清晰、密度更高、边界更准');
     expect(prompt).toContain('第二目标是从今日用户内容中抽取值得长期保存的记忆');
     expect(prompt).toContain('第三目标是根据 recall metadata 发现 glossary / disclosure / view / priority 问题');
     expect(prompt).toContain('Agent boot body');
@@ -1125,9 +1126,12 @@ describe('buildDreamSystemPrompt', () => {
   it('provides structured decision framework for interventions', () => {
     const prompt = buildDreamSystemPrompt(makeInitialContext());
     expect(prompt).toContain('先看树，再考虑写');
-    expect(prompt).toContain('优先更新 / 提炼 / 合并现有节点');
-    expect(prompt).toContain('新建节点要更严格');
-    expect(prompt).toContain('禁止为了单条 query 横向新建很多项目碎片');
+    expect(prompt).toContain('写入是一种消化');
+    expect(prompt).toContain('现有节点是优先滋养的概念容器');
+    expect(prompt).toContain('新节点代表新的长期概念');
+    expect(prompt).toContain('path 是概念在树中的位置');
+    expect(prompt).toContain('父节点是抽象，不是目录');
+    expect(prompt).toContain('日期描述事件发生时间');
     expect(prompt).toContain('树结构');
     expect(prompt).toContain('过长拆分');
     expect(prompt).toContain('三条以上相似记忆提炼');
@@ -1138,11 +1142,11 @@ describe('buildDreamSystemPrompt', () => {
 
   it('filters out non-actionable changes with explicit guardrails', () => {
     const prompt = buildDreamSystemPrompt(makeInitialContext());
-    expect(prompt).toContain('用户一次性的操作请求默认跳过');
-    expect(prompt).toContain('明确项目状态、偏好、架构决策、长期约束，可以记');
+    expect(prompt).toContain('一次性操作请求当成短暂水流');
+    expect(prompt).toContain('明确项目状态、偏好、架构决策、长期约束当成能滋养记忆树的养分');
     expect(prompt).toContain('能归入已有项目节点就更新已有节点');
-    expect(prompt).toContain('新建节点必须说明为什么更新旧节点不足够');
-    expect(prompt).toContain('只能总结 query_text 暴露出来的长期信息');
+    expect(prompt).toContain('新的长期概念出现时');
+    expect(prompt).toContain('只总结 query_text 暴露出来的长期信息');
   });
 
   it('requires structured audit diary', () => {
@@ -1206,8 +1210,8 @@ describe('buildDreamSystemPrompt', () => {
     const prompt = buildDreamSystemPrompt(makeInitialContext());
     expect(prompt).toContain('受保护的启动基线节点');
     expect(prompt).toContain('只读参考，不可修改');
-    expect(prompt).toContain('优先更新 / 提炼 / 合并现有节点');
-    expect(prompt).toContain('最后才是 create_node');
+    expect(prompt).toContain('先滋养已有概念，再提炼 / 合并');
+    expect(prompt).toContain('出现新的长期概念时 create_node');
   });
 });
 

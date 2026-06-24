@@ -47,7 +47,7 @@ def _load_guidance() -> str:
         "lore_boot is a fixed startup baseline inside Lore, not a separate config layer. "
         f"At startup, lore_boot deterministically loads the three global boot nodes core://agent (workflow constraints), core://soul (style / persona / self-definition), and preferences://user (stable user definition / durable user context), plus {CLIENT_BOOT_URI} for Hermes-specific agent rules. "
         "Treat boot as the session's startup baseline. core://agent holds shared agent rules; core://agent/hermes holds Hermes-specific rules. Use recall and search to add prompt-specific memory leads, not to replace the role of those fixed paths. "
-        "Use lore_get_node to read and lore_search to find. Before creating, search or open the likely owner node; prefer updating or merging. Use stable semantic URI/path segments and do not append dates, timestamps, or epoch values to ordinary memory paths. A multi-segment path is a semantic memory tree; every intermediate segment must be a real abstraction parent node with content, disclosure, and glossary. Before moving nodes into a hierarchy, create or update those parent nodes; a string-only path move is incomplete."
+        "Use lore_get_node to read and lore_search to find. Before creating, search or open the likely owner concept; prefer updating or merging. Lore is a living semantic tree: a path names concept identity, dates express event time in the node narrative or explicit archive concepts, and multi-segment paths grow through real parent abstractions with content, disclosure, and glossary."
     )
 
 
@@ -99,7 +99,7 @@ def _format_boot_section(data: Dict) -> str:
 
     if recent:
         lines.append("### 近期记忆")
-        lines.append("近期记忆是上下文线索，不是 URI 命名示例。部分历史 URI 可能包含日期后缀；普通记忆不要模仿这种 path 风格。")
+        lines.append("近期记忆是上下文线索。部分历史 URI 可能带有日期形态；日期只说明事件时间或归档语境，普通记忆的身份仍由稳定概念承载。")
         for mem in recent:
             parts = []
             if isinstance(mem.get("priority"), (int, float)):
@@ -416,7 +416,7 @@ class LoreMemoryProvider(MemoryProvider):
             },
             {
                 "name": "lore_create_node",
-                "description": "Create a new long-term memory node only when no existing stable node should own the fact. Use stable semantic snake_case URI/title segments. A multi-segment path is a semantic memory tree; every intermediate segment must be a real abstraction parent node with memory content, disclosure, and glossary, so create parents first. Do not append dates, timestamps, or epoch values to ordinary memory paths; put dates in content instead. Date suffixes are only for explicit diary/log/release/archive nodes. Prefer lore_update_node after search/get_node.",
+                "description": "Create a new long-term memory concept in the Lore living semantic tree. A URI path names the concept identity with durable snake_case segments; event time belongs in the node narrative or in explicit archive, diary, release, or incident concepts. For multi-segment paths, first make the parent abstraction real with content, disclosure, and glossary, then place the child under that conceptual home. Prefer update or merge when an existing concept already owns the fact.",
                 "parameters": {
                     "type": "object",
                     "additionalProperties": False,
@@ -424,10 +424,10 @@ class LoreMemoryProvider(MemoryProvider):
                         "content": {"type": "string", "description": "Memory text body"},
                         "priority": {"type": "integer", "minimum": 0, "description": "Importance tier (0=core identity, 1=key facts, 2+=general)"},
                         "glossary": {"type": "array", "items": {"type": "string"}, "description": "Initial glossary keywords written with this node create event"},
-                        "uri": {"type": "string", "description": "Optional final stable semantic memory URI. Do not append dates, timestamps, or epoch values for ordinary memories. Intermediate paths must already exist as real abstraction parent nodes with content."},
+                        "uri": {"type": "string", "description": "Optional final memory URI. It names a durable concept identity; event time belongs in content or in explicit archive, diary, release, or incident concepts. Intermediate paths grow from real parent abstractions with content."},
                         "domain": {"type": "string", "description": "Target memory domain when not using uri"},
-                        "parent_path": {"type": "string", "description": "Parent location inside the chosen domain; for multi-segment paths this must be a real abstraction node with content, disclosure, and glossary."},
-                        "title": {"type": "string", "description": "Final stable semantic path segment for the new memory; ordinary memories must not end with dates or timestamps."},
+                        "parent_path": {"type": "string", "description": "Parent concept path inside the chosen domain; for multi-segment paths this parent abstraction explains why the children belong together and carries content, disclosure, and glossary."},
+                        "title": {"type": "string", "description": "Final concept segment for the new memory; name the reusable idea, module, decision, preference, or archive concept."},
                         "disclosure": {"type": "string", "description": "When this memory should be recalled"},
                     },
                     "required": ["content", "priority", "glossary"],
@@ -464,13 +464,13 @@ class LoreMemoryProvider(MemoryProvider):
             },
             {
                 "name": "lore_move_node",
-                "description": "Move or rename a memory node to a new URI path. A multi-segment path is a semantic memory tree; the target parent must already be a real abstraction parent node with memory content. The operation reparents the moved node to that parent and updates all child paths automatically.",
+                "description": "Move or rename a memory concept inside the semantic memory tree. The target parent represents the conceptual home; it must already be a real parent abstraction with memory content so the move can reparent the node and its subtree into that abstraction.",
                 "parameters": {
                     "type": "object",
                     "additionalProperties": False,
                     "properties": {
                         "old_uri": {"type": "string", "description": "Current memory URI to move from"},
-                        "new_uri": {"type": "string", "description": "New memory URI to move to. For multi-segment paths, the target parent must already be a real abstraction node with content."},
+                        "new_uri": {"type": "string", "description": "New memory URI. For multi-segment paths, the target parent is the parent abstraction that becomes the node conceptual home."},
                     },
                     "required": ["old_uri", "new_uri"],
                 },

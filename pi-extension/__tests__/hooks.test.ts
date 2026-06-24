@@ -76,7 +76,9 @@ describe('Pi extension hooks', () => {
   it('loads prompt guidance text', () => {
     expect(loadPromptGuidance()).toContain('Lore');
     expect(DEFAULT_GUIDANCE).toContain('core://agent/pi');
-    expect(DEFAULT_GUIDANCE).toContain('ordinary memory paths');
-    expect(DEFAULT_GUIDANCE).toContain('stable semantic identity');
+    expect(DEFAULT_GUIDANCE).toContain('living semantic tree');
+    expect(DEFAULT_GUIDANCE).toContain('concept identity');
+    expect(DEFAULT_GUIDANCE).toContain('event time');
+    expect(DEFAULT_GUIDANCE).not.toContain('Do not append dates');
   });
 });

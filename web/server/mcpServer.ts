@@ -193,15 +193,15 @@ export function createMcpServer(context: McpServerContext = {}): InstanceType<ty
   // ── lore_create_node ─────────────────────────────────────────
   server.tool(
     'lore_create_node',
-    'Create a new long-term memory node only when no existing stable node should own the fact. Use stable semantic snake_case URI/title segments. A multi-segment path is a semantic memory tree; every intermediate segment must be a real abstraction parent node with memory content, disclosure, and glossary, so create parents first. Do not append dates, timestamps, or epoch values to ordinary memory paths; put dates in content instead.',
+    'Create a new long-term memory concept in the Lore living semantic tree. A URI path names the concept identity with durable snake_case segments; event time belongs in the node narrative or in explicit archive, diary, release, or incident concepts. For multi-segment paths, first make the parent abstraction real with content, disclosure, and glossary, then place the child under that conceptual home. Prefer update or merge when an existing concept already owns the fact.',
     {
       content: z.string().describe('Memory text body.'),
       priority: z.number().int().min(0).describe('Importance tier (0=core identity, 1=key facts, 2+=general).'),
       glossary: z.array(z.string()).describe('Initial glossary keywords written with this node create event.'),
-      uri: z.string().optional().describe('Optional final stable semantic memory URI. Do not append dates, timestamps, or epoch values for ordinary memories. Intermediate paths must already exist as real abstraction parent nodes with content.'),
+      uri: z.string().optional().describe('Optional final memory URI. It names a durable concept identity; event time belongs in content or in explicit archive, diary, release, or incident concepts. Intermediate paths grow from real parent abstractions with content.'),
       domain: z.string().optional().describe('Target memory domain when not using uri.'),
-      parent_path: z.string().optional().describe('Parent location inside the chosen domain; for multi-segment paths this must be a real abstraction node with content, disclosure, and glossary.'),
-      title: z.string().optional().describe('Final stable semantic path segment for the new memory; ordinary memories must not end with dates or timestamps.'),
+      parent_path: z.string().optional().describe('Parent concept path inside the chosen domain; for multi-segment paths this parent abstraction explains why the children belong together and carries content, disclosure, and glossary.'),
+      title: z.string().optional().describe('Final concept segment for the new memory; name the reusable idea, module, decision, preference, or archive concept.'),
       disclosure: z.string().optional().describe('When this memory should be recalled.'),
     },
     async (args) => {
@@ -332,10 +332,10 @@ export function createMcpServer(context: McpServerContext = {}): InstanceType<ty
   // ── lore_move_node ───────────────────────────────────────────
   server.tool(
     'lore_move_node',
-    'Move or rename a memory node to a new URI path. A multi-segment path is a semantic memory tree; the target parent must already be a real abstraction parent node with memory content. The operation reparents the moved node to that parent and updates all child paths automatically.',
+    'Move or rename a memory concept inside the semantic memory tree. The target parent represents the conceptual home; it must already be a real parent abstraction with memory content so the move can reparent the node and its subtree into that abstraction.',
     {
       old_uri: z.string().describe('Current memory URI to move from.'),
-      new_uri: z.string().describe('New memory URI to move to. For multi-segment paths, the target parent must already be a real abstraction node with content.'),
+      new_uri: z.string().describe('New memory URI. For multi-segment paths, the target parent is the parent abstraction that becomes the node conceptual home.'),
     },
     async (args) => {
       try {

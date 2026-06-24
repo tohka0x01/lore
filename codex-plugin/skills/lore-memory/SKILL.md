@@ -22,13 +22,13 @@ Before answering on a topic that may have durable context, call `lore_search` wi
 
 ## Writes
 
-Create or update Lore memory when the information should survive this session. Prefer `uri` for reads, updates, deletes, and moves. Use stable semantic snake_case ASCII path segments.
+Create or update Lore memory when the information should survive this session. Lore is a living semantic tree: each node is a concept that can absorb future evidence, and each `uri` names that concept's identity and position.
 
-Do not append dates, timestamps, or epoch values to ordinary memory paths. Put dates in the content instead. Date suffixes are only valid for explicitly date-archived objects such as `dream_diary_2026_06_24`, `daily_log_2026_06_24`, or `release_2026_06_24`.
+Dates express event time. Put event time in the node narrative, history, metadata, or explicit diary/log/release/archive/incident concepts. Project, work, preference, and decision memories should use durable concept names so future recall returns by meaning.
 
-A multi-segment path is a semantic memory tree. Every intermediate segment must be a real abstraction parent node with content, disclosure, and glossary. Before moving nodes into a hierarchy, create or update those parent nodes; a string-only path move is incomplete.
+A multi-segment path grows through parent abstractions. Every intermediate segment is a real memory node with content, disclosure, and glossary that explains why its children belong together. Before moving nodes into a hierarchy, create or update the parent abstraction.
 
-Before creating, search or open the likely existing owner node. Prefer updating or merging into an existing stable node. Use `lore_create_node` only for a new long-term semantic object.
+Before creating, search or open the likely existing owner concept. Prefer updating or merging into an existing stable node. Use `lore_create_node` when a new long-lived concept has appeared.
 
 ## Maintenance
 

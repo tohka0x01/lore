@@ -72,8 +72,10 @@ describe('DEFAULT_GUIDANCE', () => {
 
   it('mentions Lore stable path guidance', () => {
     expect(DEFAULT_GUIDANCE).toContain('Lore');
-    expect(DEFAULT_GUIDANCE).toContain('ordinary memory paths');
-    expect(DEFAULT_GUIDANCE).toContain('stable semantic identity');
+    expect(DEFAULT_GUIDANCE).toContain('living semantic tree');
+    expect(DEFAULT_GUIDANCE).toContain('concept identity');
+    expect(DEFAULT_GUIDANCE).toContain('event time');
+    expect(DEFAULT_GUIDANCE).not.toContain('Do not append dates');
   });
 });
 

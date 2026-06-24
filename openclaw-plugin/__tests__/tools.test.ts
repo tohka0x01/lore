@@ -95,12 +95,14 @@ describe('tool parameter schemas', () => {
     expect(req).toContain('glossary');
   });
 
-  it('lore_create_node warns against date suffixes', () => {
-    expect(tools.lore_create_node.description).toContain('stable semantic');
-    expect(tools.lore_create_node.description).toContain('Do not append dates');
-    expect(tools.lore_create_node.description).toContain('real abstraction parent node');
-    expect(tools.lore_create_node.parameters.properties.uri.description).toContain('Do not append dates');
-    expect(tools.lore_create_node.parameters.properties.uri.description).toContain('real abstraction parent nodes');
+  it('lore_create_node explains semantic tree identity and date meaning', () => {
+    expect(tools.lore_create_node.description).toContain('living semantic tree');
+    expect(tools.lore_create_node.description).toContain('concept identity');
+    expect(tools.lore_create_node.description).toContain('event time');
+    expect(tools.lore_create_node.description).toContain('parent abstraction');
+    expect(tools.lore_create_node.parameters.properties.uri.description).toContain('concept identity');
+    expect(tools.lore_create_node.parameters.properties.uri.description).toContain('event time');
+    expect(tools.lore_create_node.description).not.toContain('Do not append dates');
   });
 
   it('lore_update_node requires uri', () => {
@@ -124,9 +126,9 @@ describe('tool parameter schemas', () => {
     expect(req).toContain('old_uri');
     expect(req).toContain('new_uri');
     expect(tools.lore_move_node.description).toContain('semantic memory tree');
-    expect(tools.lore_move_node.description).toContain('real abstraction parent node');
-    expect(tools.lore_move_node.description).toContain('reparents');
-    expect(tools.lore_move_node.parameters.properties.new_uri.description).toContain('real abstraction node');
+    expect(tools.lore_move_node.description).toContain('parent abstraction');
+    expect(tools.lore_move_node.description).toContain('conceptual home');
+    expect(tools.lore_move_node.parameters.properties.new_uri.description).toContain('parent abstraction');
   });
 
 

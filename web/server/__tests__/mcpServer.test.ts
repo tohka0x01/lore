@@ -88,18 +88,23 @@ describe('embedded MCP contract projections', () => {
     expect(tools.lore_clear_session_reads).toBeUndefined();
   });
 
-  it('describes semantic parent requirements for create and move tools', () => {
+  it('describes semantic tree identity and date meaning for create and move tools', () => {
     const server = createMcpServer();
     const tools = (server as any)._registeredTools;
     const createShape = tools.lore_create_node.inputSchema._def.shape();
     const moveShape = tools.lore_move_node.inputSchema._def.shape();
 
-    expect(tools.lore_create_node.description).toContain('real abstraction parent node');
-    expect(createShape.uri.description).toContain('real abstraction parent nodes');
-    expect(createShape.parent_path.description).toContain('real abstraction node');
+    expect(tools.lore_create_node.description).toContain('living semantic tree');
+    expect(tools.lore_create_node.description).toContain('concept identity');
+    expect(tools.lore_create_node.description).toContain('event time');
+    expect(tools.lore_create_node.description).toContain('parent abstraction');
+    expect(createShape.uri.description).toContain('concept identity');
+    expect(createShape.uri.description).toContain('event time');
+    expect(createShape.parent_path.description).toContain('parent abstraction');
+    expect(tools.lore_create_node.description).not.toContain('Do not append dates');
     expect(tools.lore_move_node.description).toContain('semantic memory tree');
-    expect(tools.lore_move_node.description).toContain('reparents');
-    expect(moveShape.new_uri.description).toContain('real abstraction node');
+    expect(tools.lore_move_node.description).toContain('conceptual home');
+    expect(moveShape.new_uri.description).toContain('parent abstraction');
   });
 
   it('records recall usage without session read tracking when opening a recalled node', async () => {

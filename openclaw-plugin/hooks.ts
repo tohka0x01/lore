@@ -87,10 +87,10 @@ export const DEFAULT_GUIDANCE = [
   "If the recall block looks weak, noisy, or only loosely related, do not force it; search further or continue with normal reasoning as appropriate.",
   "When you need to create, revise, remove, or reorganize long-term memory, choose the Lore tool that matches that memory operation.",
   "Read a memory node before updating or deleting it.",
-  "Memory URI/path is a stable semantic identity, not a timestamp, log number, or one-off task title.",
-  "Do not append dates, timestamps, or epoch values to ordinary memory paths; put dates in the content instead. Date paths are only for explicit diary/log/release/archive nodes.",
-  "A multi-segment path is a semantic memory tree. Every intermediate segment must be a real abstraction parent node with content, disclosure, and glossary. Before moving nodes into a hierarchy, create or update those parent nodes; a string-only path move is incomplete.",
-  "Before creating memory, search or open the likely owner node; prefer updating or merging into an existing stable node. Use create only for a new long-term semantic object.",
+  "Lore is a living semantic tree. A memory path names the concept identity and the place future recall should return to.",
+  "Dates express event time. Put event time in the node narrative, history, metadata, or explicit diary/log/release/archive/incident concepts; use durable concept names for project, work, preference, and decision memory.",
+  "A multi-segment path grows through parent abstractions. Each parent is a real memory node with content, disclosure, and glossary that explains why its children belong together.",
+  "Before creating memory, search or open the likely owner concept; prefer updating or merging into an existing node. Create only when a new long-lived concept has appeared.",
 ].join("\n");
 
 export function loadPromptGuidance() {

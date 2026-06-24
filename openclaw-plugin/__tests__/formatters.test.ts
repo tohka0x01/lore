@@ -130,7 +130,8 @@ describe('formatBootView', () => {
       ],
     });
     expect(result).toContain('Recent Memories');
-    expect(result).toContain('not URI naming examples');
+    expect(result).toContain('context hints');
+    expect(result).toContain('event time');
     expect(result).toContain('core://recent');
   });
 

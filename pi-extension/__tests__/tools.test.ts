@@ -50,23 +50,26 @@ describe('Pi extension tools', () => {
     expect(pi.tools.lore_get_node.promptGuidelines.join('\n')).toContain('lore_get_node');
   });
 
-  it('create description warns against date suffixes', () => {
+  it('create description explains semantic tree identity and date meaning', () => {
     const pi = makeMockPi();
     registerTools(pi as any, makePluginCfg());
-    expect(pi.tools.lore_create_node.description).toContain('stable semantic');
-    expect(pi.tools.lore_create_node.description).toContain('Do not append dates');
-    expect(pi.tools.lore_create_node.description).toContain('real abstraction parent node');
-    expect(pi.tools.lore_create_node.parameters.properties.uri.description).toContain('Do not append dates');
-    expect(pi.tools.lore_create_node.parameters.properties.uri.description).toContain('real abstraction parent nodes');
+    expect(pi.tools.lore_create_node.description).toContain('living semantic tree');
+    expect(pi.tools.lore_create_node.description).toContain('concept identity');
+    expect(pi.tools.lore_create_node.description).toContain('event time');
+    expect(pi.tools.lore_create_node.description).toContain('parent abstraction');
+    expect(pi.tools.lore_create_node.parameters.properties.uri.description).toContain('concept identity');
+    expect(pi.tools.lore_create_node.parameters.properties.uri.description).toContain('event time');
+    expect(pi.tools.lore_create_node.description).not.toContain('Do not append dates');
     expect(pi.tools.lore_move_node.description).toContain('semantic memory tree');
-    expect(pi.tools.lore_move_node.description).toContain('real abstraction parent node');
-    expect(pi.tools.lore_move_node.description).toContain('reparents');
-    expect(pi.tools.lore_move_node.parameters.properties.new_uri.description).toContain('real abstraction node');
+    expect(pi.tools.lore_move_node.description).toContain('parent abstraction');
+    expect(pi.tools.lore_move_node.description).toContain('conceptual home');
+    expect(pi.tools.lore_move_node.parameters.properties.new_uri.description).toContain('parent abstraction');
   });
 
   it('boot formatter warns recent memories are not URI examples', () => {
     const text = formatBootView({ recent_memories: [{ uri: 'core://foo_2026_06_24', priority: 2 }] });
-    expect(text).toContain('not URI naming examples');
+    expect(text).toContain('context hints');
+    expect(text).toContain('event time');
   });
 
   it('lore_get_node exposes explicit recall identifiers without internal params', () => {
