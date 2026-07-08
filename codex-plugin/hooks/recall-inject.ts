@@ -1,6 +1,5 @@
 /**
- * Codex UserPromptSubmit hook: injects <recall> context before each prompt.
- * The backend bridge owns recall formatting and query event metadata.
+ * Codex UserPromptSubmit hook: forwards the lifecycle event to Lore.
  */
 
 import * as fs from "node:fs";
@@ -9,7 +8,7 @@ import * as os from "node:os";
 
 const LORE_CONFIG_FILE = path.join(os.homedir(), ".lore", "config.json");
 const DEFAULT_BASE_URL = "http://127.0.0.1:18901";
-const CLIENT_TYPE = "codex";
+const RUNTIME_FAMILY = "codex";
 
 interface HookInput {
   prompt?: string;
@@ -47,23 +46,20 @@ function loadConfig() {
       || pickString(process.env.LORE_API_TOKEN)
       || pickString(process.env.API_TOKEN),
     timeoutMs: 10000,
-    recallEnabled: true,
   };
 }
 
 async function readStdin(): Promise<string> {
   const chunks: Buffer[] = [];
-  for await (const chunk of process.stdin) {
-    chunks.push(chunk);
-  }
+  for await (const chunk of process.stdin) chunks.push(chunk);
   return Buffer.concat(chunks).toString("utf-8");
 }
 
-async function postBridge(pathname: string, body: Record<string, unknown>, timeoutMs: number): Promise<any> {
+async function postLifecycle(body: Record<string, unknown>, timeoutMs: number): Promise<any> {
   const cfg = loadConfig();
   const headers: Record<string, string> = { "content-type": "application/json" };
   if (cfg.apiToken) headers.authorization = `Bearer ${cfg.apiToken}`;
-  const response = await fetch(`${cfg.baseUrl}/api/bridge/${pathname}?client_type=${CLIENT_TYPE}`, {
+  const response = await fetch(`${cfg.baseUrl}/api/lifecycle/event`, {
     method: "POST",
     headers,
     body: JSON.stringify(body),
@@ -73,9 +69,15 @@ async function postBridge(pathname: string, body: Record<string, unknown>, timeo
   return response.json();
 }
 
+function writeHostOutput(response: any) {
+  const output = response?.host_output;
+  if (!output || output.mode === "none" || output.value == null) return;
+  if (output.mode === "stdout_json") process.stdout.write(JSON.stringify(output.value));
+  if (output.mode === "stdout_text") process.stdout.write(String(output.value));
+}
+
 async function main() {
   const cfg = loadConfig();
-  if (!cfg.recallEnabled) process.exit(0);
 
   let input: HookInput;
   try {
@@ -90,18 +92,15 @@ async function main() {
   const sessionId = input.session_id || input.conversation_id || "codex";
 
   try {
-    const bridge = await postBridge("recall", { session_id: sessionId, prompt }, cfg.timeoutMs);
-    const context = typeof bridge?.context === "string" ? bridge.context.trim() : "";
-    if (context) {
-      process.stdout.write(JSON.stringify({
-        hookSpecificOutput: {
-          hookEventName: "UserPromptSubmit",
-          additionalContext: context,
-        },
-      }));
-    }
+    const lifecycle = await postLifecycle({
+      protocol_version: "lore.lifecycle.v1",
+      runtime: { runtime_id: RUNTIME_FAMILY, runtime_family: RUNTIME_FAMILY },
+      event: { name: "prompt.submit", native_name: "UserPromptSubmit" },
+      normalized: { session_id: sessionId, prompt },
+    }, cfg.timeoutMs);
+    writeHostOutput(lifecycle);
   } catch {
-    // Recall is best-effort; fail silently.
+    // Lore lifecycle is best-effort; fail silently.
   }
 }
 

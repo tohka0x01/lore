@@ -2,12 +2,12 @@ import type { ClientType } from '../../auth';
 
 const DEFAULT_RECALL_SCORE_PRECISION = 2;
 
-export interface BridgeProject {
+export interface LifecycleProject {
   dirName: string;
   repoName: string | null;
 }
 
-export interface BridgeBootMemory {
+export interface LifecycleBootMemory {
   uri?: string;
   content?: string;
   priority?: number;
@@ -20,9 +20,9 @@ export interface BridgeBootMemory {
   client_type?: string | null;
 }
 
-export interface BridgeBootResponse {
-  core_memories?: BridgeBootMemory[];
-  recent_memories?: BridgeBootMemory[];
+export interface LifecycleBootResponse {
+  core_memories?: LifecycleBootMemory[];
+  recent_memories?: LifecycleBootMemory[];
 }
 
 const CLIENT_LABELS: Partial<Record<ClientType, string>> = {
@@ -49,14 +49,14 @@ function cleanText(value: unknown): string {
   return String(value || '').trim();
 }
 
-export function normalizeBridgeProject(project: unknown): BridgeProject {
+export function normalizeLifecycleProject(project: unknown): LifecycleProject {
   const value = project && typeof project === 'object' ? project as Record<string, unknown> : {};
   const dirName = cleanText(value.dir_name ?? value.dirName);
   const repoName = cleanText(value.repo_name ?? value.repoName);
   return { dirName, repoName: repoName || null };
 }
 
-export function buildStartupQueries(channel: string, project: BridgeProject): string[] {
+export function buildStartupQueries(channel: string, project: LifecycleProject): string[] {
   const seen = new Set<string>();
   const queries: string[] = [];
   for (const value of [channel, project.dirName, project.repoName]) {
@@ -75,7 +75,7 @@ function readCueList(item: any): string[] {
   return cues.map((x: any) => String(x || '').replace(/\s+/g, ' ').trim()).filter(Boolean).slice(0, 3);
 }
 
-export function formatBridgeRecallBlock(items: unknown, sessionId?: string, queryId?: string): string {
+export function formatLifecycleRecallBlock(items: unknown, sessionId?: string, queryId?: string): string {
   if (!Array.isArray(items) || items.length === 0) return '';
   const attrs = [sessionId && `session_id="${sessionId}"`, queryId && `query_id="${queryId}"`].filter(Boolean).join(' ');
   const lines = [attrs ? `<recall ${attrs}>` : '<recall>'];
@@ -102,7 +102,7 @@ export function extractNodeUris(items: unknown): string[] {
   return out;
 }
 
-export function formatBridgeBootSection(data: BridgeBootResponse | undefined, clientType: ClientType | null): string {
+export function formatLifecycleBootSection(data: LifecycleBootResponse | undefined, clientType: ClientType | null): string {
   const core = Array.isArray(data?.core_memories) ? data.core_memories : [];
   const recent = Array.isArray(data?.recent_memories) ? data.recent_memories : [];
   if (core.length === 0 && recent.length === 0) return '';
@@ -163,6 +163,6 @@ export function formatBridgeBootSection(data: BridgeBootResponse | undefined, cl
   return lines.join('\n').trim();
 }
 
-export function joinBridgeContext(parts: Array<string | null | undefined>): string {
+export function joinLifecycleContext(parts: Array<string | null | undefined>): string {
   return parts.map((part) => cleanText(part)).filter(Boolean).join('\n\n');
 }

@@ -6,12 +6,13 @@ CODEX_HOME="${CODEX_HOME:-$HOME/.codex}"
 HOOK_ROOT="$CODEX_HOME/hooks/lore"
 HOOKS_JSON="$CODEX_HOME/hooks.json"
 
-mkdir -p "$HOOK_ROOT/hooks" "$HOOK_ROOT/rules"
+mkdir -p "$HOOK_ROOT/hooks"
 cp "$PLUGIN_ROOT/hooks/rules-inject.ts" "$HOOK_ROOT/hooks/rules-inject.ts"
 cp "$PLUGIN_ROOT/hooks/recall-inject.ts" "$HOOK_ROOT/hooks/recall-inject.ts"
 cp "$PLUGIN_ROOT/hooks/rules-inject.mjs" "$HOOK_ROOT/hooks/rules-inject.mjs"
 cp "$PLUGIN_ROOT/hooks/recall-inject.mjs" "$HOOK_ROOT/hooks/recall-inject.mjs"
-cp "$PLUGIN_ROOT/rules/lore-guidance.md" "$HOOK_ROOT/rules/lore-guidance.md"
+rm -f "$HOOK_ROOT/rules/lore-guidance.md"
+rmdir "$HOOK_ROOT/rules" 2>/dev/null || true
 
 if [[ -f "$HOOKS_JSON" ]]; then
   cp "$HOOKS_JSON" "$HOOKS_JSON.bak.$(date +%Y%m%d%H%M%S)"

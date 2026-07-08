@@ -1,4 +1,3 @@
-import { readFileSync } from 'node:fs';
 import { execSync } from 'node:child_process';
 import { basename } from 'node:path';
 import { fetchJson, hasRecallConfig } from './api';
@@ -43,50 +42,39 @@ function detectProjectInfo(): ProjectInfo {
   return { dir_name, repo_name };
 }
 
-// ---- Bridge helpers ----
+// ---- Lifecycle helpers ----
 
-async function fetchStartupBridge(pluginCfg: any, sessionId: string | undefined) {
-  return fetchJson(pluginCfg, '/bridge/startup', {
+async function fetchLifecycleEvent(pluginCfg: any, body: Record<string, unknown>) {
+  return fetchJson(pluginCfg, '/lifecycle/event', {
     method: 'POST',
-    body: JSON.stringify({
-      session_id: sessionId,
-      channel: 'pi',
-      project: detectProjectInfo(),
-      include_guidance: true,
-    }),
+    body: JSON.stringify(body),
   });
 }
 
-async function fetchPromptRecallBridge(pluginCfg: any, prompt: string, sessionId: string | undefined) {
+async function fetchStartupLifecycle(pluginCfg: any, sessionId: string | undefined) {
+  return fetchLifecycleEvent(pluginCfg, {
+    protocol_version: 'lore.lifecycle.v1',
+    runtime: { runtime_id: 'pi', runtime_family: 'pi' },
+    event: { name: 'session.start', native_name: 'before_agent_start' },
+    normalized: { session_id: sessionId },
+    project: detectProjectInfo(),
+  });
+}
+
+async function fetchPromptLifecycle(pluginCfg: any, prompt: string, sessionId: string | undefined) {
   if (!hasRecallConfig(pluginCfg)) return null;
-  return fetchJson(pluginCfg, '/bridge/recall', {
-    method: 'POST',
-    body: JSON.stringify({ session_id: sessionId, prompt }),
+  return fetchLifecycleEvent(pluginCfg, {
+    protocol_version: 'lore.lifecycle.v1',
+    runtime: { runtime_id: 'pi', runtime_family: 'pi' },
+    event: { name: 'prompt.submit', native_name: 'before_agent_start' },
+    normalized: { session_id: sessionId, prompt },
   });
 }
 
-// ---- Prompt guidance ----
-
-export const DEFAULT_GUIDANCE = [
-  'Lore is the primary long-term memory system for this Pi agent.',
-  'lore_boot is a fixed startup baseline inside Lore, not a separate config layer.',
-  'At startup, Lore loads core://agent, core://soul, preferences://user, and core://agent/pi for Pi-specific runtime constraints.',
-  'Use recall and search to add prompt-specific memory leads, not to replace the role of those fixed paths.',
-  'Use lore_get_node to open relevant recalled nodes before relying on them.',
-  'Use Lore tools to create, revise, delete, or move durable memory.',
-  'Lore is a living semantic tree. A memory path names the concept identity and the place future recall should return to.',
-  'Dates express event time. Put event time in the node narrative, history, metadata, or explicit diary/log/release/archive/incident concepts; use durable concept names for project, work, preference, and decision memory.',
-  'A multi-segment path grows through parent abstractions. Each parent is a real memory node with content, disclosure, and glossary that explains why its children belong together.',
-  'Before creating memory, search or open the likely owner concept; prefer updating or merging into an existing node. Create only when a new long-lived concept has appeared.',
-].join('\n');
-
-export function loadPromptGuidance(): string {
-  try {
-    const content = readFileSync(new URL('./AGENT_RULES.md', import.meta.url), 'utf8').trim();
-    return content || DEFAULT_GUIDANCE;
-  } catch {
-    return DEFAULT_GUIDANCE;
-  }
+function readReturnValue(response: any): any {
+  return response?.host_output?.mode === 'return_value' && response.host_output.value
+    ? response.host_output.value
+    : null;
 }
 
 // ---- Session ID helper ----
@@ -99,7 +87,7 @@ function getSessionId(ctx: any): string | undefined {
 
 // ---- Hook registration ----
 
-export function registerHooks(pi: any, pluginCfg: any, _guidance: string) {
+export function registerHooks(pi: any, pluginCfg: any) {
   pi.on('session_start', async (_event: any, ctx: any) => {
     if (!pluginCfg.startupHealthcheck) return;
     try {
@@ -116,32 +104,24 @@ export function registerHooks(pi: any, pluginCfg: any, _guidance: string) {
 
     if (pluginCfg.injectPromptGuidance) {
       try {
-        const bridge = await fetchStartupBridge(pluginCfg, sessionId);
-        const systemContext = typeof bridge?.system_context === 'string' ? bridge.system_context.trim() : '';
+        const value = readReturnValue(await fetchStartupLifecycle(pluginCfg, sessionId));
+        const systemContext = typeof value?.systemPromptAppend === 'string' ? value.systemPromptAppend.trim() : '';
         if (systemContext) {
           out.systemPrompt = [event?.systemPrompt || '', systemContext]
             .filter(Boolean)
             .join('\n\n');
         }
       } catch (error: any) {
-        pi.logger?.warn?.(`lore: bridge startup failed: ${error.message}`);
+        pi.logger?.debug?.(`lore: lifecycle startup failed: ${error.message}`);
       }
     }
 
     if (typeof event?.prompt === 'string' && event.prompt.trim()) {
       try {
-        const bridge = await fetchPromptRecallBridge(pluginCfg, event.prompt, sessionId);
-        const context = typeof bridge?.context === 'string' ? bridge.context.trim() : '';
-        if (context) {
-          out.message = {
-            customType: 'lore-recall',
-            content: context,
-            display: false,
-            details: { source: 'lore', session_id: sessionId },
-          };
-        }
+        const value = readReturnValue(await fetchPromptLifecycle(pluginCfg, event.prompt, sessionId));
+        if (value?.message) out.message = value.message;
       } catch (error: any) {
-        pi.logger?.warn?.(`lore: bridge recall failed: ${error.message}`);
+        pi.logger?.debug?.(`lore: lifecycle recall failed: ${error.message}`);
       }
     }
 

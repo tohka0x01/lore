@@ -657,26 +657,21 @@ PY
     ok "Claude MCP configured"
   fi
 
-  # lore-guidance.md + CLAUDE.md @import
-  local gsrc="$plugin_dir/rules/lore-guidance.md"
+  # Legacy local guidance is no longer installed; lifecycle context comes from the Lore server.
   local gdst="$HOME/.claude/lore-guidance.md"
-  if [[ -f "$gsrc" ]]; then
-    cp "$gsrc" "$gdst"
-    ok "Claude guidance installed"
-  fi
-
+  [[ -f "$gdst" ]] && rm -f "$gdst"
   local cmd="$HOME/.claude/CLAUDE.md"
   local iline="@~/.claude/lore-guidance.md"
   if [[ -f "$cmd" ]] && grep -qF "$iline" "$cmd" 2>/dev/null; then
-    ok "CLAUDE.md already has lore-guidance import."
-  else
-    if [[ -f "$cmd" ]]; then
-      printf '%s\n\n%s\n' "$iline" "$(cat "$cmd")" > "${cmd}.tmp.$$"
-      mv "${cmd}.tmp.$$" "$cmd"
+    local tmp="${cmd}.tmp.$$"
+    grep -vF "$iline" "$cmd" > "$tmp"
+    if [[ "$OSTYPE" == "darwin"* ]]; then
+      sed -i '' '/./,$!d' "$tmp"
     else
-      printf '%s\n' "$iline" > "$cmd"
+      sed -i '/./,$!d' "$tmp"
     fi
-    ok "Claude guidance import added"
+    mv "$tmp" "$cmd"
+    ok "Removed legacy Claude guidance import"
   fi
 
   ok "Claude Code configured"

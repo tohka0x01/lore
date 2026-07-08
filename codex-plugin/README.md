@@ -57,7 +57,7 @@ Set `LORE_CODEX_INSTALL_USER_HOOKS=1` only for legacy Codex builds that require 
 
 The hooks add:
 
-- `SessionStart`: Lore guidance plus boot baseline from `client_type=codex`
+- `SessionStart`: server-returned Lore boot lifecycle context from `client_type=codex`
 - `UserPromptSubmit`: `<recall>` context for the current prompt
 
 Hook commands run plain `node` `.mjs` files instead of `npx tsx`, avoiding per-prompt package runner startup cost.

@@ -222,7 +222,7 @@ Re-run the install script anytime to update. If Docker was auto-started on first
 
 | Runtime | Integration |
 |---|---|
-| **Claude Code** | Marketplace plugin, MCP tools, SessionStart boot injection, per-prompt recall, guidance via CLAUDE.md `@~/.claude/lore-guidance.md` |
+| **Claude Code** | Marketplace plugin, MCP tools, SessionStart boot injection, per-prompt recall via server-driven lifecycle hooks |
 | **Codex** | Local marketplace plugin, MCP config, boot/recall hooks |
 | **Pi** | Extension tools, startup boot + recall context |
 | **OpenClaw** | Runtime plugin with boot, recall, and Lore tools |

@@ -179,24 +179,27 @@ class LoreClientThinAdapterTests(unittest.TestCase):
         self.assertEqual(requests[0][1]["data"]["glossary_add"], ["memory"])
         self.assertEqual(requests[0][1]["data"]["glossary_remove"], ["archive"])
 
-    def test_bridge_methods_call_bridge_routes(self):
+    def test_lifecycle_event_calls_lifecycle_route(self):
         client = LoreClient(base_url="http://example.com")
         requests = []
         client._request = lambda *args, **kwargs: {"ok": True} if not requests.append((args, kwargs)) else {}
 
-        client.bridge_startup(
+        client.lifecycle_event(
+            "session.start",
             session_id="sess-1",
-            channel="hermes",
             project={"dir_name": "lore", "repo_name": "lore"},
-            include_guidance=True,
         )
-        client.bridge_recall(session_id="sess-1", prompt="hello")
+        client.lifecycle_event("prompt.submit", session_id="sess-1", prompt="hello")
 
-        self.assertEqual(requests[0][0], ("POST", "/bridge/startup"))
-        self.assertEqual(requests[0][1]["data"]["session_id"], "sess-1")
-        self.assertEqual(requests[0][1]["data"]["channel"], "hermes")
-        self.assertEqual(requests[1][0], ("POST", "/bridge/recall"))
-        self.assertEqual(requests[1][1]["data"], {"session_id": "sess-1", "prompt": "hello"})
+        self.assertEqual(requests[0][0], ("POST", "/lifecycle/event"))
+        self.assertEqual(requests[0][1]["data"]["protocol_version"], "lore.lifecycle.v1")
+        self.assertEqual(requests[0][1]["data"]["runtime"], {"runtime_id": "hermes", "runtime_family": "hermes"})
+        self.assertEqual(requests[0][1]["data"]["event"]["name"], "session.start")
+        self.assertEqual(requests[0][1]["data"]["normalized"]["session_id"], "sess-1")
+        self.assertEqual(requests[0][1]["data"]["project"], {"dir_name": "lore", "repo_name": "lore"})
+        self.assertEqual(requests[1][0], ("POST", "/lifecycle/event"))
+        self.assertEqual(requests[1][1]["data"]["event"]["name"], "prompt.submit")
+        self.assertEqual(requests[1][1]["data"]["normalized"], {"session_id": "sess-1", "prompt": "hello"})
         self.assertEqual(len(requests), 2)
 
 
@@ -224,11 +227,22 @@ class FakeClient:
     def move_node(self, *args, **kwargs):
         return {"old_uri": "core://old/path", "new_uri": "core://new/path", "uri": "core://new/path"}
 
-    def bridge_startup(self, **kwargs):
-        return {"system_context": "BRIDGE SYSTEM"}
-
-    def bridge_recall(self, **kwargs):
-        return {"context": "<recall session_id=\"sess-1\" query_id=\"q1\">\n0.70 | core://project\n</recall>"}
+    def lifecycle_event(self, event_name, **kwargs):
+        if event_name == "session.start":
+            return {
+                "host_output": {
+                    "mode": "return_value",
+                    "value": {"system_context": "LIFECYCLE SYSTEM"},
+                },
+            }
+        if event_name == "prompt.submit":
+            return {
+                "host_output": {
+                    "mode": "return_value",
+                    "value": {"context": "<recall session_id=\"sess-1\" query_id=\"q1\">\n0.70 | core://project\n</recall>"},
+                },
+            }
+        return {"host_output": {"mode": "none", "value": None}}
 
 
 class LoreProviderThinAdapterTests(unittest.TestCase):
@@ -290,7 +304,7 @@ class LoreProviderThinAdapterTests(unittest.TestCase):
         self.assertIn("glossary_remove", props)
         self.assertNotIn("glossary fields", schemas["lore_update_node"]["description"])
 
-    def test_initialize_uses_bridge_startup_context(self):
+    def test_initialize_uses_lifecycle_startup_context(self):
         import lore_memory as provider_module
         original_client = provider_module.LoreClient
         fake = FakeClient()
@@ -301,9 +315,9 @@ class LoreProviderThinAdapterTests(unittest.TestCase):
         finally:
             provider_module.LoreClient = original_client
 
-        self.assertEqual(provider.system_prompt_block(), "BRIDGE SYSTEM")
+        self.assertEqual(provider.system_prompt_block(), "LIFECYCLE SYSTEM")
 
-    def test_prefetch_uses_bridge_recall_context(self):
+    def test_prefetch_uses_lifecycle_recall_context(self):
         result = self.provider.prefetch("hello", session_id="sess-1")
         self.assertIn("core://project", result)
 

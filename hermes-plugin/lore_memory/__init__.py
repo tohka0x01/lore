@@ -23,131 +23,9 @@ from .client import LoreClient, LoreError
 from . import formatters
 
 logger = logging.getLogger(__name__)
-CLIENT_BOOT_URI = "core://agent/hermes"
 RECALL_GET_NODE_DESCRIPTION = "Open a memory node. REQUIRED when opening a URI from a <recall>: copy the exact session_id and query_id from that <recall> tag."
 RECALL_SESSION_ID_DESCRIPTION = "REQUIRED when the URI came from <recall>: copy the exact session_id from that <recall> tag."
 RECALL_QUERY_ID_DESCRIPTION = "REQUIRED when the URI came from <recall>: copy the exact query_id from that <recall> tag."
-
-# ---------------------------------------------------------------------------
-# Guidance text (static behavioral instructions)
-# ---------------------------------------------------------------------------
-
-def _load_guidance() -> str:
-    """Load guidance text from AGENT_RULES.md, with inline fallback."""
-    try:
-        from pathlib import Path as _P
-        _rules_path = _P(__file__).parent / "AGENT_RULES.md"
-        if _rules_path.exists():
-            return _rules_path.read_text(encoding="utf-8").strip()
-    except Exception:
-        pass
-    # Fallback: minimal inline guidance
-    return (
-        "Lore is the primary long-term memory system. "
-        "lore_boot is a fixed startup baseline inside Lore, not a separate config layer. "
-        f"At startup, lore_boot deterministically loads the three global boot nodes core://agent (workflow constraints), core://soul (style / persona / self-definition), and preferences://user (stable user definition / durable user context), plus {CLIENT_BOOT_URI} for Hermes-specific agent rules. "
-        "Treat boot as the session's startup baseline. core://agent holds shared agent rules; core://agent/hermes holds Hermes-specific rules. Use recall and search to add prompt-specific memory leads, not to replace the role of those fixed paths. "
-        "Use lore_get_node to read and lore_search to find. Before creating, search or open the likely owner concept; prefer updating or merging. Lore is a living semantic tree: a path names concept identity, dates express event time in the node narrative or explicit archive concepts, and multi-segment paths grow through real parent abstractions with content, disclosure, and glossary."
-    )
-
-
-_GUIDANCE = _load_guidance()
-
-
-# ---------------------------------------------------------------------------
-# Boot section formatter
-# ---------------------------------------------------------------------------
-
-def _format_boot_section(data: Dict) -> str:
-    core = data.get("core_memories", []) if isinstance(data, dict) else []
-    recent = data.get("recent_memories", []) if isinstance(data, dict) else []
-
-    if not core and not recent:
-        return ""
-
-    lines = [
-        "## lore_boot 已加载内容",
-        "",
-        "`lore_boot` 是 Lore 节点系统中的固定启动基线,不是独立于记忆系统的外挂配置。",
-        "启动时会先确定性加载 3 个全局固定节点:",
-        "- `core://agent` — workflow constraints",
-        "- `core://soul` — style / persona / self-definition",
-        "- `preferences://user` — stable user definition / durable user context",
-        "",
-        "Hermes 会话还会额外加载 1 个 agent 特化节点:",
-        f"- `{CLIENT_BOOT_URI}` — hermes runtime constraints",
-        "",
-        "把 boot 当作本会话的稳定 startup baseline。`core://agent` 提供通用 agent 规则, `core://agent/hermes` 提供 Hermes 环境专属规则。`<recall>` 和 `lore_search` 提供的是按当前问题补充的候选线索,不会取代这些固定路径各自的职责。",
-        "",
-    ]
-
-    for mem in core:
-        lines.append(f"### {mem.get('uri', '')}")
-        if mem.get("boot_role_label"):
-            lines.append(f"Role: {mem['boot_role_label']}")
-        if mem.get("boot_purpose"):
-            lines.append(f"Purpose: {mem['boot_purpose']}")
-        if mem.get("priority") is not None:
-            lines.append(f"Priority: {mem['priority']}")
-        if mem.get("disclosure"):
-            lines.append(f"Disclosure: {mem['disclosure']}")
-        if mem.get("node_uuid"):
-            lines.append(f"Node UUID: {mem['node_uuid']}")
-        lines.append("")
-        lines.append(mem.get("content", "(empty)"))
-        lines.append("")
-
-    if recent:
-        lines.append("### 近期记忆")
-        lines.append("近期记忆是上下文线索。部分历史 URI 可能带有日期形态；日期只说明事件时间或归档语境，普通记忆的身份仍由稳定概念承载。")
-        for mem in recent:
-            parts = []
-            if isinstance(mem.get("priority"), (int, float)):
-                parts.append(f"priority: {mem['priority']}")
-            if mem.get("created_at"):
-                parts.append(f"created: {mem['created_at']}")
-            suffix = f" ({', '.join(parts)})" if parts else ""
-            lines.append(f"- {mem.get('uri', '')}{suffix}")
-            if mem.get("disclosure"):
-                lines.append(f"  Disclosure: {mem['disclosure']}")
-
-    return "\n".join(lines).strip()
-
-
-def _read_cues(item: Dict[str, Any]) -> List[str]:
-    cues = item.get("cues", []) if isinstance(item, dict) else []
-    cleaned: List[str] = []
-    for cue in cues[:3]:
-        text = " ".join(str(cue or "").split()).strip()
-        if text:
-            cleaned.append(text)
-    return cleaned
-
-
-def _format_recall_tag(items: List[Dict[str, Any]], session_id: Optional[str] = None, query_id: Optional[str] = None) -> str:
-    if not items:
-        return ""
-    attrs: List[str] = []
-    if session_id:
-        attrs.append(f'session_id="{session_id}"')
-    if query_id:
-        attrs.append(f'query_id="{query_id}"')
-    lines = [f"<recall {' '.join(attrs)}>" if attrs else "<recall>"]
-    for item in items:
-        score = item.get("score_display")
-        if score is not None:
-            score_str = f"{score:.2f}"
-        else:
-            score_str = str(item.get("score", ""))
-        cues = _read_cues(item)
-        cue_text = " · ".join(cues)
-        line = f"{score_str} | {item.get('uri', '')}"
-        if cue_text:
-            line += f" | {cue_text}"
-        lines.append(line)
-    lines.append("</recall>")
-    return "\n".join(lines)
-
 
 def _detect_project_info() -> Dict[str, Optional[str]]:
     dir_name = os.path.basename(os.getcwd())
@@ -213,37 +91,20 @@ class LoreMemoryProvider(MemoryProvider):
         self._session_id = session_id
         resolved_base_url = getattr(self._client, "base_url", "http://127.0.0.1:18901")
 
+        self._boot_block = ""
         try:
-            bridge = self._client.bridge_startup(
+            lifecycle = self._client.lifecycle_event(
+                "session.start",
                 session_id=session_id,
-                channel="hermes",
                 project=_detect_project_info(),
-                include_guidance=True,
             )
-            system_context = str(bridge.get("system_context") or "").strip()
+            output = lifecycle.get("host_output", {}) or {}
+            value = output.get("value", {}) if output.get("mode") == "return_value" else {}
+            system_context = str((value or {}).get("system_context") or "").strip()
             if system_context:
                 self._boot_block = system_context
-                logger.info("Lore memory provider initialized (server: %s, session: %s)", resolved_base_url, session_id)
-                return
         except Exception as e:
-            logger.warning("Lore bridge startup failed: %s", e)
-
-        # Fallback for older Lore servers without bridge endpoints.
-        try:
-            boot_data = self._client.boot()
-            boot_text = _format_boot_section(boot_data)
-        except Exception as e:
-            logger.warning("Lore boot failed: %s", e)
-            boot_text = ""
-
-        try:
-            initial_recall_text = self._fetch_initial_recalls()
-        except Exception as e:
-            logger.warning("Lore initial recall failed: %s", e)
-            initial_recall_text = ""
-
-        parts = [_GUIDANCE, boot_text, initial_recall_text]
-        self._boot_block = "\n\n".join(part for part in parts if part)
+            logger.debug("Lore lifecycle startup failed: %s", e)
 
         logger.info("Lore memory provider initialized (server: %s, session: %s)",
                      resolved_base_url, session_id)
@@ -252,39 +113,6 @@ class LoreMemoryProvider(MemoryProvider):
 
     def system_prompt_block(self) -> str:
         return self._boot_block
-
-    def _fetch_initial_recalls(self) -> str:
-        if not self._client:
-            return ""
-        info = _detect_project_info()
-        queries = [
-            ("channel", "hermes"),
-            ("project-dir", info["dir_name"] or ""),
-        ]
-        repo_name = info.get("repo_name")
-        dir_name = info.get("dir_name")
-        if repo_name and repo_name != dir_name:
-            queries.append(("project-repo", repo_name))
-
-        blocks: List[str] = []
-        for _source, query in queries:
-            if not query:
-                continue
-            try:
-                data = self._client.recall(query, session_id="boot")
-            except Exception:
-                continue
-            block = _format_recall_tag(
-                data.get("items", []),
-                session_id="boot",
-                query_id=(data.get("event_log", {}) or {}).get("query_id"),
-            )
-            if block:
-                blocks.append(block)
-
-        if not blocks:
-            return ""
-        return "以下记忆节点与当前环境高度相关,建议提前读取。\n\n" + "\n\n".join(blocks)
 
     # -- Prefetch (dynamic recall per turn) --------------------------------
 
@@ -347,26 +175,19 @@ class LoreMemoryProvider(MemoryProvider):
         if not normalized_query:
             return ""
         try:
-            bridge = self._client.bridge_recall(session_id=session_id, prompt=normalized_query)
-            context = str(bridge.get("context") or "").strip()
+            lifecycle = self._client.lifecycle_event(
+                "prompt.submit",
+                session_id=session_id,
+                prompt=normalized_query,
+            )
+            output = lifecycle.get("host_output", {}) or {}
+            value = output.get("value", {}) if output.get("mode") == "return_value" else {}
+            context = str((value or {}).get("context") or "").strip()
             with self._prefetch_lock:
                 self._last_recall_query = normalized_query
-            if context:
-                return context
+            return context
         except Exception as e:
-            logger.debug("Lore bridge recall failed: %s", e)
-
-        try:
-            recall_data = self._client.recall(normalized_query, session_id=session_id)
-            items = recall_data.get("items", [])
-            with self._prefetch_lock:
-                self._last_recall_query = normalized_query
-            if not items:
-                return ""
-            query_id = recall_data.get("event_log", {}).get("query_id")
-            return formatters.format_recall_block(items, session_id=session_id, query_id=query_id)
-        except Exception as e:
-            logger.debug("Lore recall failed: %s", e)
+            logger.debug("Lore lifecycle recall failed: %s", e)
             return ""
 
     # -- Sync turn (no-op for Lore) ----------------------------------------

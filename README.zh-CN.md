@@ -213,7 +213,7 @@ curl -fsSL https://raw.githubusercontent.com/FFatTiger/lore/main/scripts/install
 
 | Runtime | 接入方式 |
 |---|---|
-| **Claude Code** | Marketplace 插件、MCP tools、SessionStart boot 注入、每轮 recall、CLAUDE.md `@~/.claude/lore-guidance.md` 规则导入 |
+| **Claude Code** | Marketplace 插件、MCP tools、通过服务端生命周期 hooks 注入 SessionStart boot 和每轮 recall |
 | **Codex** | 本地 marketplace 插件、MCP 配置、boot/recall hooks |
 | **Pi** | Extension tools、启动 boot + recall 上下文 |
 | **OpenClaw** | Runtime plugin，提供 boot、recall 和 Lore tools |

@@ -1,9 +1,7 @@
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach } from 'vitest';
 import {
   extractMessageText,
   extractAssistantText,
-  DEFAULT_GUIDANCE,
-  loadPromptGuidance,
   registerHooks,
 } from '../hooks';
 
@@ -64,30 +62,6 @@ describe('extractAssistantText', () => {
   });
 });
 
-describe('DEFAULT_GUIDANCE', () => {
-  it('is a non-empty string', () => {
-    expect(typeof DEFAULT_GUIDANCE).toBe('string');
-    expect(DEFAULT_GUIDANCE.length).toBeGreaterThan(0);
-  });
-
-  it('mentions Lore stable path guidance', () => {
-    expect(DEFAULT_GUIDANCE).toContain('Lore');
-    expect(DEFAULT_GUIDANCE).toContain('living semantic tree');
-    expect(DEFAULT_GUIDANCE).toContain('concept identity');
-    expect(DEFAULT_GUIDANCE).toContain('event time');
-    expect(DEFAULT_GUIDANCE).not.toContain('Do not append dates');
-  });
-});
-
-describe('loadPromptGuidance', () => {
-  it('returns DEFAULT_GUIDANCE when AGENT_RULES.md does not exist', () => {
-    // The test environment typically won't have the file at the url path
-    const result = loadPromptGuidance();
-    expect(typeof result).toBe('string');
-    expect(result.length).toBeGreaterThan(0);
-  });
-});
-
 describe('registerHooks', () => {
   function makeMockApi() {
     const hooks: any[] = [];
@@ -112,7 +86,7 @@ describe('registerHooks', () => {
 
   it('registers all expected hooks and gateway method', () => {
     const api = makeMockApi();
-    registerHooks(api as any, { startupHealthcheck: false, injectPromptGuidance: false, recallEnabled: false }, '');
+    registerHooks(api as any, { startupHealthcheck: false, injectPromptGuidance: false, recallEnabled: false });
     expect('lore.status' in api.gatewayMethods).toBe(true);
     expect('gateway_start' in api.events).toBe(true);
     expect('before_tool_call' in api.events).toBe(false);
@@ -121,24 +95,43 @@ describe('registerHooks', () => {
   });
 
 
-  it('before_prompt_build injects bridge startup context and prompt recall', async () => {
+  it('before_prompt_build forwards lifecycle events and applies host output', async () => {
     const api = makeMockApi();
-    vi.stubGlobal('fetch', vi.fn(async (url: string) => {
-      if (String(url).includes('/bridge/startup')) {
-        return { ok: true, status: 200, text: async () => JSON.stringify({ system_context: 'BRIDGE SYSTEM' }) };
-      }
-      if (String(url).includes('/bridge/recall')) {
-        return { ok: true, status: 200, text: async () => JSON.stringify({ context: '<recall session_id="sess-1" query_id="q1">\n0.70 | core://project\n</recall>', has_recall: true }) };
+    vi.stubGlobal('fetch', vi.fn(async (url: string, init: any) => {
+      if (String(url).includes('/lifecycle/event')) {
+        const body = JSON.parse(String(init?.body || '{}'));
+        if (body?.event?.name === 'session.start') {
+          return {
+            ok: true,
+            status: 200,
+            text: async () => JSON.stringify({
+              host_output: { mode: 'return_value', value: { appendSystemContext: 'LIFECYCLE SYSTEM' } },
+            }),
+          };
+        }
+        if (body?.event?.name === 'prompt.submit') {
+          return {
+            ok: true,
+            status: 200,
+            text: async () => JSON.stringify({
+              host_output: {
+                mode: 'return_value',
+                value: { prependContext: '<recall session_id="sess-1" query_id="q1">\n0.70 | core://project\n</recall>' },
+              },
+            }),
+          };
+        }
       }
       return { ok: true, status: 200, text: async () => '{}' };
     }));
 
-    registerHooks(api as any, { startupHealthcheck: false, injectPromptGuidance: true, recallEnabled: true, baseUrl: 'http://localhost' }, 'GUIDANCE');
+    registerHooks(api as any, { startupHealthcheck: false, injectPromptGuidance: true, recallEnabled: true, baseUrl: 'http://localhost' });
     const result = await api.events.before_prompt_build.handler({ prompt: 'what now?', context: { sessionId: 'sess-1' } });
 
-    expect(result.appendSystemContext).toBe('BRIDGE SYSTEM');
+    expect(result.appendSystemContext).toBe('LIFECYCLE SYSTEM');
     expect(result.prependContext).toContain('core://project');
     const urls = (fetch as any).mock.calls.map((call: any[]) => String(call[0]));
+    expect(urls.filter((url: string) => url.includes('/lifecycle/event'))).toHaveLength(2);
     expect(urls.some((url: string) => url.includes('/browse/boot'))).toBe(false);
     expect(urls.some((url: string) => url.includes('/browse/recall'))).toBe(false);
   });

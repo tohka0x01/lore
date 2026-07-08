@@ -231,30 +231,24 @@ class LoreClient:
             data["session_id"] = session_id
         return self._request("POST", "/browse/recall", data=data) or {}
 
-    # ---- Bridge Lifecycle ----
+    # ---- Lifecycle ----
 
-    def bridge_startup(
-        self,
-        session_id: str,
-        channel: str,
-        project: Dict,
-        include_guidance: bool = True,
-    ) -> Dict:
-        """Load unified startup context from the Lore bridge."""
+    def lifecycle_event(self, event_name: str, *, session_id: str = "", prompt: str = "", project: Optional[Dict] = None) -> Dict:
+        """Forward a runtime lifecycle event to Lore."""
+        normalized: Dict[str, str] = {}
+        if session_id:
+            normalized["session_id"] = session_id
+        if prompt:
+            normalized["prompt"] = prompt
         data = {
-            "session_id": session_id,
-            "channel": channel,
-            "project": project,
-            "include_guidance": include_guidance,
+            "protocol_version": "lore.lifecycle.v1",
+            "runtime": {"runtime_id": self.CLIENT_TYPE, "runtime_family": self.CLIENT_TYPE},
+            "event": {"name": event_name, "native_name": event_name},
+            "normalized": normalized,
         }
-        return self._request("POST", "/bridge/startup", data=data) or {}
-
-    def bridge_recall(self, session_id: str, prompt: str) -> Dict:
-        """Load formatted prompt recall context from the Lore bridge."""
-        return self._request("POST", "/bridge/recall", data={
-            "session_id": session_id,
-            "prompt": prompt,
-        }) or {}
+        if project is not None:
+            data["project"] = project
+        return self._request("POST", "/lifecycle/event", data=data) or {}
 
     # ---- Domains ----
     

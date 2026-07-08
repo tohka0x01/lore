@@ -158,13 +158,12 @@ claude mcp add --transport http --scope user \
 
 如果本地服务器未启用认证，省略 `--header`。
 
-如果手动安装 Claude Code 插件，克隆 Lore 仓库并复制 guidance 文件，然后从 `~/.claude/CLAUDE.md` 导入：
+如果手动安装 Claude Code 插件，安装插件文件和 hooks 后重启 Claude Code。不要再把本地 guidance 复制进 `CLAUDE.md`；hooks 只负责把生命周期事件转发给 Lore server，并使用服务端返回的 host output。
 
 ```bash
 git clone https://github.com/FFatTiger/lore.git /tmp/lore-plugin
-mkdir -p ~/.claude
-cp /tmp/lore-plugin/packages/claudecode-plugin/rules/lore-guidance.md ~/.claude/lore-guidance.md
-printf '@~/.claude/lore-guidance.md\n' >> ~/.claude/CLAUDE.md
+# 按你的 Claude Code 插件安装方式复制或安装 claudecode-plugin 目录。
+# 确认 hooks 调用 /api/lifecycle/event，并共用 ~/.lore/config.json。
 ```
 
 插件具体路径可能随版本变化，请以 Lore 仓库中的实际布局为准。

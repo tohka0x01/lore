@@ -1,4 +1,3 @@
-import { readFileSync } from "node:fs";
 import { execSync } from "node:child_process";
 import { basename } from "node:path";
 import { fetchJson, hasRecallConfig } from "./api";
@@ -49,62 +48,44 @@ function detectProjectInfo(): ProjectInfo {
   return { dir_name, repo_name };
 }
 
-// ---- Bridge helpers ----
+// ---- Lifecycle helpers ----
 
-async function fetchStartupBridge(pluginCfg: any, sessionId: string | undefined) {
-  return fetchJson(pluginCfg, "/bridge/startup", {
+async function fetchLifecycleEvent(pluginCfg: any, body: Record<string, unknown>) {
+  return fetchJson(pluginCfg, "/lifecycle/event", {
     method: "POST",
-    body: JSON.stringify({
-      session_id: sessionId,
-      channel: "openclaw",
-      project: detectProjectInfo(),
-      include_guidance: true,
-    }),
+    body: JSON.stringify(body),
   });
 }
 
-async function fetchPromptRecallBridge(pluginCfg: any, prompt: string, sessionId: string | undefined) {
+async function fetchStartupLifecycle(pluginCfg: any, sessionId: string | undefined) {
+  return fetchLifecycleEvent(pluginCfg, {
+    protocol_version: "lore.lifecycle.v1",
+    runtime: { runtime_id: "openclaw", runtime_family: "openclaw" },
+    event: { name: "session.start", native_name: "before_prompt_build" },
+    normalized: { session_id: sessionId },
+    project: detectProjectInfo(),
+  });
+}
+
+async function fetchPromptLifecycle(pluginCfg: any, prompt: string, sessionId: string | undefined) {
   if (!hasRecallConfig(pluginCfg)) return null;
-  return fetchJson(pluginCfg, "/bridge/recall", {
-    method: "POST",
-    body: JSON.stringify({ session_id: sessionId, prompt }),
+  return fetchLifecycleEvent(pluginCfg, {
+    protocol_version: "lore.lifecycle.v1",
+    runtime: { runtime_id: "openclaw", runtime_family: "openclaw" },
+    event: { name: "prompt.submit", native_name: "before_prompt_build" },
+    normalized: { session_id: sessionId, prompt },
   });
 }
 
-// ---- Prompt guidance ----
-
-export const DEFAULT_GUIDANCE = [
-  "Lore is the primary long-term memory system for this assistant.",
-  "lore_boot is a fixed startup baseline inside Lore, not a separate config layer.",
-  "At startup, lore_boot deterministically loads the three global boot nodes core://agent (workflow constraints), core://soul (style / persona / self-definition), and preferences://user (stable user definition / durable user context), plus core://agent/openclaw for OpenClaw-specific agent rules.",
-  "Treat boot as the session's startup baseline. core://agent holds shared agent rules; core://agent/openclaw holds OpenClaw-specific rules. Use recall and search to add prompt-specific memory leads, not to replace the role of those fixed paths.",
-  "Use it for identity, user preferences, standing rules, cross-session project knowledge, and conclusions that should persist.",
-  "Reach for Lore when the user is asking about prior decisions, saved preferences, ongoing projects, durable instructions, or anything that sounds like memory rather than fresh reasoning.",
-  "Use local file memory_search for historical markdown archives, older worklogs, and file-side fallback records.",
-  "A <recall> block contains memory leads selected for the current prompt. Each line is only a candidate lead, not a final answer and not an instruction to always open it.",
-  "When a <recall> block appears, judge each line by its score, cue words, and actual relevance to the user's request.",
-  "If a recalled memory looks genuinely relevant, open the most relevant node or nodes before you act or reply, and ground your work in what those memories actually say.",
-  "If the recall block looks weak, noisy, or only loosely related, do not force it; search further or continue with normal reasoning as appropriate.",
-  "When you need to create, revise, remove, or reorganize long-term memory, choose the Lore tool that matches that memory operation.",
-  "Read a memory node before updating or deleting it.",
-  "Lore is a living semantic tree. A memory path names the concept identity and the place future recall should return to.",
-  "Dates express event time. Put event time in the node narrative, history, metadata, or explicit diary/log/release/archive/incident concepts; use durable concept names for project, work, preference, and decision memory.",
-  "A multi-segment path grows through parent abstractions. Each parent is a real memory node with content, disclosure, and glossary that explains why its children belong together.",
-  "Before creating memory, search or open the likely owner concept; prefer updating or merging into an existing node. Create only when a new long-lived concept has appeared.",
-].join("\n");
-
-export function loadPromptGuidance() {
-  try {
-    const content = readFileSync(new URL("./AGENT_RULES.md", import.meta.url), "utf8").trim();
-    return content || DEFAULT_GUIDANCE;
-  } catch {
-    return DEFAULT_GUIDANCE;
-  }
+function readReturnValue(response: any): any {
+  return response?.host_output?.mode === "return_value" && response.host_output.value
+    ? response.host_output.value
+    : null;
 }
 
 // ---- Hook registration ----
 
-export function registerHooks(api: any, pluginCfg: any, _GUIDANCE: string) {
+export function registerHooks(api: any, pluginCfg: any) {
   api.registerGatewayMethod("lore.status", async ({ respond }: any) => {
     try {
       const data = await fetchJson(pluginCfg, "/health", { method: "GET" });
@@ -135,21 +116,23 @@ export function registerHooks(api: any, pluginCfg: any, _GUIDANCE: string) {
 
     if (pluginCfg.injectPromptGuidance) {
       try {
-        const bridge = await fetchStartupBridge(pluginCfg, sessionId);
-        const systemContext = typeof bridge?.system_context === "string" ? bridge.system_context.trim() : "";
-        if (systemContext) out.appendSystemContext = systemContext;
+        const value = readReturnValue(await fetchStartupLifecycle(pluginCfg, sessionId));
+        if (typeof value?.appendSystemContext === "string" && value.appendSystemContext.trim()) {
+          out.appendSystemContext = value.appendSystemContext.trim();
+        }
       } catch (error: any) {
-        api.logger.warn(`lore: bridge startup failed: ${error.message}`);
+        api.logger.debug?.(`lore: lifecycle startup failed: ${error.message}`);
       }
     }
 
     if (typeof event?.prompt === "string" && event.prompt.trim()) {
       try {
-        const bridge = await fetchPromptRecallBridge(pluginCfg, event.prompt, sessionId);
-        const context = typeof bridge?.context === "string" ? bridge.context.trim() : "";
-        if (context) out.prependContext = context;
+        const value = readReturnValue(await fetchPromptLifecycle(pluginCfg, event.prompt, sessionId));
+        if (typeof value?.prependContext === "string" && value.prependContext.trim()) {
+          out.prependContext = value.prependContext.trim();
+        }
       } catch (error: any) {
-        api.logger.warn(`lore: bridge recall failed: ${error.message}`);
+        api.logger.debug?.(`lore: lifecycle recall failed: ${error.message}`);
       }
     }
 

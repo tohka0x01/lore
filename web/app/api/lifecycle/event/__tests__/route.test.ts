@@ -1,0 +1,146 @@
+import { beforeEach, describe, expect, it, vi } from 'vitest';
+
+vi.mock('../../../../../server/auth', () => ({
+  requireBearerAuth: vi.fn(),
+  normalizeClientType: vi.fn((value: string | null) => value || null),
+}));
+vi.mock('../../../../../server/lore/memory/boot', () => ({
+  bootView: vi.fn(),
+}));
+vi.mock('../../../../../server/lore/recall/recall', () => ({
+  recallMemories: vi.fn(),
+}));
+
+import { requireBearerAuth } from '../../../../../server/auth';
+import { bootView } from '../../../../../server/lore/memory/boot';
+import { recallMemories } from '../../../../../server/lore/recall/recall';
+import * as lifecycleRoute from '../route';
+
+const mockRequireBearerAuth = vi.mocked(requireBearerAuth);
+const mockBootView = vi.mocked(bootView);
+const mockRecallMemories = vi.mocked(recallMemories);
+
+describe('lifecycle event route', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mockRequireBearerAuth.mockReturnValue(null);
+    mockBootView.mockResolvedValue({
+      loaded: 4,
+      total: 4,
+      failed: [],
+      core_memories: [
+        { uri: 'core://agent', content: 'Agent rules', priority: 1, boot_role_label: 'workflow constraints' },
+        { uri: 'core://agent/codex', content: 'Codex rules', priority: 0, boot_role_label: 'codex runtime constraints', scope: 'client', client_type: 'codex' },
+      ],
+      recent_memories: [],
+    } as any);
+    mockRecallMemories.mockResolvedValue({
+      items: [{ uri: 'project://lore', score_display: 0.82, cues: ['bridge'] }],
+      event_log: { query_id: 'q-start' },
+    } as any);
+  });
+
+  it('returns host-ready Codex startup output', async () => {
+    const request = new Request('http://localhost/api/lifecycle/event', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        protocol_version: 'lore.lifecycle.v1',
+        runtime: { runtime_id: 'codex', runtime_family: 'codex' },
+        event: { name: 'session.start', native_name: 'SessionStart' },
+        normalized: { session_id: 'sess-1' },
+        project: { dir_name: 'lore', repo_name: 'lore' },
+      }),
+    }) as any;
+
+    const response = await lifecycleRoute.POST(request);
+    const body = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(body.host_output.mode).toBe('stdout_json');
+    expect(body.host_output.value.hookSpecificOutput.hookEventName).toBe('SessionStart');
+    expect(body.host_output.value.hookSpecificOutput.additionalContext).toContain('## lore_boot 已加载内容');
+    expect(body.host_output.value.hookSpecificOutput.additionalContext).toContain('core://agent/codex');
+    expect(body.host_output.value.hookSpecificOutput.additionalContext).toContain('<recall session_id="boot" query_id="q-start">');
+    expect(body.meta.queries).toEqual(['codex', 'lore']);
+    expect(mockBootView).toHaveBeenCalledWith({ client_type: 'codex' });
+  });
+
+  it('returns host-ready Claude prompt output', async () => {
+    mockRecallMemories.mockResolvedValueOnce({
+      items: [{ uri: 'core://agent', score_display: 0.8, cues: ['agent'] }],
+      event_log: { query_id: 'q-prompt' },
+    } as any);
+
+    const request = new Request('http://localhost/api/lifecycle/event', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        runtime: { runtime_id: 'claudecode', runtime_family: 'claudecode' },
+        event: { name: 'prompt.submit', native_name: 'UserPromptSubmit' },
+        normalized: { session_id: 'sess-1', prompt: 'remember agent rules' },
+      }),
+    }) as any;
+
+    const response = await lifecycleRoute.POST(request);
+    const body = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(body.host_output.mode).toBe('stdout_text');
+    expect(body.host_output.value).toContain('<recall session_id="sess-1" query_id="q-prompt">');
+    expect(body.host_output.value).toContain('0.80 | core://agent | agent');
+    expect(body.query_id).toBe('q-prompt');
+    expect(body.node_uris).toEqual(['core://agent']);
+    expect(mockRecallMemories).toHaveBeenCalledWith(expect.objectContaining({ query: 'remember agent rules', session_id: 'sess-1' }), { clientType: 'claudecode' });
+  });
+
+  it('no-ops unknown runtimes and empty prompts', async () => {
+    const unknownRequest = new Request('http://localhost/api/lifecycle/event', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        runtime: { runtime_id: 'new-agent' },
+        event: { name: 'session.start' },
+      }),
+    }) as any;
+
+    const unknownResponse = await lifecycleRoute.POST(unknownRequest);
+    expect(await unknownResponse.json()).toMatchObject({
+      host_output: { mode: 'none', value: null },
+      meta: { reason: 'unknown_runtime_family' },
+    });
+
+    const unsupportedRequest = new Request('http://localhost/api/lifecycle/event', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        runtime: { runtime_id: 'mcp', runtime_family: 'mcp' },
+        event: { name: 'session.start' },
+      }),
+    }) as any;
+
+    const unsupportedResponse = await lifecycleRoute.POST(unsupportedRequest);
+    expect(await unsupportedResponse.json()).toMatchObject({
+      host_output: { mode: 'none', value: null },
+      meta: { reason: 'unsupported_runtime_family' },
+    });
+
+    const emptyPromptRequest = new Request('http://localhost/api/lifecycle/event', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        runtime: { runtime_id: 'pi', runtime_family: 'pi' },
+        event: { name: 'prompt.submit' },
+        normalized: { session_id: 'sess-empty', prompt: '' },
+      }),
+    }) as any;
+
+    const emptyPromptResponse = await lifecycleRoute.POST(emptyPromptRequest);
+    expect(await emptyPromptResponse.json()).toMatchObject({
+      host_output: { mode: 'none', value: null },
+      meta: { reason: 'empty_prompt' },
+    });
+    expect(mockBootView).not.toHaveBeenCalled();
+    expect(mockRecallMemories).not.toHaveBeenCalled();
+  });
+});

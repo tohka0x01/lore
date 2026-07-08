@@ -85,7 +85,6 @@ hermes-plugin/
     ├── __init__.py      # MemoryProvider + tool schemas
     ├── client.py        # HTTP client for Lore API
     ├── formatters.py    # Output formatting
-    ├── AGENT_RULES.md   # Agent guidance rules
     └── plugin.yaml      # Plugin manifest
 ```
 

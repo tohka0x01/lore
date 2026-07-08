@@ -158,13 +158,12 @@ claude mcp add --transport http --scope user \
 
 For an unprotected local server, omit the `--header` option.
 
-If you install the Claude Code plugin by hand, clone the Lore repository and copy its guidance file, then import it from `~/.claude/CLAUDE.md`:
+If you install the Claude Code plugin by hand, install the plugin files and hooks, then restart Claude Code. Do not copy local guidance into `CLAUDE.md`; the hooks forward lifecycle events to the Lore server and use the server-returned host output.
 
 ```bash
 git clone https://github.com/FFatTiger/lore.git /tmp/lore-plugin
-mkdir -p ~/.claude
-cp /tmp/lore-plugin/packages/claudecode-plugin/rules/lore-guidance.md ~/.claude/lore-guidance.md
-printf '@~/.claude/lore-guidance.md\n' >> ~/.claude/CLAUDE.md
+# Copy or install the claudecode-plugin directory according to your Claude Code plugin setup.
+# Ensure its hooks call /api/lifecycle/event and share ~/.lore/config.json.
 ```
 
 The exact plugin path may differ by release. Check the Lore repository for the current plugin layout.

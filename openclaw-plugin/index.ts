@@ -1,9 +1,7 @@
 import { definePluginEntry } from "openclaw/plugin-sdk/plugin-entry";
 import { pickPluginConfig } from "./api";
 import { registerTools } from "./tools";
-import { registerHooks, loadPromptGuidance } from "./hooks";
-
-const GUIDANCE = loadPromptGuidance();
+import { registerHooks } from "./hooks";
 
 export default definePluginEntry({
   id: "lore",
@@ -16,7 +14,7 @@ export default definePluginEntry({
       api.logger.info(`lore: baseUrl=${pluginCfg.baseUrl}, recall=${pluginCfg.recallEnabled}`);
       registerTools(api, pluginCfg);
       api.logger.info(`lore: tools registered ok`);
-      registerHooks(api, pluginCfg, GUIDANCE);
+      registerHooks(api, pluginCfg);
       api.logger.info(`lore: hooks registered ok`);
     } catch (e: any) {
       api.logger.error(`lore: register() FAILED: ${e.message}\n${e.stack}`);
