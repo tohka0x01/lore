@@ -67,7 +67,7 @@ export function coerce(value: unknown, schema: SettingDef): string | number | bo
     const s = String(value);
     return schema.options?.includes(s) ? s : null;
   }
-  if (schema.type === 'string') return String(value);
+  if (schema.type === 'string' || schema.type === 'text') return String(value);
   if (schema.type === 'boolean') {
     if (typeof value === 'boolean') return value;
     return String(value).toLowerCase() === 'true';

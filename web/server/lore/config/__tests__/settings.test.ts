@@ -52,6 +52,16 @@ describe('settingsSchema', () => {
       default: false,
     });
     expect(SECTIONS.some((section) => section.id === 'cache')).toBe(true);
+    expect(SCHEMA_BY_KEY.get('lifecycle.guidance.global')).toMatchObject({
+      section: 'lifecycle',
+      type: 'text',
+    });
+    expect(String(SCHEMA_BY_KEY.get('lifecycle.guidance.global')?.default)).toContain('Lore 使用规则');
+    expect(SCHEMA_BY_KEY.get('lifecycle.boot.preamble')).toMatchObject({
+      section: 'lifecycle',
+      type: 'text',
+    });
+    expect(SECTIONS.some((section) => section.id === 'lifecycle')).toBe(true);
     expect(SCHEMA_BY_KEY.get('recall.safety.max_query_chars')).toMatchObject({
       section: 'recall_safety',
       type: 'integer',
@@ -97,6 +107,7 @@ describe('coerce', () => {
   const intSchema: SettingDef = { key: 'x', section: 's', label: 'l', type: 'integer', default: 0 };
   const enumSchema: SettingDef = { key: 'x', section: 's', label: 'l', type: 'enum', default: 'a', options: ['a', 'b'] };
   const strSchema: SettingDef = { key: 'x', section: 's', label: 'l', type: 'string', default: '' };
+  const textSchema: SettingDef = { key: 'x', section: 's', label: 'l', type: 'text', default: '' };
   const boolSchema: SettingDef = { key: 'x', section: 's', label: 'l', type: 'boolean', default: false };
 
   it('returns null for nullish values', () => {
@@ -126,6 +137,11 @@ describe('coerce', () => {
 
   it('coerces strings', () => {
     expect(coerce(42, strSchema)).toBe('42');
+  });
+
+  it('coerces long text', () => {
+    expect(coerce(42, textSchema)).toBe('42');
+    expect(coerce('line 1\nline 2', textSchema)).toBe('line 1\nline 2');
   });
 
   it('coerces booleans', () => {

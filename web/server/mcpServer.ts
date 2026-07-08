@@ -16,6 +16,7 @@ import { createNode, updateNodeByPath, deleteNodeByPath, moveNode } from './lore
 import { searchMemories } from './lore/search/search';
 import { markRecallEventsUsedInAnswer } from './lore/recall/recallEventLog';
 import { validateCreatePolicy, validateUpdatePolicy, validateDeletePolicy } from './lore/ops/policy';
+import { loadLifecycleTextConfig } from './lore/lifecycle/config';
 
 import {
   ok,
@@ -27,7 +28,6 @@ import {
   formatNode,
   formatBootView,
   loadGuidance,
-  loadGuidanceReference,
 } from './mcpFormatters';
 
 // ── server factory ────────────────────────────────────────────────
@@ -54,7 +54,7 @@ export function createMcpServer(context: McpServerContext = {}): InstanceType<ty
     'Load the full Lore usage rules. Call this if your context does not already contain detailed usage guidance.',
     {},
     async () => {
-      const text = loadGuidanceReference();
+      const text = (await loadLifecycleTextConfig()).guidance;
       return text ? ok(text) : fail('Guidance', new Error('file not found'));
     },
   );

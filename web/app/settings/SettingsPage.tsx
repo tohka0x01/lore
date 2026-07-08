@@ -128,7 +128,7 @@ export default function SettingsPage(): React.JSX.Element {
       <PageTitle
         eyebrow={t('Configuration')}
         title={t('Settings')}
-        description={t('Runtime parameters for the recall pipeline. Changes take effect immediately.')}
+        description={t('Runtime parameters for lifecycle injection, recall, model services, and maintenance. Changes take effect immediately.')}
         right={dirtyKeys.length === 0 ? undefined : null}
       />
 

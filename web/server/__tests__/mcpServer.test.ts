@@ -27,8 +27,12 @@ vi.mock('../lore/ops/policy', () => ({
   validateUpdatePolicy: vi.fn(),
   validateDeletePolicy: vi.fn(),
 }));
+vi.mock('../lore/config/settings', () => ({
+  getSettings: vi.fn(),
+}));
 
 import { createMcpServer } from '../mcpServer';
+import { getSettings } from '../lore/config/settings';
 import { getNodePayload } from '../lore/memory/browse';
 import { markRecallEventsUsedInAnswer } from '../lore/recall/recallEventLog';
 import { createNode, deleteNodeByPath, moveNode, updateNodeByPath } from '../lore/memory/write';
@@ -43,6 +47,7 @@ const mockMoveNode = vi.mocked(moveNode);
 const mockValidateCreatePolicy = vi.mocked(validateCreatePolicy);
 const mockValidateUpdatePolicy = vi.mocked(validateUpdatePolicy);
 const mockValidateDeletePolicy = vi.mocked(validateDeletePolicy);
+const mockGetSettings = vi.mocked(getSettings);
 
 function getToolHandler(name: string) {
   const server = createMcpServer();
@@ -52,6 +57,12 @@ function getToolHandler(name: string) {
 describe('embedded MCP contract projections', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    mockGetSettings.mockResolvedValue({
+      'lifecycle.guidance.enabled': true,
+      'lifecycle.guidance.global': 'CONFIGURED LORE GUIDANCE',
+      'lifecycle.boot.preamble': '',
+      'lifecycle.startup_recall.preamble': '',
+    });
     mockValidateCreatePolicy.mockResolvedValue({ errors: [], warnings: [] } as any);
     mockValidateUpdatePolicy.mockResolvedValue({ errors: [], warnings: [] } as any);
     mockValidateDeletePolicy.mockResolvedValue({ errors: [], warnings: [] } as any);
@@ -86,6 +97,15 @@ describe('embedded MCP contract projections', () => {
 
     expect(tools.lore_list_session_reads).toBeUndefined();
     expect(tools.lore_clear_session_reads).toBeUndefined();
+  });
+
+  it('serves lore_guidance from server settings', async () => {
+    const handler = getToolHandler('lore_guidance');
+
+    const result = await handler({});
+
+    expect(result.content[0].text).toContain('CONFIGURED LORE GUIDANCE');
+    expect(mockGetSettings).toHaveBeenCalledWith(expect.arrayContaining(['lifecycle.guidance.global']));
   });
 
   it('describes semantic tree identity and date meaning for create and move tools', () => {

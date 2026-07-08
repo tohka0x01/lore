@@ -6,6 +6,7 @@ vi.mock('@/components/ui', () => ({
   AppInput: (props: React.InputHTMLAttributes<HTMLInputElement>) => <input data-app-input="true" {...props} />,
   AppInputNumber: (props: Record<string, unknown>) => <input data-app-input-number="true" {...props} />,
   AppPasswordInput: (props: React.InputHTMLAttributes<HTMLInputElement>) => <input data-app-password-input="true" type="password" {...props} />,
+  AppTextArea: (props: React.TextareaHTMLAttributes<HTMLTextAreaElement>) => <textarea data-app-text-area="true" {...props} />,
   AppSelect: ({ options = [], value }: { options?: Array<{ label: React.ReactNode; value: string }>; value?: string }) => (
     <div data-app-select="true" data-value={value}>
       {options.map((option) => <span key={option.value}>{option.label}</span>)}
@@ -47,6 +48,13 @@ const stringSchema: FieldSchema = {
   label: 'Model',
   type: 'string',
   section: 'memory',
+};
+
+const textSchema: FieldSchema = {
+  key: 'lifecycle.guidance.global',
+  label: 'Guidance',
+  type: 'text',
+  section: 'lifecycle',
 };
 
 const secretSchema: FieldSchema = {
@@ -151,5 +159,23 @@ describe('SettingsSectionEditor fields', () => {
     expect(textHtml).toContain('data-app-input="true"');
     expect(secretHtml).toContain('data-app-password-input="true"');
     expect(secretHtml).toContain('Stored');
+  });
+
+  it('renders long text fields through AppTextArea', () => {
+    const html = renderToStaticMarkup(
+      <FieldRow
+        schema={textSchema}
+        value="# Lore 使用规则"
+        source="default"
+        dirty={false}
+        secretConfigured={false}
+        onChange={() => undefined}
+        onReset={() => undefined}
+        saving={false}
+      />,
+    );
+
+    expect(html).toContain('data-app-text-area="true"');
+    expect(html).toContain('# Lore 使用规则');
   });
 });

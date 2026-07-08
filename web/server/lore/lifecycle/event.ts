@@ -1,9 +1,7 @@
-import { readFileSync } from 'node:fs';
-import { join } from 'node:path';
-
 import { normalizeClientType, type ClientType } from '../../auth';
 import { bootView } from '../memory/boot';
 import { recallMemories } from '../recall/recall';
+import { loadLifecycleTextConfig } from './config';
 import {
   buildStartupQueries,
   extractNodeUris,
@@ -61,18 +59,6 @@ export interface LifecycleEventResponse {
 
 function cleanText(value: unknown): string {
   return String(value || '').trim();
-}
-
-function loadGuidance(): string {
-  try {
-    return readFileSync(join(process.cwd(), 'server', 'lore', 'guidance-reference.md'), 'utf8').trim();
-  } catch {
-    try {
-      return readFileSync(join(process.cwd(), 'web', 'server', 'lore', 'guidance-reference.md'), 'utf8').trim();
-    } catch {
-      return '';
-    }
-  }
 }
 
 function runtimeFamily(input: LifecycleEventInput): ClientType | null {
@@ -180,7 +166,11 @@ function renderHostOutput(args: {
   return { mode: 'none', value: null };
 }
 
-async function buildStartupRecallContext(queries: string[], clientType: ClientType | null): Promise<string> {
+async function buildStartupRecallContext(
+  queries: string[],
+  clientType: ClientType | null,
+  preamble: string,
+): Promise<string> {
   const blocks: string[] = [];
   for (const query of queries) {
     try {
@@ -192,7 +182,7 @@ async function buildStartupRecallContext(queries: string[], clientType: ClientTy
       // Startup recall is best effort.
     }
   }
-  return blocks.length > 0 ? `以下记忆节点与当前环境高度相关,建议提前读取。\n\n${blocks.join('\n\n')}` : '';
+  return blocks.length > 0 ? joinLifecycleContext([preamble, blocks.join('\n\n')]) : '';
 }
 
 async function buildSessionStart(input: LifecycleEventInput, family: ClientType, runtime: string): Promise<LifecycleEventResponse> {
@@ -200,13 +190,14 @@ async function buildSessionStart(input: LifecycleEventInput, family: ClientType,
   const channel = runtime || family;
   const project: LifecycleProject = normalizeLifecycleProject(input.project);
   const queries = buildStartupQueries(channel, project);
-  const [bootData, startupRecallContext] = await Promise.all([
+  const [textConfig, bootData] = await Promise.all([
+    loadLifecycleTextConfig(),
     bootView({ client_type: family }),
-    buildStartupRecallContext(queries, family),
   ]);
+  const startupRecallContext = await buildStartupRecallContext(queries, family, textConfig.startupRecallPreamble);
   const context = joinLifecycleContext([
-    loadGuidance(),
-    formatLifecycleBootSection(bootData, family),
+    textConfig.guidance,
+    formatLifecycleBootSection(bootData, family, textConfig.bootPreamble),
     startupRecallContext,
   ]);
   const hostOutput = renderHostOutput({
@@ -237,7 +228,9 @@ async function buildPromptSubmit(input: LifecycleEventInput, family: ClientType,
   const data = await recallMemories({ query: prompt, session_id: sessionId }, { clientType: family });
   const queryId = typeof data?.event_log?.query_id === 'string' ? data.event_log.query_id : '';
   const items = data?.items || [];
-  const context = formatLifecycleRecallBlock(items, sessionId, queryId);
+  const recallBlock = formatLifecycleRecallBlock(items, sessionId, queryId);
+  const textConfig = recallBlock ? await loadLifecycleTextConfig() : null;
+  const context = joinLifecycleContext([textConfig?.promptRecallPreamble, recallBlock]);
   const nodeUris = extractNodeUris(items);
   const hostOutput = renderHostOutput({
     family,

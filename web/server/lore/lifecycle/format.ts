@@ -102,7 +102,11 @@ export function extractNodeUris(items: unknown): string[] {
   return out;
 }
 
-export function formatLifecycleBootSection(data: LifecycleBootResponse | undefined, clientType: ClientType | null): string {
+export function formatLifecycleBootSection(
+  data: LifecycleBootResponse | undefined,
+  clientType: ClientType | null,
+  preamble?: string,
+): string {
   const core = Array.isArray(data?.core_memories) ? data.core_memories : [];
   const recent = Array.isArray(data?.recent_memories) ? data.recent_memories : [];
   if (core.length === 0 && recent.length === 0) return '';
@@ -112,16 +116,8 @@ export function formatLifecycleBootSection(data: LifecycleBootResponse | undefin
   const clientBootUri = clientBoot?.uri || (clientType ? `core://agent/${clientType}` : '');
   const clientBootLabel = clientBoot?.boot_role_label || (clientType ? CLIENT_BOOT_LABELS[clientType] || `${clientType} runtime constraints` : 'client runtime constraints');
 
-  const lines: string[] = [
-    '## lore_boot 已加载内容',
-    '',
-    '`lore_boot` 是 Lore 节点系统中的固定启动基线,不是独立于记忆系统的外挂配置。',
-    '启动时会先确定性加载 3 个全局固定节点:',
-    '- `core://agent` — workflow constraints',
-    '- `core://soul` — style / persona / self-definition',
-    '- `preferences://user` — stable user definition / durable user context',
-    '',
-  ];
+  const resolvedPreamble = cleanText(preamble);
+  const lines: string[] = resolvedPreamble ? [resolvedPreamble, ''] : [];
 
   if (clientBootUri) {
     lines.push(`${label} 会话还会额外加载 1 个 agent 特化节点:`);

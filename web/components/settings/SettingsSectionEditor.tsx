@@ -2,7 +2,7 @@
 
 import React, { ChangeEvent, type CSSProperties } from 'react';
 import clsx from 'clsx';
-import { AppInput, AppInputNumber, AppPasswordInput, AppSelect, Badge, Button, TextButton, ToggleSwitch } from '@/components/ui';
+import { AppInput, AppInputNumber, AppPasswordInput, AppSelect, AppTextArea, Badge, Button, TextButton, ToggleSwitch } from '@/components/ui';
 import { useT } from '@/lib/i18n';
 
 export type SettingSource = 'db' | 'default';
@@ -10,7 +10,7 @@ export type SettingSource = 'db' | 'default';
 export interface FieldSchema {
   key: string;
   label: string;
-  type: 'number' | 'integer' | 'string' | 'enum' | 'boolean';
+  type: 'number' | 'integer' | 'string' | 'text' | 'enum' | 'boolean';
   description?: string;
   min?: number;
   max?: number;
@@ -119,6 +119,25 @@ function StringInput({
   );
 }
 
+interface TextInputProps {
+  value: unknown;
+  onChange: (v: string) => void;
+  disabled: boolean;
+}
+
+function TextInput({ value, onChange, disabled }: TextInputProps): React.JSX.Element {
+  return (
+    <AppTextArea
+      value={value == null ? '' : String(value)}
+      disabled={disabled}
+      autoComplete="off"
+      onChange={(e: ChangeEvent<HTMLTextAreaElement>) => onChange(e.target.value)}
+      className="min-h-48 font-mono text-[12px] leading-relaxed"
+      resize
+    />
+  );
+}
+
 interface EnumInputProps {
   value: unknown;
   onChange: (v: string) => void;
@@ -192,11 +211,12 @@ export function FieldRow({
   controlStyle,
 }: FieldRowProps): React.JSX.Element {
   const { t } = useT();
-  const isString = schema.type === 'string';
+  const isWide = schema.type === 'string' || schema.type === 'text';
   const renderInput = () => {
     if (schema.type === 'number' || schema.type === 'integer') return <NumberInput value={value} onChange={onChange as (v: number | '') => void} schema={schema} disabled={saving} controlClassName={controlClassName} controlStyle={controlStyle} />;
     if (schema.type === 'enum') return <EnumInput value={value} onChange={onChange as (v: string) => void} schema={schema} disabled={saving} controlClassName={controlClassName} controlStyle={controlStyle} />;
     if (schema.type === 'boolean') return <BooleanInput value={value} onChange={onChange as (v: boolean) => void} disabled={saving} />;
+    if (schema.type === 'text') return <TextInput value={value} onChange={onChange as (v: string) => void} disabled={saving} />;
     return <StringInput value={value} onChange={onChange as (v: string) => void} disabled={saving} secret={schema.secret} secretConfigured={secretConfigured} controlClassName={controlClassName} controlStyle={controlStyle} />;
   };
 
@@ -204,7 +224,7 @@ export function FieldRow({
     <div
       className={clsx(
         'grid gap-3 md:gap-4 border-b border-separator-hairline px-4 md:px-6 py-4 last:border-b-0 transition-colors',
-        isString ? 'grid-cols-1' : 'grid-cols-1 sm:grid-cols-[1fr_auto] sm:items-center',
+        isWide ? 'grid-cols-1' : 'grid-cols-1 sm:grid-cols-[1fr_auto] sm:items-center',
         dirty && 'bg-sys-blue/[0.04]',
       )}
     >
@@ -228,7 +248,7 @@ export function FieldRow({
           {(schema.min !== undefined || schema.max !== undefined) && <> · {t('range')} [{schema.min ?? '∞'}, {schema.max ?? '∞'}]</>}
         </p>
       </div>
-      <div className={isString ? '' : 'shrink-0'}>
+      <div className={isWide ? '' : 'shrink-0'}>
         {renderInput()}
       </div>
     </div>

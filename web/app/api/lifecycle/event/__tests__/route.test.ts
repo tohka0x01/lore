@@ -10,13 +10,18 @@ vi.mock('../../../../../server/lore/memory/boot', () => ({
 vi.mock('../../../../../server/lore/recall/recall', () => ({
   recallMemories: vi.fn(),
 }));
+vi.mock('../../../../../server/lore/config/settings', () => ({
+  getSettings: vi.fn(),
+}));
 
 import { requireBearerAuth } from '../../../../../server/auth';
+import { getSettings } from '../../../../../server/lore/config/settings';
 import { bootView } from '../../../../../server/lore/memory/boot';
 import { recallMemories } from '../../../../../server/lore/recall/recall';
 import * as lifecycleRoute from '../route';
 
 const mockRequireBearerAuth = vi.mocked(requireBearerAuth);
+const mockGetSettings = vi.mocked(getSettings);
 const mockBootView = vi.mocked(bootView);
 const mockRecallMemories = vi.mocked(recallMemories);
 
@@ -24,6 +29,13 @@ describe('lifecycle event route', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mockRequireBearerAuth.mockReturnValue(null);
+    mockGetSettings.mockResolvedValue({
+      'lifecycle.guidance.enabled': true,
+      'lifecycle.guidance.global': 'SERVER GUIDANCE',
+      'lifecycle.boot.preamble': 'BOOT PREAMBLE',
+      'lifecycle.startup_recall.preamble': 'STARTUP RECALL PREAMBLE',
+      'lifecycle.prompt_recall.preamble': 'PROMPT RECALL PREAMBLE',
+    });
     mockBootView.mockResolvedValue({
       loaded: 4,
       total: 4,
@@ -59,8 +71,10 @@ describe('lifecycle event route', () => {
     expect(response.status).toBe(200);
     expect(body.host_output.mode).toBe('stdout_json');
     expect(body.host_output.value.hookSpecificOutput.hookEventName).toBe('SessionStart');
-    expect(body.host_output.value.hookSpecificOutput.additionalContext).toContain('## lore_boot 已加载内容');
+    expect(body.host_output.value.hookSpecificOutput.additionalContext).toContain('SERVER GUIDANCE');
+    expect(body.host_output.value.hookSpecificOutput.additionalContext).toContain('BOOT PREAMBLE');
     expect(body.host_output.value.hookSpecificOutput.additionalContext).toContain('core://agent/codex');
+    expect(body.host_output.value.hookSpecificOutput.additionalContext).toContain('STARTUP RECALL PREAMBLE');
     expect(body.host_output.value.hookSpecificOutput.additionalContext).toContain('<recall session_id="boot" query_id="q-start">');
     expect(body.meta.queries).toEqual(['codex', 'lore']);
     expect(mockBootView).toHaveBeenCalledWith({ client_type: 'codex' });
@@ -87,6 +101,7 @@ describe('lifecycle event route', () => {
 
     expect(response.status).toBe(200);
     expect(body.host_output.mode).toBe('stdout_text');
+    expect(body.host_output.value).toContain('PROMPT RECALL PREAMBLE');
     expect(body.host_output.value).toContain('<recall session_id="sess-1" query_id="q-prompt">');
     expect(body.host_output.value).toContain('0.80 | core://agent | agent');
     expect(body.query_id).toBe('q-prompt');

@@ -224,11 +224,3 @@ export function loadGuidance(): string {
     return '';
   }
 }
-
-export function loadGuidanceReference(): string {
-  try {
-    return fs.readFileSync(path.join(__dirname, 'lore', 'guidance-reference.md'), 'utf-8');
-  } catch {
-    return '';
-  }
-}

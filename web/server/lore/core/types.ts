@@ -130,7 +130,7 @@ export interface MemoryViewRecord {
 }
 
 // === Settings ===
-export type SettingType = 'number' | 'integer' | 'string' | 'enum' | 'boolean';
+export type SettingType = 'number' | 'integer' | 'string' | 'text' | 'enum' | 'boolean';
 
 export interface SettingDef {
   key: string;

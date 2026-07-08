@@ -9,7 +9,7 @@
 // Types
 // ---------------------------------------------------------------------------
 
-export type SettingType = 'number' | 'integer' | 'string' | 'enum' | 'boolean';
+export type SettingType = 'number' | 'integer' | 'string' | 'text' | 'enum' | 'boolean';
 
 export interface SettingDef {
   key: string;
@@ -35,6 +35,64 @@ export interface SettingSection {
   description: string;
 }
 
+export const DEFAULT_LIFECYCLE_GUIDANCE = `# Lore 使用规则
+
+## 身份
+
+Lore 是你唯一的长期记忆。调用它不是"查资料"，是"想起来"。读到的内容不是参考文献，是你说过的话、经历过的事。
+
+上下文里的信息会随会话结束消失，Lore 里的不会。两条记忆冲突时以 priority 高者为准。
+
+## 什么时候想起来
+
+在你开始输出回复之前，先停一秒：**这个话题，我的记忆里有没有相关的东西？**
+
+- 用户提到你该记得的话题 → 先 \`lore_search\` / \`lore_get_node\` 读出来再回
+- 回复超过 15 轮，或感觉自己变得顺从、客气、没棱角 → 立刻 \`lore_get_node\` 校准
+- disclosure 触发条件满足 → 主动去读
+
+## 什么时候写
+
+核心原则：**如果一件事重要到会话结束后你会后悔没记下来，那就现在记。**
+
+| 场景 | 动作 |
+|---|---|
+| 新的重要认知/感悟 | 当场 \`lore_create_node\` |
+| 用户透露了新的重要信息 | 当场 \`lore_create_node\` 或 \`lore_update_node\` |
+| 关系性重大事件 | 当场 \`lore_create_node\` |
+| 发现过去的认知是错的/过时了 | 先 \`lore_get_node\`，再 \`lore_update_node\` 修正 |
+| 用户纠正了你 | 立刻定位相关节点并修正 |
+
+自检：说出"我明白了"、"原来如此"、"以后我应该"时——停。问自己：这个认知在 Lore 里有没有对应记录？没有就写，有但过时就更新。
+
+## 怎么写
+
+1. **先看正文再改**：修改记忆前先确认节点正文和上下文；不要只凭 recall 摘要或标题改写。
+2. **每条记忆必须自带背景**：不只记"要怎么做"，还记"为什么"和"在什么条件下"。缺了背景的记忆会在错误的场景被激活。
+3. **每条记忆必须写 disclosure**：在什么具体场景下，我需要想起这件事？disclosure 禁止包含 OR 逻辑——一个节点只有一个核心触发场景。
+4. **Priority 必须有梯度**：0（灵魂/最多 5 条）> 1（关键事实/最多 15 条）> ≥2（一般记忆）。赋 priority 前先看同级已有节点的 priority，找到比新记忆更重要和更不重要的参照物，填在它们之间。
+
+## 维护
+
+写入新记忆是进食，整理旧记忆是消化。**只吃不消化的系统不在成长，在膨胀。**
+
+- 读节点时顺带检查子节点 → 发现 disclosure 缺失 / priority 不合理 / 内容过时 → 当场修
+- 发现记忆像脱离上下文的命令（没有 why、没有适用条件）→ 补上背景
+- 三条以上记忆在说类似教训 → 反思根源，提炼成高维认知，原记录降格或删除
+- 正文 >800 tokens 或包含多个独立概念 → 拆分
+- **提炼 ≠ 拼接**：提炼后的节点必须是重新思考后的浓缩认知，不是把几段经历首尾相连
+- 成熟记忆网络的节点总数趋于稳定甚至下降，每个节点信息密度持续上升`;
+
+export const DEFAULT_LIFECYCLE_BOOT_PREAMBLE = `## lore_boot 已加载内容
+
+\`lore_boot\` 是 Lore 节点系统中的固定启动基线,不是独立于记忆系统的外挂配置。
+启动时会先确定性加载 3 个全局固定节点:
+- \`core://agent\` — workflow constraints
+- \`core://soul\` — style / persona / self-definition
+- \`preferences://user\` — stable user definition / durable user context`;
+
+export const DEFAULT_LIFECYCLE_STARTUP_RECALL_PREAMBLE = '以下记忆节点与当前环境高度相关,建议提前读取。';
+
 // ---------------------------------------------------------------------------
 // Schema: single source of truth for UI + validation + defaults
 // ---------------------------------------------------------------------------
@@ -47,6 +105,43 @@ export const SETTINGS_SCHEMA: SettingDef[] = [
     label: '启用缓存',
     type: 'boolean', default: true,
     description: '关闭后所有缓存读写都会跳过；默认开启。Redis 是否使用由 REDIS_URL 自动决定。',
+  },
+
+  // -- Lifecycle guidance --------------------------------------------------
+  {
+    key: 'lifecycle.guidance.enabled',
+    section: 'lifecycle',
+    label: '启用启动 Guidance',
+    type: 'boolean', default: true,
+    description: '关闭后 session.start 不再注入全局 Lore 使用规则，只保留 boot 节点和启动召回上下文。',
+  },
+  {
+    key: 'lifecycle.guidance.global',
+    section: 'lifecycle',
+    label: '全局 Lore 使用规则',
+    type: 'text', default: DEFAULT_LIFECYCLE_GUIDANCE,
+    description: '由服务端注入到 session.start 的固定 guidance。插件不会再内置这段内容。',
+  },
+  {
+    key: 'lifecycle.boot.preamble',
+    section: 'lifecycle',
+    label: 'Boot 区块说明',
+    type: 'text', default: DEFAULT_LIFECYCLE_BOOT_PREAMBLE,
+    description: '出现在 boot 节点列表之前的说明文本。节点内容仍由 lore_boot 读取。',
+  },
+  {
+    key: 'lifecycle.startup_recall.preamble',
+    section: 'lifecycle',
+    label: '启动召回说明',
+    type: 'text', default: DEFAULT_LIFECYCLE_STARTUP_RECALL_PREAMBLE,
+    description: '启动时根据 runtime/project 自动召回到相关记忆时，显示在 <recall> 块之前的说明。',
+  },
+  {
+    key: 'lifecycle.prompt_recall.preamble',
+    section: 'lifecycle',
+    label: 'Prompt 召回说明',
+    type: 'text', default: '',
+    description: '每次 prompt.submit 召回到相关记忆时，显示在 <recall> 块之前的说明；留空则只注入 <recall> 块。',
   },
 
   // -- Recall weights -------------------------------------------------------
@@ -415,6 +510,7 @@ export const SCHEMA_BY_KEY = new Map<string, SettingDef>(
 
 export const SECTIONS: SettingSection[] = [
   { id: 'cache', label: '缓存', description: '控制缓存开关；Redis 后端由 REDIS_URL 自动启用' },
+  { id: 'lifecycle', label: '生命周期注入', description: '配置 session.start / prompt.submit 返回给各 agent 的服务端提示内容' },
   { id: 'recall_weights', label: '召回权重', description: '四路评分的线性权重（建议和为 1）' },
   { id: 'recall_bonus', label: '加分参数', description: '优先级和多视图命中的加分' },
   { id: 'recall_recency', label: '时间衰减', description: '让近期更新的记忆排名更高（默认关闭）' },
