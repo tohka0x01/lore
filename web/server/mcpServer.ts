@@ -40,7 +40,7 @@ export async function createMcpServer(context: McpServerContext = {}): Promise<I
   const server = new McpServer(
     {
       name: 'lore',
-      version: '1.3.9',
+      version: '1.3.12',
     },
     guidance ? { instructions: guidance } : undefined,
   );

@@ -1,5 +1,5 @@
 /**
- * Codex SessionStart hook: injects Lore guidance + backend bridge startup context.
+ * Codex SessionStart hook: forwards the lifecycle event to Lore.
  */
 
 import * as fs from 'node:fs';
@@ -10,7 +10,7 @@ import { execSync } from 'node:child_process';
 const LORE_CONFIG_FILE = path.join(os.homedir(), '.lore', 'config.json');
 const DEFAULT_BASE_URL = 'http://127.0.0.1:18901';
 const BOOT_TIMEOUT_MS = 8000;
-const CLIENT_TYPE = 'codex';
+const RUNTIME_FAMILY = 'codex';
 
 function readLoreConfig() {
   try {
@@ -38,12 +38,6 @@ function loadConfig() {
   };
 }
 
-function resolveRulesPath() {
-  const pluginRoot = process.env.LORE_CODEX_PLUGIN_ROOT;
-  if (pluginRoot) return path.join(pluginRoot, 'rules', 'lore-guidance.md');
-  return path.resolve(process.cwd(), 'rules', 'lore-guidance.md');
-}
-
 function detectProjectInfo() {
   const dir_name = path.basename(process.cwd());
   let repo_name = null;
@@ -60,11 +54,18 @@ function detectProjectInfo() {
   return { dir_name, repo_name };
 }
 
-async function postBridge(pathname, body, timeoutMs) {
+async function readStdin() {
+  if (process.stdin.isTTY) return '';
+  const chunks = [];
+  for await (const chunk of process.stdin) chunks.push(chunk);
+  return Buffer.concat(chunks).toString('utf-8');
+}
+
+async function postLifecycle(body, timeoutMs) {
   const cfg = loadConfig();
   const headers = { 'content-type': 'application/json' };
   if (cfg.apiToken) headers.authorization = `Bearer ${cfg.apiToken}`;
-  const response = await fetch(`${cfg.baseUrl}/api/bridge/${pathname}?client_type=${CLIENT_TYPE}`, {
+  const response = await fetch(`${cfg.baseUrl}/api/lifecycle/event`, {
     method: 'POST',
     headers,
     body: JSON.stringify(body),
@@ -74,31 +75,30 @@ async function postBridge(pathname, body, timeoutMs) {
   return response.json();
 }
 
+function writeHostOutput(response) {
+  const output = response?.host_output;
+  if (!output || output.mode === 'none' || output.value == null) return;
+  if (output.mode === 'stdout_json') process.stdout.write(JSON.stringify(output.value));
+  if (output.mode === 'stdout_text') process.stdout.write(String(output.value));
+}
+
 async function main() {
-  let rules = '';
+  let input = {};
   try {
-    rules = fs.readFileSync(resolveRulesPath(), 'utf-8').trim();
+    const raw = await readStdin();
+    input = raw.trim() ? JSON.parse(raw) : {};
   } catch {}
 
-  const bridge = await postBridge('startup', {
-    channel: CLIENT_TYPE,
+  const sessionId = input.session_id || input.conversation_id || '';
+  const lifecycle = await postLifecycle({
+    protocol_version: 'lore.lifecycle.v1',
+    runtime: { runtime_id: RUNTIME_FAMILY, runtime_family: RUNTIME_FAMILY },
+    event: { name: 'session.start', native_name: 'SessionStart' },
+    normalized: sessionId ? { session_id: sessionId } : {},
     project: detectProjectInfo(),
-    include_guidance: false,
   }, BOOT_TIMEOUT_MS).catch(() => null);
 
-  const parts = [
-    rules,
-    typeof bridge?.boot_context === 'string' ? bridge.boot_context : '',
-    typeof bridge?.startup_recall_context === 'string' ? bridge.startup_recall_context : '',
-  ].map(part => part.trim()).filter(Boolean);
-  if (parts.length === 0) process.exit(0);
-
-  process.stdout.write(JSON.stringify({
-    hookSpecificOutput: {
-      hookEventName: 'SessionStart',
-      additionalContext: parts.join('\n\n'),
-    },
-  }));
+  writeHostOutput(lifecycle);
 }
 
 main();

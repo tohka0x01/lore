@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { mkdtempSync, readFileSync, writeFileSync, chmodSync, existsSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, readFileSync, writeFileSync, chmodSync, existsSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { execFileSync } from 'node:child_process';
@@ -11,9 +11,12 @@ const installScript = path.join(pluginRoot, 'scripts', 'install.sh');
 test('install defaults to plugin hooks and removes legacy Lore user hooks', () => {
   const root = mkdtempSync(path.join(tmpdir(), 'lore-codex-install-'));
   const codexHome = path.join(root, 'codex-home');
+  const staleVersionRoot = path.join(codexHome, 'plugins', 'cache', 'lore', 'lore', '1.3.11');
   const fakeBin = path.join(root, 'bin');
   const fakeCodex = path.join(fakeBin, 'codex');
   execFileSync('mkdir', ['-p', codexHome, fakeBin]);
+  mkdirSync(staleVersionRoot, { recursive: true });
+  writeFileSync(path.join(staleVersionRoot, 'stale.txt'), 'stale version cache');
   writeFileSync(fakeCodex, '#!/usr/bin/env bash\nset -euo pipefail\necho "$@" >> "$CODEX_FAKE_LOG"\n');
   chmodSync(fakeCodex, 0o755);
   writeFileSync(path.join(codexHome, 'hooks.json'), JSON.stringify({
@@ -68,6 +71,22 @@ test('install defaults to plugin hooks and removes legacy Lore user hooks', () =
   assert.match(installedHooks, /node /);
   assert.match(installedHooks, /recall-inject\.mjs/);
   assert.doesNotMatch(installedHooks, /npx tsx/);
+  assert.doesNotMatch(installedHooks, /__LORE_CODEX_PLUGIN_ROOT__/);
+
+  const installedRoot = path.join(codexHome, 'plugins', 'cache', 'lore', 'lore', 'local');
+  assert.match(installedHooks, new RegExp(installedRoot.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')));
+  const installedRulesHook = readFileSync(path.join(installedRoot, 'hooks', 'rules-inject.mjs'), 'utf8');
+  const installedRecallHook = readFileSync(path.join(installedRoot, 'hooks', 'recall-inject.mjs'), 'utf8');
+  assert.match(installedRulesHook, /\/api\/lifecycle\/event/);
+  assert.match(installedRecallHook, /\/api\/lifecycle\/event/);
+  assert.doesNotMatch(installedRulesHook, /\/api\/bridge\//);
+  assert.doesNotMatch(installedRecallHook, /\/api\/bridge\//);
+  assert.equal(existsSync(staleVersionRoot), false);
+
+  const marketplaceRoot = path.join(codexHome, 'plugins', 'lore-local-marketplace', 'plugins', 'lore');
+  const marketplaceHooks = readFileSync(path.join(marketplaceRoot, 'hooks', 'hooks.json'), 'utf8');
+  assert.doesNotMatch(marketplaceHooks, /__LORE_CODEX_PLUGIN_ROOT__/);
+  assert.match(marketplaceHooks, new RegExp(marketplaceRoot.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')));
 
   const userHooks = JSON.parse(readFileSync(path.join(codexHome, 'hooks.json'), 'utf8'));
   assert.deepEqual(userHooks.hooks.SessionStart, []);

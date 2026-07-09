@@ -126,6 +126,25 @@ register_marketplace() {
   codex plugin marketplace add "$TARGET_ROOT"
 }
 
+patch_hook_placeholders() {
+  local plugin_root="$1"
+  local hooks_json="$plugin_root/hooks/hooks.json"
+  [ -f "$hooks_json" ] || return 0
+  python3 - "$hooks_json" "$plugin_root" <<'PY'
+import sys
+from pathlib import Path
+hooks_path = Path(sys.argv[1])
+plugin_root = sys.argv[2]
+hooks_path.write_text(hooks_path.read_text().replace("__LORE_CODEX_PLUGIN_ROOT__", plugin_root))
+PY
+}
+
+remove_stale_installed_plugin_roots() {
+  local cache_parent="$CODEX_HOME/plugins/cache/$MARKETPLACE_NAME/$PLUGIN_NAME"
+  [ -d "$cache_parent" ] || return 0
+  find "$cache_parent" -mindepth 1 -maxdepth 1 -type d ! -name local -exec rm -rf {} +
+}
+
 enable_codex_hooks_feature() {
   mkdir -p "$(dirname "$CODEX_CONFIG")"
   touch "$CODEX_CONFIG"
@@ -275,19 +294,14 @@ require_command jq
 require_command python3
 
 copy_source_layout
+remove_stale_installed_plugin_roots
 rm -rf "$INSTALLED_PLUGIN_ROOT.tmp"
 mkdir -p "$(dirname "$INSTALLED_PLUGIN_ROOT")"
 cp -a "$TARGET_ROOT/plugins/$PLUGIN_NAME" "$INSTALLED_PLUGIN_ROOT.tmp"
 rm -rf "$INSTALLED_PLUGIN_ROOT"
 mv "$INSTALLED_PLUGIN_ROOT.tmp" "$INSTALLED_PLUGIN_ROOT"
-python3 - "$INSTALLED_PLUGIN_ROOT/hooks/hooks.json" "$INSTALLED_PLUGIN_ROOT" <<'PY'
-import sys
-from pathlib import Path
-hooks_path = Path(sys.argv[1])
-plugin_root = sys.argv[2]
-if hooks_path.exists():
-    hooks_path.write_text(hooks_path.read_text().replace("__LORE_CODEX_PLUGIN_ROOT__", plugin_root))
-PY
+patch_hook_placeholders "$INSTALLED_PLUGIN_ROOT"
+patch_hook_placeholders "$TARGET_ROOT/plugins/$PLUGIN_NAME"
 jq -e '.plugins[0].source.path == "./plugins/lore"' "$TARGET_ROOT/.agents/plugins/marketplace.json" >/dev/null
 jq -e '.mcpServers.lore.url | contains("client_type=codex")' "$INSTALLED_PLUGIN_ROOT/.mcp.json" >/dev/null
 
