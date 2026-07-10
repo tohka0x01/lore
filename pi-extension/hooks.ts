@@ -55,7 +55,7 @@ async function fetchStartupLifecycle(pluginCfg: any, sessionId: string | undefin
   return fetchLifecycleEvent(pluginCfg, {
     protocol_version: 'lore.lifecycle.v1',
     runtime: { runtime_id: 'pi', runtime_family: 'pi' },
-    event: { name: 'session.start', native_name: 'before_agent_start' },
+    event: { name: 'session.start', native_name: 'session_start' },
     normalized: { session_id: sessionId },
     project: detectProjectInfo(),
   });
@@ -85,24 +85,47 @@ function getSessionId(ctx: any): string | undefined {
   return typeof manager?.sessionId === 'string' ? manager.sessionId : undefined;
 }
 
+function sessionStartKey(sessionId: string | undefined): string {
+  if (typeof sessionId === 'string' && sessionId.trim()) return sessionId.trim();
+  return 'missing:default';
+}
+
 // ---- Hook registration ----
 
 export function registerHooks(pi: any, pluginCfg: any) {
+  // Prefer true session_start for boot; fall back to first before_agent_start once.
+  const startedSessions = new Set<string>();
+
   pi.on('session_start', async (_event: any, ctx: any) => {
-    if (!pluginCfg.startupHealthcheck) return;
+    if (pluginCfg.startupHealthcheck) {
+      try {
+        await fetchJson(pluginCfg, '/health', { method: 'GET' });
+        ctx?.ui?.notify?.(`Lore connected: ${pluginCfg.baseUrl}`, 'info');
+      } catch (error: any) {
+        pi.logger?.warn?.(`lore: startup health check failed (${pluginCfg.baseUrl}): ${error.message}`);
+      }
+    }
+
+    if (!pluginCfg.injectPromptGuidance) return;
+    const sessionId = getSessionId(ctx);
+    const key = sessionStartKey(sessionId);
+    if (startedSessions.has(key)) return;
     try {
-      await fetchJson(pluginCfg, '/health', { method: 'GET' });
-      ctx?.ui?.notify?.(`Lore connected: ${pluginCfg.baseUrl}`, 'info');
+      // Fire session.start for boot/guidance; host may not consume return value here.
+      await fetchStartupLifecycle(pluginCfg, sessionId);
+      startedSessions.add(key);
     } catch (error: any) {
-      pi.logger?.warn?.(`lore: startup health check failed (${pluginCfg.baseUrl}): ${error.message}`);
+      pi.logger?.debug?.(`lore: lifecycle startup failed: ${error.message}`);
     }
   });
 
   pi.on('before_agent_start', async (event: any, ctx: any) => {
     const sessionId = getSessionId(ctx);
+    const key = sessionStartKey(sessionId);
     const out: any = {};
 
-    if (pluginCfg.injectPromptGuidance) {
+    // Fallback: if session_start did not run (some embeds), start once here.
+    if (pluginCfg.injectPromptGuidance && !startedSessions.has(key)) {
       try {
         const value = readReturnValue(await fetchStartupLifecycle(pluginCfg, sessionId));
         const systemContext = typeof value?.systemPromptAppend === 'string' ? value.systemPromptAppend.trim() : '';
@@ -111,6 +134,7 @@ export function registerHooks(pi: any, pluginCfg: any) {
             .filter(Boolean)
             .join('\n\n');
         }
+        startedSessions.add(key);
       } catch (error: any) {
         pi.logger?.debug?.(`lore: lifecycle startup failed: ${error.message}`);
       }

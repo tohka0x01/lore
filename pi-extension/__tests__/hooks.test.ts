@@ -82,9 +82,18 @@ describe('Pi extension hooks', () => {
     expect(result.systemPrompt).toContain('LIFECYCLE SYSTEM');
     expect(result.message.content).toContain('<recall');
     expect(result.message.content).toContain('core://project');
-    const urls = (fetch as any).mock.calls.map((call: any[]) => String(call[0]));
+    let urls = (fetch as any).mock.calls.map((call: any[]) => String(call[0]));
     expect(urls.filter((url: string) => url.includes('/lifecycle/event'))).toHaveLength(2);
     expect(urls.some((url: string) => url.includes('/browse/boot'))).toBe(false);
     expect(urls.some((url: string) => url.includes('/browse/recall'))).toBe(false);
+
+    (fetch as any).mockClear();
+    const second = await pi.events.before_agent_start({ prompt: 'again', systemPrompt: 'base system' }, { sessionManager: { sessionId: 'sess-2' } });
+    expect(second.systemPrompt).toBeUndefined();
+    expect(second.message.content).toContain('<recall');
+    urls = (fetch as any).mock.calls.map((call: any[]) => String(call[0]));
+    expect(urls.filter((url: string) => url.includes('/lifecycle/event'))).toHaveLength(1);
+    const bodies = (fetch as any).mock.calls.map((call: any[]) => JSON.parse(String(call[1]?.body || '{}')));
+    expect(bodies[0]?.event?.name).toBe('prompt.submit');
   });
 });

@@ -83,9 +83,17 @@ function readReturnValue(response: any): any {
     : null;
 }
 
+function sessionStartKey(sessionId: string | undefined): string {
+  if (typeof sessionId === "string" && sessionId.trim()) return sessionId.trim();
+  return "missing:default";
+}
+
 // ---- Hook registration ----
 
 export function registerHooks(api: any, pluginCfg: any) {
+  // Once-per-session gate: session.start must not re-fire on every prompt build.
+  const startedSessions = new Set<string>();
+
   api.registerGatewayMethod("lore.status", async ({ respond }: any) => {
     try {
       const data = await fetchJson(pluginCfg, "/health", { method: "GET" });
@@ -112,14 +120,17 @@ export function registerHooks(api: any, pluginCfg: any) {
   api.on("before_prompt_build", async (event: any) => {
     const ctx = event?.context;
     const sessionId = ctx?.sessionId;
+    const startKey = sessionStartKey(sessionId);
     const out: any = {};
 
-    if (pluginCfg.injectPromptGuidance) {
+    if (pluginCfg.injectPromptGuidance && !startedSessions.has(startKey)) {
       try {
         const value = readReturnValue(await fetchStartupLifecycle(pluginCfg, sessionId));
         if (typeof value?.appendSystemContext === "string" && value.appendSystemContext.trim()) {
           out.appendSystemContext = value.appendSystemContext.trim();
         }
+        // Mark started even on empty host_output to avoid startup recall storms.
+        startedSessions.add(startKey);
       } catch (error: any) {
         api.logger.debug?.(`lore: lifecycle startup failed: ${error.message}`);
       }
