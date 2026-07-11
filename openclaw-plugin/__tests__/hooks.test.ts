@@ -90,12 +90,82 @@ describe('registerHooks', () => {
     expect('lore.status' in api.gatewayMethods).toBe(true);
     expect('gateway_start' in api.events).toBe(true);
     expect('before_tool_call' in api.events).toBe(false);
-    expect('session_end' in api.events).toBe(false);
+    expect('session_start' in api.events).toBe(true);
+    expect('session_end' in api.events).toBe(true);
     expect('before_prompt_build' in api.events).toBe(true);
   });
 
 
-  it('before_prompt_build forwards lifecycle events and applies host output', async () => {
+  it('deduplicates repeated session starts until the session ends', async () => {
+    const api = makeMockApi();
+    vi.stubGlobal('fetch', vi.fn(async (_url: string, init: any) => {
+      const body = JSON.parse(String(init?.body || '{}'));
+      if (body?.event?.name === 'session.start') {
+        return {
+          ok: true,
+          status: 200,
+          text: async () => JSON.stringify({
+            host_output: { mode: 'return_value', value: { appendSystemContext: 'ONCE' } },
+          }),
+        };
+      }
+      return { ok: true, status: 200, text: async () => '{}' };
+    }));
+
+    registerHooks(api as any, { startupHealthcheck: false, injectPromptGuidance: true, recallEnabled: false, baseUrl: 'http://localhost' });
+    const event = { sessionId: 'sess-repeat' };
+    const ctx = { sessionId: 'sess-repeat' };
+    await api.events.session_start.handler(event, ctx);
+    await api.events.session_start.handler(event, ctx);
+    expect(fetch).toHaveBeenCalledTimes(1);
+
+    expect((await api.events.before_prompt_build.handler({ prompt: '', messages: [] }, ctx))?.appendSystemContext).toBe('ONCE');
+    await api.events.session_start.handler(event, ctx);
+    expect(fetch).toHaveBeenCalledTimes(1);
+    expect((await api.events.before_prompt_build.handler({ prompt: '', messages: [] }, ctx))?.appendSystemContext).toBeUndefined();
+
+    await api.events.session_end.handler({ sessionId: 'sess-repeat', reason: 'reset' }, ctx);
+    await api.events.session_start.handler(event, ctx);
+    expect(fetch).toHaveBeenCalledTimes(2);
+  });
+
+  it('does not restore startup context after a session ends during an in-flight start', async () => {
+    const api = makeMockApi();
+    let resolveStart!: (response: any) => void;
+    vi.stubGlobal('fetch', vi.fn((url: string, init: any) => {
+      const body = JSON.parse(String(init?.body || '{}'));
+      if (String(url).includes('/lifecycle/event') && body?.event?.name === 'session.start') {
+        return new Promise((resolve) => { resolveStart = resolve; });
+      }
+      return Promise.resolve({ ok: true, status: 200, text: async () => '{}' });
+    }));
+
+    registerHooks(api as any, { startupHealthcheck: false, injectPromptGuidance: true, recallEnabled: false, baseUrl: 'http://localhost' });
+    const starting = api.events.session_start.handler(
+      { sessionId: 'sess-ended' },
+      { sessionId: 'sess-ended' },
+    );
+    await api.events.session_end.handler(
+      { sessionId: 'sess-ended', reason: 'reset' },
+      { sessionId: 'sess-ended' },
+    );
+    resolveStart({
+      ok: true,
+      status: 200,
+      text: async () => JSON.stringify({
+        host_output: { mode: 'return_value', value: { appendSystemContext: 'STALE SYSTEM' } },
+      }),
+    });
+    await starting;
+
+    const result = await api.events.before_prompt_build.handler(
+      { prompt: 'after reset', messages: [] },
+      { sessionId: 'sess-ended', runId: 'run-after-reset' },
+    );
+    expect(result?.appendSystemContext).toBeUndefined();
+  });
+
+  it('session_start caches startup context for the first prompt build', async () => {
     const api = makeMockApi();
     vi.stubGlobal('fetch', vi.fn(async (url: string, init: any) => {
       if (String(url).includes('/lifecycle/event')) {
@@ -126,22 +196,27 @@ describe('registerHooks', () => {
     }));
 
     registerHooks(api as any, { startupHealthcheck: false, injectPromptGuidance: true, recallEnabled: true, baseUrl: 'http://localhost' });
-    const result = await api.events.before_prompt_build.handler({ prompt: 'what now?', context: { sessionId: 'sess-1' } });
-
-    expect(result.appendSystemContext).toBe('LIFECYCLE SYSTEM');
-    expect(result.prependContext).toContain('core://project');
-    let urls = (fetch as any).mock.calls.map((call: any[]) => String(call[0]));
-    expect(urls.filter((url: string) => url.includes('/lifecycle/event'))).toHaveLength(2);
-    expect(urls.some((url: string) => url.includes('/browse/boot'))).toBe(false);
-    expect(urls.some((url: string) => url.includes('/browse/recall'))).toBe(false);
+    await api.events.session_start.handler({ sessionId: 'sess-1', sessionKey: 'agent:main' }, { sessionId: 'sess-1', sessionKey: 'agent:main' });
 
     (fetch as any).mockClear();
-    const second = await api.events.before_prompt_build.handler({ prompt: 'again', context: { sessionId: 'sess-1' } });
+    const first = await api.events.before_prompt_build.handler(
+      { prompt: 'what now?', messages: [] },
+      { sessionId: 'sess-1', sessionKey: 'agent:main', runId: 'run-1' },
+    );
+    expect(first.appendSystemContext).toBe('LIFECYCLE SYSTEM');
+    expect(first.prependContext).toContain('core://project');
+    let bodies = (fetch as any).mock.calls.map((call: any[]) => JSON.parse(String(call[1]?.body || '{}')));
+    expect(bodies.map((body: any) => body.event.name)).toEqual(['prompt.submit']);
+    expect(bodies[0].normalized.session_id).toBe('sess-1');
+
+    (fetch as any).mockClear();
+    const second = await api.events.before_prompt_build.handler(
+      { prompt: 'again', messages: [] },
+      { sessionId: 'sess-1', sessionKey: 'agent:main', runId: 'run-2' },
+    );
     expect(second.appendSystemContext).toBeUndefined();
     expect(second.prependContext).toContain('core://project');
-    urls = (fetch as any).mock.calls.map((call: any[]) => String(call[0]));
-    expect(urls.filter((url: string) => url.includes('/lifecycle/event'))).toHaveLength(1);
-    const bodies = (fetch as any).mock.calls.map((call: any[]) => JSON.parse(String(call[1]?.body || '{}')));
-    expect(bodies[0]?.event?.name).toBe('prompt.submit');
+    bodies = (fetch as any).mock.calls.map((call: any[]) => JSON.parse(String(call[1]?.body || '{}')));
+    expect(bodies.map((body: any) => body.event.name)).toEqual(['prompt.submit']);
   });
 });

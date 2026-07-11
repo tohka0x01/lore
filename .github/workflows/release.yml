@@ -116,7 +116,7 @@ jobs:
           mkdir -p dist
           cd claudecode-plugin
           zip -r ../dist/lore-claudecode.zip \
-            .claude-plugin .mcp.json hooks rules
+            .claude-plugin .mcp.json hooks
 
       - name: Build Codex artifact
         run: |

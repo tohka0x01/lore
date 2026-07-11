@@ -10,6 +10,7 @@ into Hermes via the native memory provider interface:
 
 from __future__ import annotations
 
+import hashlib
 import logging
 import os
 import re
@@ -53,6 +54,19 @@ def _detect_project_info() -> Dict[str, Optional[str]]:
     return {"dir_name": dir_name, "repo_name": repo_name}
 
 
+class _PrefetchFlight:
+    """Single-flight recall operation shared by queue and foreground paths."""
+
+    def __init__(self, *, key: str, session_id: str, generation: int, payload: str):
+        self.key = key
+        self.session_id = session_id
+        self.generation = generation
+        self.payload = payload
+        self.done = threading.Event()
+        self.result = ""
+        self.thread: Optional[threading.Thread] = None
+
+
 # ---------------------------------------------------------------------------
 # LoreMemoryProvider
 # ---------------------------------------------------------------------------
@@ -60,15 +74,21 @@ def _detect_project_info() -> Dict[str, Optional[str]]:
 class LoreMemoryProvider(MemoryProvider):
     """Lore long-term memory provider for Hermes Agent."""
 
+    _PREFETCH_WAIT_SECONDS = 5.0
+    _SHUTDOWN_WAIT_SECONDS = 5.0
+
     def __init__(self):
         self._client: Optional[LoreClient] = None
         self._session_id: str = ""
         self._boot_block: str = ""
-        self._prefetch_result: str = ""
-        self._prefetch_result_query: str = ""
-        self._last_recall_query: str = ""
         self._prefetch_lock = threading.Lock()
+        # Retained for compatibility with tests that inspect the latest thread.
         self._prefetch_thread: Optional[threading.Thread] = None
+        self._prefetch_threads: set = set()
+        self._generation = 0
+        self._ready_key: Optional[str] = None
+        self._ready_result: str = ""
+        self._inflight: Dict[str, "_PrefetchFlight"] = {}
 
     @property
     def name(self) -> str:
@@ -109,6 +129,26 @@ class LoreMemoryProvider(MemoryProvider):
         logger.info("Lore memory provider initialized (server: %s, session: %s)",
                      resolved_base_url, session_id)
 
+    def on_session_switch(
+        self,
+        new_session_id: str,
+        *,
+        parent_session_id: str = "",
+        reset: bool = False,
+        rewound: bool = False,
+        **kwargs,
+    ) -> None:
+        """Rebind provider session identity without re-running session.start."""
+        with self._prefetch_lock:
+            self._session_id = new_session_id or ""
+            self._generation += 1
+            self._ready_key = None
+            self._ready_result = ""
+            # Detach all joinable flights so a same-key request after rewind/reset
+            # starts current-generation work instead of joining stale/wedged work.
+            # Old threads may finish but cannot publish current ready cache.
+            self._inflight.clear()
+
     # -- System prompt (static content) ------------------------------------
 
     def system_prompt_block(self) -> str:
@@ -117,75 +157,185 @@ class LoreMemoryProvider(MemoryProvider):
     # -- Prefetch (dynamic recall per turn) --------------------------------
 
     def prefetch_all(self, query: str, *, session_id: str = "") -> str:
-        # run_agent.py calls prefetch_all without session_id.
-        # Use self._session_id (set during initialize) as the authoritative source.
-        return self.prefetch(query, session_id=self._session_id)
+        return self.prefetch(query, session_id=session_id or self._session_id)
 
     def queue_prefetch_all(self, query: str, *, session_id: str = "") -> None:
-        self.queue_prefetch(query, session_id=self._session_id)
+        self.queue_prefetch(query, session_id=session_id or self._session_id)
 
     @staticmethod
-    def _normalize_query(query: str) -> str:
-        return " ".join(query.strip().split())[:500]
+    def _normalize_full_query(query: str) -> str:
+        return " ".join(str(query or "").strip().split())
+
+    @classmethod
+    def _payload_prompt(cls, query: str) -> str:
+        # Existing API constraint: lifecycle payload is truncated to 500 chars.
+        return cls._normalize_full_query(query)[:500]
+
+    @classmethod
+    def _identity_key(cls, session_id: str, query: str) -> str:
+        full = cls._normalize_full_query(query)
+        digest = hashlib.sha256(full.encode("utf-8")).hexdigest()
+        return f"{session_id}:{digest}"
+
+    def _register_flight_locked(
+        self,
+        *,
+        key: str,
+        session_id: str,
+        payload: str,
+    ) -> "_PrefetchFlight":
+        """Register a new flight. Caller must hold _prefetch_lock; start thread after unlock."""
+        flight = _PrefetchFlight(
+            key=key,
+            session_id=session_id,
+            generation=self._generation,
+            payload=payload,
+        )
+        self._inflight[key] = flight
+        thread = threading.Thread(
+            target=self._run_flight,
+            args=(flight,),
+            daemon=True,
+            name="lore-prefetch",
+        )
+        flight.thread = thread
+        self._prefetch_thread = thread
+        self._prefetch_threads.add(thread)
+        return flight
+
+    def _claim_or_join(
+        self,
+        session_id: str,
+        query: str,
+        *,
+        for_queue: bool = False,
+    ) -> Optional[Any]:
+        """Atomically decide ready consume / join / register under one lock.
+
+        Returns:
+          - ("ready", result) for prefetch consume-once
+          - ("join", flight) to wait on an existing same-generation in-flight flight
+          - ("start", flight) newly registered; caller must start flight.thread after unlock
+          - None when there is nothing to do (no payload/client, or queue skip)
+
+        Only callers that claim/join while a flight is still in `_inflight` share its
+        result. Completed flights are never retained for later same-text joins, so a
+        sequential same-session/same-text prefetch is always a new operation.
+        """
+        payload = self._payload_prompt(query)
+        if not payload or not self._client:
+            return None
+        key = self._identity_key(session_id, query)
+        flight_to_start: Optional[_PrefetchFlight] = None
+        outcome: Optional[Any] = None
+        with self._prefetch_lock:
+            if for_queue:
+                if self._ready_key == key or key in self._inflight:
+                    return None
+                flight_to_start = self._register_flight_locked(
+                    key=key,
+                    session_id=session_id,
+                    payload=payload,
+                )
+                outcome = ("start", flight_to_start)
+            else:
+                if self._ready_key == key:
+                    result = self._ready_result
+                    self._ready_key = None
+                    self._ready_result = ""
+                    return ("ready", result)
+                existing = self._inflight.get(key)
+                if existing is not None and existing.generation == self._generation:
+                    return ("join", existing)
+                flight_to_start = self._register_flight_locked(
+                    key=key,
+                    session_id=session_id,
+                    payload=payload,
+                )
+                outcome = ("start", flight_to_start)
+        # Start outside the lock so completion cannot deadlock on the same lock.
+        if flight_to_start is not None and flight_to_start.thread is not None:
+            flight_to_start.thread.start()
+        return outcome
+
+    def _run_flight(self, flight: "_PrefetchFlight") -> None:
+        result = ""
+        try:
+            result = self._do_recall(flight.payload, flight.session_id)
+        except Exception as e:
+            logger.debug("Lore queue_prefetch failed: %s", e)
+        finally:
+            with self._prefetch_lock:
+                if (
+                    self._inflight.get(flight.key) is flight
+                    and flight.generation == self._generation
+                ):
+                    # Keep ready cache even for empty results so a late timeout
+                    # path that already joined does not immediately re-issue.
+                    self._ready_key = flight.key
+                    self._ready_result = result
+                if self._inflight.get(flight.key) is flight:
+                    del self._inflight[flight.key]
+                if flight.thread is not None:
+                    self._prefetch_threads.discard(flight.thread)
+            flight.result = result
+            flight.done.set()
 
     def prefetch(self, query: str, *, session_id: str = "") -> str:
-        normalized_query = self._normalize_query(query)
-        # Wait for background thread from previous queue_prefetch to finish.
-        if self._prefetch_thread and self._prefetch_thread.is_alive():
-            self._prefetch_thread.join(timeout=5.0)
+        sid = session_id or self._session_id
+        payload = self._payload_prompt(query)
+        if not payload:
+            return ""
+        key = self._identity_key(sid, query)
+
+        claimed = self._claim_or_join(sid, query, for_queue=False)
+        if claimed is None:
+            return ""
+        kind, value = claimed
+        if kind == "ready":
+            return value
+
+        flight: _PrefetchFlight = value
+        finished = flight.done.wait(timeout=float(self._PREFETCH_WAIT_SECONDS))
+        if not finished:
+            # Bounded wait only: never start a second request for the same key.
+            return ""
+
         with self._prefetch_lock:
-            result = self._prefetch_result
-            result_query = self._prefetch_result_query
-            self._prefetch_result = ""
-            self._prefetch_result_query = ""
-        # If cache hit for the same query, return it.
-        if result and result_query == normalized_query:
-            return result
-        # Cache miss (first turn, or thread didn't finish): fetch synchronously.
-        # This ensures the first user message always gets recall.
-        return self._do_recall(normalized_query, session_id or self._session_id)
+            if self._ready_key == key:
+                result = self._ready_result
+                self._ready_key = None
+                self._ready_result = ""
+                return result
+        # Flight completed; same-flight waiters that joined before completion use
+        # the shared result even if another waiter already consumed ready cache.
+        if flight.generation == self._generation and flight.key == key:
+            return flight.result
+        return ""
 
     def queue_prefetch(self, query: str, *, session_id: str = "") -> None:
         if not self._client:
             return
         sid = session_id or self._session_id
-        normalized_query = self._normalize_query(query)
-        if not normalized_query:
+        payload = self._payload_prompt(query)
+        if not payload:
             return
-        with self._prefetch_lock:
-            if self._last_recall_query == normalized_query or self._prefetch_result_query == normalized_query:
-                return
-
-        def _run():
-            try:
-                result = self._do_recall(normalized_query, sid)
-                if result:
-                    with self._prefetch_lock:
-                        self._prefetch_result = result
-                        self._prefetch_result_query = normalized_query
-            except Exception as e:
-                logger.debug("Lore queue_prefetch failed: %s", e)
-
-        self._prefetch_thread = threading.Thread(target=_run, daemon=True, name="lore-prefetch")
-        self._prefetch_thread.start()
+        self._claim_or_join(sid, query, for_queue=True)
 
     def _do_recall(self, query: str, session_id: str) -> str:
         """Execute recall API and return formatted block. Thread-safe."""
-        normalized_query = self._normalize_query(query)
-        if not normalized_query:
+        payload = self._payload_prompt(query)
+        if not payload:
             return ""
         try:
             lifecycle = self._client.lifecycle_event(
                 "prompt.submit",
                 session_id=session_id,
-                prompt=normalized_query,
+                prompt=payload,
             )
             output = lifecycle.get("host_output", {}) or {}
             value = output.get("value", {}) if output.get("mode") == "return_value" else {}
-            context = str((value or {}).get("context") or "").strip()
-            with self._prefetch_lock:
-                self._last_recall_query = normalized_query
-            return context
+            return str((value or {}).get("context") or "").strip()
         except Exception as e:
             logger.debug("Lore lifecycle recall failed: %s", e)
             return ""
@@ -203,8 +353,26 @@ class LoreMemoryProvider(MemoryProvider):
     # -- Shutdown ----------------------------------------------------------
 
     def shutdown(self) -> None:
-        if self._prefetch_thread and self._prefetch_thread.is_alive():
-            self._prefetch_thread.join(timeout=5.0)
+        # Snapshot provider-owned threads; never hold the lock while joining.
+        with self._prefetch_lock:
+            threads = {
+                thread
+                for thread in self._prefetch_threads
+                if thread is not None and thread.is_alive()
+            }
+            if self._prefetch_thread is not None and self._prefetch_thread.is_alive():
+                threads.add(self._prefetch_thread)
+        if not threads:
+            return
+
+        import time
+
+        deadline = time.monotonic() + float(self._SHUTDOWN_WAIT_SECONDS)
+        for thread in threads:
+            remaining = deadline - time.monotonic()
+            if remaining <= 0:
+                break
+            thread.join(timeout=remaining)
 
     # -- Tool schemas ------------------------------------------------------
 

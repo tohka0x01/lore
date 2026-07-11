@@ -33,7 +33,75 @@ describe('Pi extension hooks', () => {
     expect(pi.events.session_shutdown).toBeUndefined();
   });
 
-  it('before_agent_start applies lifecycle startup context and recall message', async () => {
+  it('coalesces duplicate session starts for the active binding', async () => {
+    const pi = makeMockPi();
+    let resolveStart!: (response: any) => void;
+    vi.stubGlobal('fetch', vi.fn(() => new Promise((resolve) => { resolveStart = resolve; })));
+
+    registerHooks(pi as any, {
+      baseUrl: 'http://host',
+      timeoutMs: 1000,
+      injectPromptGuidance: true,
+      recallEnabled: false,
+      startupHealthcheck: false,
+    });
+
+    const ctx = { sessionManager: { getSessionId: () => 'sess-duplicate' } };
+    const first = pi.events.session_start({ reason: 'startup' }, ctx);
+    const duplicate = pi.events.session_start({ reason: 'reload' }, ctx);
+    expect(fetch).toHaveBeenCalledTimes(1);
+
+    resolveStart({
+      ok: true, status: 200, statusText: 'OK',
+      text: async () => JSON.stringify({
+        host_output: { mode: 'return_value', value: { systemPromptAppend: 'ONCE' } },
+      }),
+    });
+    await Promise.all([first, duplicate]);
+
+    const turn = await pi.events.before_agent_start({ prompt: '', systemPrompt: 'base' }, ctx);
+    expect(turn?.systemPrompt).toBe('base\n\nONCE');
+    expect((await pi.events.before_agent_start({ prompt: '', systemPrompt: 'base' }, ctx))?.systemPrompt).toBeUndefined();
+  });
+
+  it('ignores an old session start that resolves after a newer binding', async () => {
+    const pi = makeMockPi();
+    const resolvers = new Map<string, (response: any) => void>();
+    vi.stubGlobal('fetch', vi.fn((_url: string, init: any) => {
+      const body = JSON.parse(String(init?.body || '{}'));
+      const sessionId = body.normalized.session_id;
+      return new Promise((resolve) => { resolvers.set(sessionId, resolve); });
+    }));
+
+    registerHooks(pi as any, {
+      baseUrl: 'http://host',
+      timeoutMs: 1000,
+      injectPromptGuidance: true,
+      recallEnabled: false,
+      startupHealthcheck: false,
+    });
+
+    const ctxA = { sessionManager: { getSessionId: () => 'sess-a' } };
+    const ctxB = { sessionManager: { getSessionId: () => 'sess-b' } };
+    const startA = pi.events.session_start({ reason: 'startup' }, ctxA);
+    const startB = pi.events.session_start({ reason: 'new' }, ctxB);
+
+    resolvers.get('sess-b')!({
+      ok: true, status: 200, statusText: 'OK',
+      text: async () => JSON.stringify({ host_output: { mode: 'return_value', value: { systemPromptAppend: 'B' } } }),
+    });
+    await startB;
+    resolvers.get('sess-a')!({
+      ok: true, status: 200, statusText: 'OK',
+      text: async () => JSON.stringify({ host_output: { mode: 'return_value', value: { systemPromptAppend: 'A' } } }),
+    });
+    await startA;
+
+    expect((await pi.events.before_agent_start({ prompt: '', systemPrompt: 'base' }, ctxB))?.systemPrompt).toBe('base\n\nB');
+    expect((await pi.events.before_agent_start({ prompt: '', systemPrompt: 'base' }, ctxA))?.systemPrompt).toBeUndefined();
+  });
+
+  it('caches session startup context and consumes it on the first agent turn', async () => {
     const pi = makeMockPi();
     vi.stubGlobal('fetch', vi.fn(async (url: string, init: any) => {
       if (String(url).includes('/lifecycle/event')) {
@@ -78,22 +146,25 @@ describe('Pi extension hooks', () => {
       startupHealthcheck: false,
     });
 
-    const result = await pi.events.before_agent_start({ prompt: 'what now?', systemPrompt: 'base system' }, { sessionManager: { sessionId: 'sess-2' } });
-    expect(result.systemPrompt).toContain('LIFECYCLE SYSTEM');
-    expect(result.message.content).toContain('<recall');
-    expect(result.message.content).toContain('core://project');
-    let urls = (fetch as any).mock.calls.map((call: any[]) => String(call[0]));
-    expect(urls.filter((url: string) => url.includes('/lifecycle/event'))).toHaveLength(2);
-    expect(urls.some((url: string) => url.includes('/browse/boot'))).toBe(false);
-    expect(urls.some((url: string) => url.includes('/browse/recall'))).toBe(false);
+    const ctx = { sessionManager: { getSessionId: () => 'sess-2' } };
+    expect(await pi.events.session_start({ reason: 'startup' }, ctx)).toBeUndefined();
+
+    let bodies = (fetch as any).mock.calls.map((call: any[]) => JSON.parse(String(call[1]?.body || '{}')));
+    expect(bodies.map((body: any) => body.event.name)).toEqual(['session.start']);
 
     (fetch as any).mockClear();
-    const second = await pi.events.before_agent_start({ prompt: 'again', systemPrompt: 'base system' }, { sessionManager: { sessionId: 'sess-2' } });
+    const first = await pi.events.before_agent_start({ prompt: 'what now?', systemPrompt: 'base system' }, ctx);
+    expect(first.systemPrompt).toBe('base system\n\nLIFECYCLE SYSTEM');
+    expect(first.message.content).toContain('<recall');
+    bodies = (fetch as any).mock.calls.map((call: any[]) => JSON.parse(String(call[1]?.body || '{}')));
+    expect(bodies.map((body: any) => body.event.name)).toEqual(['prompt.submit']);
+    expect(bodies[0].normalized.session_id).toBe('sess-2');
+
+    (fetch as any).mockClear();
+    const second = await pi.events.before_agent_start({ prompt: 'again', systemPrompt: 'base system' }, ctx);
     expect(second.systemPrompt).toBeUndefined();
     expect(second.message.content).toContain('<recall');
-    urls = (fetch as any).mock.calls.map((call: any[]) => String(call[0]));
-    expect(urls.filter((url: string) => url.includes('/lifecycle/event'))).toHaveLength(1);
-    const bodies = (fetch as any).mock.calls.map((call: any[]) => JSON.parse(String(call[1]?.body || '{}')));
-    expect(bodies[0]?.event?.name).toBe('prompt.submit');
+    bodies = (fetch as any).mock.calls.map((call: any[]) => JSON.parse(String(call[1]?.body || '{}')));
+    expect(bodies.map((body: any) => body.event.name)).toEqual(['prompt.submit']);
   });
 });

@@ -39,7 +39,7 @@ const commandFor = (script) =>
 
 const entries = {
   SessionStart: {
-    matcher: "",
+    matcher: "startup|resume|clear",
     hooks: [{ type: "command", command: commandFor('rules-inject.mjs'), timeout: 10 }],
   },
   UserPromptSubmit: {

@@ -57,11 +57,11 @@ async function fetchLifecycleEvent(pluginCfg: any, body: Record<string, unknown>
   });
 }
 
-async function fetchStartupLifecycle(pluginCfg: any, sessionId: string | undefined) {
+async function fetchStartupLifecycle(pluginCfg: any, sessionId: string) {
   return fetchLifecycleEvent(pluginCfg, {
     protocol_version: "lore.lifecycle.v1",
     runtime: { runtime_id: "openclaw", runtime_family: "openclaw" },
-    event: { name: "session.start", native_name: "before_prompt_build" },
+    event: { name: "session.start", native_name: "session_start" },
     normalized: { session_id: sessionId },
     project: detectProjectInfo(),
   });
@@ -83,16 +83,16 @@ function readReturnValue(response: any): any {
     : null;
 }
 
-function sessionStartKey(sessionId: string | undefined): string {
-  if (typeof sessionId === "string" && sessionId.trim()) return sessionId.trim();
-  return "missing:default";
+function usableSessionId(value: unknown): string | undefined {
+  return typeof value === "string" && value.trim() ? value.trim() : undefined;
 }
 
 // ---- Hook registration ----
 
 export function registerHooks(api: any, pluginCfg: any) {
-  // Once-per-session gate: session.start must not re-fire on every prompt build.
-  const startedSessions = new Set<string>();
+  const startupStates = new Map<string, { appendSystemContext: string; consumed: boolean }>();
+  const startupRequests = new Map<string, { promise: Promise<void>; token: object }>();
+  const endedTokens = new WeakSet<object>();
 
   api.registerGatewayMethod("lore.status", async ({ respond }: any) => {
     try {
@@ -117,22 +117,55 @@ export function registerHooks(api: any, pluginCfg: any) {
     { priority: 50 },
   );
 
-  api.on("before_prompt_build", async (event: any) => {
-    const ctx = event?.context;
-    const sessionId = ctx?.sessionId;
-    const startKey = sessionStartKey(sessionId);
-    const out: any = {};
+  api.on("session_start", async (event: any, ctx: any) => {
+    if (!pluginCfg.injectPromptGuidance) return;
+    const sessionId = usableSessionId(event?.sessionId) ?? usableSessionId(ctx?.sessionId);
+    if (!sessionId) return;
 
-    if (pluginCfg.injectPromptGuidance && !startedSessions.has(startKey)) {
+    if (startupStates.has(sessionId)) return;
+    const existing = startupRequests.get(sessionId);
+    if (existing) return existing.promise;
+
+    const token = {};
+    const request = (async () => {
       try {
         const value = readReturnValue(await fetchStartupLifecycle(pluginCfg, sessionId));
-        if (typeof value?.appendSystemContext === "string" && value.appendSystemContext.trim()) {
-          out.appendSystemContext = value.appendSystemContext.trim();
+        const appendSystemContext = typeof value?.appendSystemContext === "string"
+          ? value.appendSystemContext.trim()
+          : "";
+        if (!endedTokens.has(token)) {
+          startupStates.set(sessionId, { appendSystemContext, consumed: false });
         }
-        // Mark started even on empty host_output to avoid startup recall storms.
-        startedSessions.add(startKey);
       } catch (error: any) {
         api.logger.debug?.(`lore: lifecycle startup failed: ${error.message}`);
+      } finally {
+        if (startupRequests.get(sessionId)?.token === token) startupRequests.delete(sessionId);
+      }
+    })();
+    startupRequests.set(sessionId, { promise: request, token });
+    return request;
+  });
+
+  api.on("session_end", async (event: any, ctx: any) => {
+    const sessionId = usableSessionId(event?.sessionId) ?? usableSessionId(ctx?.sessionId);
+    if (!sessionId) return;
+    startupStates.delete(sessionId);
+    const request = startupRequests.get(sessionId);
+    if (request) endedTokens.add(request.token);
+    startupRequests.delete(sessionId);
+  });
+
+  api.on("before_prompt_build", async (event: any, ctx: any) => {
+    const sessionId = usableSessionId(ctx?.sessionId);
+    const out: any = {};
+
+    if (sessionId) {
+      const pending = startupRequests.get(sessionId)?.promise;
+      if (pending) await pending;
+      const startup = startupStates.get(sessionId);
+      if (startup && !startup.consumed) {
+        startup.consumed = true;
+        if (startup.appendSystemContext) out.appendSystemContext = startup.appendSystemContext;
       }
     }
 

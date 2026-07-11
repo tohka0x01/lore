@@ -67,14 +67,15 @@ test('install defaults to plugin hooks and removes legacy Lore user hooks', () =
 
   const installedHooksPath = path.join(codexHome, 'plugins', 'cache', 'lore', 'lore', 'local', 'hooks', 'hooks.json');
   assert.equal(existsSync(installedHooksPath), true);
-  const installedHooks = readFileSync(installedHooksPath, 'utf8');
-  assert.match(installedHooks, /node /);
-  assert.match(installedHooks, /recall-inject\.mjs/);
-  assert.doesNotMatch(installedHooks, /npx tsx/);
-  assert.doesNotMatch(installedHooks, /__LORE_CODEX_PLUGIN_ROOT__/);
+  const installedHooks = JSON.parse(readFileSync(installedHooksPath, 'utf8'));
+  assert.match(JSON.stringify(installedHooks), /node /);
+  assert.match(JSON.stringify(installedHooks), /recall-inject\.mjs/);
+  assert.doesNotMatch(JSON.stringify(installedHooks), /npx tsx/);
+  assert.doesNotMatch(JSON.stringify(installedHooks), /__LORE_CODEX_PLUGIN_ROOT__/);
+  assert.equal(installedHooks.hooks.SessionStart[0].matcher, 'startup|resume|clear');
 
   const installedRoot = path.join(codexHome, 'plugins', 'cache', 'lore', 'lore', 'local');
-  assert.match(installedHooks, new RegExp(installedRoot.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')));
+  assert.match(JSON.stringify(installedHooks), new RegExp(installedRoot.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')));
   const installedRulesHook = readFileSync(path.join(installedRoot, 'hooks', 'rules-inject.mjs'), 'utf8');
   const installedRecallHook = readFileSync(path.join(installedRoot, 'hooks', 'recall-inject.mjs'), 'utf8');
   assert.match(installedRulesHook, /\/api\/lifecycle\/event/);

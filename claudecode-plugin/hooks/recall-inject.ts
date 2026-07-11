@@ -9,10 +9,21 @@ import * as os from "node:os";
 const LORE_CONFIG_FILE = path.join(os.homedir(), ".lore", "config.json");
 const DEFAULT_BASE_URL = "http://127.0.0.1:18901";
 const RUNTIME_FAMILY = "claudecode";
+const SNAPSHOT_ALLOWLIST = [
+  "session_id",
+  "conversation_id",
+  "hook_event_name",
+  "cwd",
+  "permission_mode",
+  "transcript_path",
+  "source",
+] as const;
 
 interface HookInput {
   prompt?: string;
+  user_prompt?: string;
   session_id?: string;
+  conversation_id?: string;
   [key: string]: any;
 }
 
@@ -31,6 +42,23 @@ function readLoreConfig(): LoreConfig {
 
 function pickString(value: unknown): string {
   return typeof value === "string" && value.trim() ? value.trim() : "";
+}
+
+function resolveSessionId(input: HookInput): string {
+  return pickString(input.session_id) || pickString(input.conversation_id);
+}
+
+function resolvePrompt(input: HookInput): string {
+  return pickString(input.prompt) || pickString(input.user_prompt);
+}
+
+function buildNativeInputSnapshot(input: HookInput): Record<string, string> | undefined {
+  const snapshot: Record<string, string> = {};
+  for (const key of SNAPSHOT_ALLOWLIST) {
+    const value = pickString(input[key]);
+    if (value) snapshot[key] = value;
+  }
+  return Object.keys(snapshot).length ? snapshot : undefined;
 }
 
 function loadConfig() {
@@ -84,17 +112,21 @@ async function main() {
     process.exit(0);
   }
 
-  const prompt = String(input.prompt || "").trim();
+  const prompt = resolvePrompt(input);
   if (!prompt) process.exit(0);
 
-  const sessionId = input.session_id || "claude-code";
+  const sessionId = resolveSessionId(input);
+  const nativeInputSnapshot = buildNativeInputSnapshot(input);
+  const normalized: Record<string, string> = { prompt };
+  if (sessionId) normalized.session_id = sessionId;
 
   try {
     const lifecycle = await postLifecycle({
       protocol_version: "lore.lifecycle.v1",
       runtime: { runtime_id: RUNTIME_FAMILY, runtime_family: RUNTIME_FAMILY },
       event: { name: "prompt.submit", native_name: "UserPromptSubmit" },
-      normalized: { session_id: sessionId, prompt },
+      normalized,
+      ...(nativeInputSnapshot ? { native_input_snapshot: nativeInputSnapshot } : {}),
     }, cfg.timeoutMs);
     writeHostOutput(lifecycle);
   } catch {

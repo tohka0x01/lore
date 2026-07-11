@@ -81,20 +81,18 @@ function readReturnValue(response: any): any {
 
 function getSessionId(ctx: any): string | undefined {
   const manager = ctx?.sessionManager;
-  if (manager && typeof manager.getSessionId === 'function') return manager.getSessionId();
-  return typeof manager?.sessionId === 'string' ? manager.sessionId : undefined;
-}
-
-function sessionStartKey(sessionId: string | undefined): string {
-  if (typeof sessionId === 'string' && sessionId.trim()) return sessionId.trim();
-  return 'missing:default';
+  if (!manager || typeof manager.getSessionId !== 'function') return undefined;
+  const sessionId = manager.getSessionId();
+  return typeof sessionId === 'string' && sessionId.trim() ? sessionId.trim() : undefined;
 }
 
 // ---- Hook registration ----
 
 export function registerHooks(pi: any, pluginCfg: any) {
-  // Prefer true session_start for boot; fall back to first before_agent_start once.
-  const startedSessions = new Set<string>();
+  const startupRequests = new Map<string, Promise<void>>();
+  let activeSessionId: string | undefined;
+  let activeStartup: { sessionId: string; systemPromptAppend: string; token: object } | undefined;
+  let activeToken: object | undefined;
 
   pi.on('session_start', async (_event: any, ctx: any) => {
     if (pluginCfg.startupHealthcheck) {
@@ -108,35 +106,43 @@ export function registerHooks(pi: any, pluginCfg: any) {
 
     if (!pluginCfg.injectPromptGuidance) return;
     const sessionId = getSessionId(ctx);
-    const key = sessionStartKey(sessionId);
-    if (startedSessions.has(key)) return;
-    try {
-      // Fire session.start for boot/guidance; host may not consume return value here.
-      await fetchStartupLifecycle(pluginCfg, sessionId);
-      startedSessions.add(key);
-    } catch (error: any) {
-      pi.logger?.debug?.(`lore: lifecycle startup failed: ${error.message}`);
-    }
+    if (!sessionId) return;
+
+    const existing = startupRequests.get(sessionId);
+    if (existing) return existing;
+
+    const token = {};
+    activeSessionId = sessionId;
+    activeToken = token;
+    activeStartup = undefined;
+    const request = (async () => {
+      try {
+        const value = readReturnValue(await fetchStartupLifecycle(pluginCfg, sessionId));
+        const systemPromptAppend = typeof value?.systemPromptAppend === 'string'
+          ? value.systemPromptAppend.trim()
+          : '';
+        if (activeToken === token) activeStartup = { sessionId, systemPromptAppend, token };
+      } catch (error: any) {
+        pi.logger?.debug?.(`lore: lifecycle startup failed: ${error.message}`);
+      } finally {
+        if (startupRequests.get(sessionId) === request) startupRequests.delete(sessionId);
+      }
+    })();
+    startupRequests.set(sessionId, request);
+    return request;
   });
 
   pi.on('before_agent_start', async (event: any, ctx: any) => {
     const sessionId = getSessionId(ctx);
-    const key = sessionStartKey(sessionId);
     const out: any = {};
 
-    // Fallback: if session_start did not run (some embeds), start once here.
-    if (pluginCfg.injectPromptGuidance && !startedSessions.has(key)) {
-      try {
-        const value = readReturnValue(await fetchStartupLifecycle(pluginCfg, sessionId));
-        const systemContext = typeof value?.systemPromptAppend === 'string' ? value.systemPromptAppend.trim() : '';
-        if (systemContext) {
-          out.systemPrompt = [event?.systemPrompt || '', systemContext]
-            .filter(Boolean)
-            .join('\n\n');
-        }
-        startedSessions.add(key);
-      } catch (error: any) {
-        pi.logger?.debug?.(`lore: lifecycle startup failed: ${error.message}`);
+    if (sessionId && activeStartup?.sessionId === sessionId) {
+      const systemPromptAppend = activeStartup.systemPromptAppend;
+      activeStartup = undefined;
+      if (systemPromptAppend) {
+        out.systemPrompt = [event?.systemPrompt || '', systemPromptAppend]
+          .filter(Boolean)
+          .join('\n\n');
       }
     }
 
