@@ -35,6 +35,132 @@ interface McpServerContext {
   clientType?: ClientType | null;
 }
 
+export interface LoreToolParameterContract {
+  name: string;
+  description: string;
+  required: boolean;
+}
+
+export interface LoreToolContract {
+  name: string;
+  description: string;
+  parameters: LoreToolParameterContract[];
+}
+
+type LoreToolContractSource = {
+  name: string;
+  description: string;
+  parameters: Record<string, { description: string; required: boolean }>;
+};
+
+const loreToolContractSources: readonly LoreToolContractSource[] = [
+  {
+    name: 'lore_guidance',
+    description: 'Load the full Lore usage rules. Call this if your context does not already contain detailed usage guidance.',
+    parameters: {},
+  },
+  {
+    name: 'lore_status',
+    description: 'Check memory backend availability and connection health.',
+    parameters: {},
+  },
+  {
+    name: 'lore_boot',
+    description: 'Load the fixed boot memory view that restores the deterministic startup baseline and core operating context.',
+    parameters: {},
+  },
+  {
+    name: 'lore_get_node',
+    description: 'Open a memory node. REQUIRED when opening a URI from a <recall>: copy the exact session_id and query_id from that <recall> tag.',
+    parameters: {
+      uri: { description: 'Full memory URI for the node you want to open, such as core://soul. Use core:// or project:// to browse a domain root; bare words are paths in the default domain.', required: true },
+      nav_only: { description: 'If true, skip expensive glossary processing.', required: false },
+      session_id: { description: 'REQUIRED when the URI came from <recall>: copy the exact session_id from that <recall> tag.', required: false },
+      query_id: { description: 'REQUIRED when the URI came from <recall>: copy the exact query_id from that <recall> tag.', required: false },
+    },
+  },
+  {
+    name: 'lore_search',
+    description: 'Search memories by keyword, semantic similarity, or both. Returns full content for top results — use this when you need to read memory content directly without a separate get_node call.',
+    parameters: {
+      query: { description: 'Search query text. Not a wildcard — use a meaningful keyword or phrase. Passing an empty string or * with a domain filter browses that domain root.', required: true },
+      domain: { description: 'Optional domain filter to narrow the search.', required: false },
+      limit: { description: 'Maximum number of results.', required: false },
+      content_limit: { description: 'How many top results include full content (default 5).', required: false },
+    },
+  },
+  {
+    name: 'lore_list_domains',
+    description: 'Browse the top-level memory domains available in the memory system.',
+    parameters: {},
+  },
+  {
+    name: 'lore_create_node',
+    description: 'Create a new long-term memory concept in the Lore living semantic tree. A URI path names the concept identity with durable snake_case segments; event time belongs in the node narrative or in explicit archive, diary, release, or incident concepts. For multi-segment paths, first make the parent abstraction real with content, disclosure, and glossary, then place the child under that conceptual home. Prefer update or merge when an existing concept already owns the fact.',
+    parameters: {
+      content: { description: 'Memory text body.', required: true },
+      priority: { description: 'Importance tier (0=core identity, 1=key facts, 2+=general).', required: true },
+      glossary: { description: 'Initial glossary keywords written with this node create event.', required: true },
+      uri: { description: 'Optional final memory URI. It names a durable concept identity; event time belongs in content or in explicit archive, diary, release, or incident concepts. Intermediate paths grow from real parent abstractions with content.', required: false },
+      domain: { description: 'Target memory domain when not using uri.', required: false },
+      parent_path: { description: 'Parent concept path inside the chosen domain; for multi-segment paths this parent abstraction explains why the children belong together and carries content, disclosure, and glossary.', required: false },
+      title: { description: 'Final concept segment for the new memory; name the reusable idea, module, decision, preference, or archive concept.', required: false },
+      disclosure: { description: 'When this memory should be recalled.', required: false },
+    },
+  },
+  {
+    name: 'lore_update_node',
+    description: 'Revise an existing long-term memory node. Omitted content, metadata, and glossary mutation fields are left unchanged.',
+    parameters: {
+      uri: { description: 'Full memory URI for the node you want to revise.', required: true },
+      content: { description: 'New content to replace the existing content; omit to leave content unchanged.', required: false },
+      priority: { description: 'New priority level; omit to leave priority unchanged.', required: false },
+      disclosure: { description: 'New disclosure / trigger condition; omit to leave disclosure unchanged.', required: false },
+      glossary_add: { description: 'Keywords to add as part of this same node update event.', required: false },
+      glossary_remove: { description: 'Keywords to remove as part of this same node update event.', required: false },
+    },
+  },
+  {
+    name: 'lore_delete_node',
+    description: 'Remove a memory path that is obsolete, duplicated, or no longer wanted.',
+    parameters: {
+      uri: { description: 'Full memory URI for the path you want to remove.', required: true },
+    },
+  },
+  {
+    name: 'lore_move_node',
+    description: 'Move or rename a memory concept inside the semantic memory tree. The target parent represents the conceptual home; it must already be a real parent abstraction with memory content so the move can reparent the node and its subtree into that abstraction.',
+    parameters: {
+      old_uri: { description: 'Current memory URI to move from.', required: true },
+      new_uri: { description: 'New memory URI. For multi-segment paths, the target parent is the parent abstraction that becomes the node conceptual home.', required: true },
+    },
+  },
+];
+
+function loreToolContractSource(name: string): LoreToolContractSource {
+  const contract = loreToolContractSources.find((item) => item.name === name);
+  if (!contract) throw new Error(`Missing Lore tool contract: ${name}`);
+  return contract;
+}
+
+function loreToolParameterDescription(toolName: string, parameterName: string): string {
+  const parameter = loreToolContractSource(toolName).parameters[parameterName];
+  if (!parameter) throw new Error(`Missing Lore tool parameter contract: ${toolName}.${parameterName}`);
+  return parameter.description;
+}
+
+export function getLoreToolContracts(): LoreToolContract[] {
+  return loreToolContractSources.map((contract) => ({
+    name: contract.name,
+    description: contract.description,
+    parameters: Object.entries(contract.parameters).map(([name, parameter]) => ({
+      name,
+      description: parameter.description,
+      required: parameter.required,
+    })),
+  }));
+}
+
 export async function createMcpServer(context: McpServerContext = {}): Promise<InstanceType<typeof McpServer>> {
   const guidance = await loadLifecycleTextConfig().then((config) => config.guidance).catch(() => '');
   const server = new McpServer(
@@ -50,7 +176,7 @@ export async function createMcpServer(context: McpServerContext = {}): Promise<I
   // ── lore_guidance ─────────────────────────────────────────────
   server.tool(
     'lore_guidance',
-    'Load the full Lore usage rules. Call this if your context does not already contain detailed usage guidance.',
+    loreToolContractSource('lore_guidance').description,
     {},
     async () => {
       const text = (await loadLifecycleTextConfig()).guidance;
@@ -61,7 +187,7 @@ export async function createMcpServer(context: McpServerContext = {}): Promise<I
   // ── lore_status ──────────────────────────────────────────────
   server.tool(
     'lore_status',
-    'Check memory backend availability and connection health.',
+    loreToolContractSource('lore_status').description,
     {},
     async () => {
       try {
@@ -76,7 +202,7 @@ export async function createMcpServer(context: McpServerContext = {}): Promise<I
   // ── lore_boot ────────────────────────────────────────────────
   server.tool(
     'lore_boot',
-    'Load the fixed boot memory view that restores the deterministic startup baseline and core operating context.',
+    loreToolContractSource('lore_boot').description,
     {},
     async () => {
       try {
@@ -91,12 +217,12 @@ export async function createMcpServer(context: McpServerContext = {}): Promise<I
   // ── lore_get_node ────────────────────────────────────────────
   server.tool(
     'lore_get_node',
-    'Open a memory node. REQUIRED when opening a URI from a <recall>: copy the exact session_id and query_id from that <recall> tag.',
+    loreToolContractSource('lore_get_node').description,
     {
-      uri: z.string().describe('Full memory URI for the node you want to open, such as core://soul. Use core:// or project:// to browse a domain root; bare words are paths in the default domain.'),
-      nav_only: z.boolean().optional().describe('If true, skip expensive glossary processing.'),
-      session_id: z.string().optional().describe('REQUIRED when the URI came from <recall>: copy the exact session_id from that <recall> tag.'),
-      query_id: z.string().optional().describe('REQUIRED when the URI came from <recall>: copy the exact query_id from that <recall> tag.'),
+      uri: z.string().describe(loreToolParameterDescription('lore_get_node', 'uri')),
+      nav_only: z.boolean().optional().describe(loreToolParameterDescription('lore_get_node', 'nav_only')),
+      session_id: z.string().optional().describe(loreToolParameterDescription('lore_get_node', 'session_id')),
+      query_id: z.string().optional().describe(loreToolParameterDescription('lore_get_node', 'query_id')),
     },
     async (args) => {
       try {
@@ -129,12 +255,12 @@ export async function createMcpServer(context: McpServerContext = {}): Promise<I
   // ── lore_search ──────────────────────────────────────────────
   server.tool(
     'lore_search',
-    'Search memories by keyword, semantic similarity, or both. Returns full content for top results — use this when you need to read memory content directly without a separate get_node call.',
+    loreToolContractSource('lore_search').description,
     {
-      query: z.string().describe('Search query text. Not a wildcard — use a meaningful keyword or phrase. Passing an empty string or * with a domain filter browses that domain root.'),
-      domain: z.string().optional().describe('Optional domain filter to narrow the search.'),
-      limit: z.number().int().min(1).max(100).optional().describe('Maximum number of results.'),
-      content_limit: z.number().int().min(0).max(20).optional().describe('How many top results include full content (default 5).'),
+      query: z.string().describe(loreToolParameterDescription('lore_search', 'query')),
+      domain: z.string().optional().describe(loreToolParameterDescription('lore_search', 'domain')),
+      limit: z.number().int().min(1).max(100).optional().describe(loreToolParameterDescription('lore_search', 'limit')),
+      content_limit: z.number().int().min(0).max(20).optional().describe(loreToolParameterDescription('lore_search', 'content_limit')),
     },
     async (args) => {
       try {
@@ -174,7 +300,7 @@ export async function createMcpServer(context: McpServerContext = {}): Promise<I
   // ── lore_list_domains ────────────────────────────────────────
   server.tool(
     'lore_list_domains',
-    'Browse the top-level memory domains available in the memory system.',
+    loreToolContractSource('lore_list_domains').description,
     {},
     async () => {
       try {
@@ -192,16 +318,16 @@ export async function createMcpServer(context: McpServerContext = {}): Promise<I
   // ── lore_create_node ─────────────────────────────────────────
   server.tool(
     'lore_create_node',
-    'Create a new long-term memory concept in the Lore living semantic tree. A URI path names the concept identity with durable snake_case segments; event time belongs in the node narrative or in explicit archive, diary, release, or incident concepts. For multi-segment paths, first make the parent abstraction real with content, disclosure, and glossary, then place the child under that conceptual home. Prefer update or merge when an existing concept already owns the fact.',
+    loreToolContractSource('lore_create_node').description,
     {
-      content: z.string().describe('Memory text body.'),
-      priority: z.number().int().min(0).describe('Importance tier (0=core identity, 1=key facts, 2+=general).'),
-      glossary: z.array(z.string()).describe('Initial glossary keywords written with this node create event.'),
-      uri: z.string().optional().describe('Optional final memory URI. It names a durable concept identity; event time belongs in content or in explicit archive, diary, release, or incident concepts. Intermediate paths grow from real parent abstractions with content.'),
-      domain: z.string().optional().describe('Target memory domain when not using uri.'),
-      parent_path: z.string().optional().describe('Parent concept path inside the chosen domain; for multi-segment paths this parent abstraction explains why the children belong together and carries content, disclosure, and glossary.'),
-      title: z.string().optional().describe('Final concept segment for the new memory; name the reusable idea, module, decision, preference, or archive concept.'),
-      disclosure: z.string().optional().describe('When this memory should be recalled.'),
+      content: z.string().describe(loreToolParameterDescription('lore_create_node', 'content')),
+      priority: z.number().int().min(0).describe(loreToolParameterDescription('lore_create_node', 'priority')),
+      glossary: z.array(z.string()).describe(loreToolParameterDescription('lore_create_node', 'glossary')),
+      uri: z.string().optional().describe(loreToolParameterDescription('lore_create_node', 'uri')),
+      domain: z.string().optional().describe(loreToolParameterDescription('lore_create_node', 'domain')),
+      parent_path: z.string().optional().describe(loreToolParameterDescription('lore_create_node', 'parent_path')),
+      title: z.string().optional().describe(loreToolParameterDescription('lore_create_node', 'title')),
+      disclosure: z.string().optional().describe(loreToolParameterDescription('lore_create_node', 'disclosure')),
     },
     async (args) => {
       try {
@@ -252,14 +378,14 @@ export async function createMcpServer(context: McpServerContext = {}): Promise<I
   // ── lore_update_node ─────────────────────────────────────────
   server.tool(
     'lore_update_node',
-    'Revise an existing long-term memory node. Omitted content, metadata, and glossary mutation fields are left unchanged.',
+    loreToolContractSource('lore_update_node').description,
     {
-      uri: z.string().describe('Full memory URI for the node you want to revise.'),
-      content: z.string().optional().describe('New content to replace the existing content; omit to leave content unchanged.'),
-      priority: z.number().int().min(0).optional().describe('New priority level; omit to leave priority unchanged.'),
-      disclosure: z.string().optional().describe('New disclosure / trigger condition; omit to leave disclosure unchanged.'),
-      glossary_add: z.array(z.string()).optional().describe('Keywords to add as part of this same node update event.'),
-      glossary_remove: z.array(z.string()).optional().describe('Keywords to remove as part of this same node update event.'),
+      uri: z.string().describe(loreToolParameterDescription('lore_update_node', 'uri')),
+      content: z.string().optional().describe(loreToolParameterDescription('lore_update_node', 'content')),
+      priority: z.number().int().min(0).optional().describe(loreToolParameterDescription('lore_update_node', 'priority')),
+      disclosure: z.string().optional().describe(loreToolParameterDescription('lore_update_node', 'disclosure')),
+      glossary_add: z.array(z.string()).optional().describe(loreToolParameterDescription('lore_update_node', 'glossary_add')),
+      glossary_remove: z.array(z.string()).optional().describe(loreToolParameterDescription('lore_update_node', 'glossary_remove')),
     },
     async (args) => {
       try {
@@ -304,9 +430,9 @@ export async function createMcpServer(context: McpServerContext = {}): Promise<I
   // ── lore_delete_node ─────────────────────────────────────────
   server.tool(
     'lore_delete_node',
-    'Remove a memory path that is obsolete, duplicated, or no longer wanted.',
+    loreToolContractSource('lore_delete_node').description,
     {
-      uri: z.string().describe('Full memory URI for the path you want to remove.'),
+      uri: z.string().describe(loreToolParameterDescription('lore_delete_node', 'uri')),
     },
     async (args) => {
       try {
@@ -331,10 +457,10 @@ export async function createMcpServer(context: McpServerContext = {}): Promise<I
   // ── lore_move_node ───────────────────────────────────────────
   server.tool(
     'lore_move_node',
-    'Move or rename a memory concept inside the semantic memory tree. The target parent represents the conceptual home; it must already be a real parent abstraction with memory content so the move can reparent the node and its subtree into that abstraction.',
+    loreToolContractSource('lore_move_node').description,
     {
-      old_uri: z.string().describe('Current memory URI to move from.'),
-      new_uri: z.string().describe('New memory URI. For multi-segment paths, the target parent is the parent abstraction that becomes the node conceptual home.'),
+      old_uri: z.string().describe(loreToolParameterDescription('lore_move_node', 'old_uri')),
+      new_uri: z.string().describe(loreToolParameterDescription('lore_move_node', 'new_uri')),
     },
     async (args) => {
       try {

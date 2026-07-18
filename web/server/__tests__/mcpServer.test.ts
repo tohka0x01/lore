@@ -1,3 +1,5 @@
+import { readFileSync, writeFileSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 vi.mock('../db', () => ({
@@ -31,7 +33,7 @@ vi.mock('../lore/config/settings', () => ({
   getSettings: vi.fn(),
 }));
 
-import { createMcpServer } from '../mcpServer';
+import { createMcpServer, getLoreToolContracts } from '../mcpServer';
 import { getSettings } from '../lore/config/settings';
 import { getNodePayload } from '../lore/memory/browse';
 import { markRecallEventsUsedInAnswer } from '../lore/recall/recallEventLog';
@@ -66,6 +68,32 @@ describe('embedded MCP contract projections', () => {
     mockValidateCreatePolicy.mockResolvedValue({ errors: [], warnings: [] } as any);
     mockValidateUpdatePolicy.mockResolvedValue({ errors: [], warnings: [] } as any);
     mockValidateDeletePolicy.mockResolvedValue({ errors: [], warnings: [] } as any);
+  });
+
+  it('keeps the generated OpenCode contract synchronized with registered MCP tools', async () => {
+    const contracts = getLoreToolContracts();
+    const server = await createMcpServer();
+    const tools = (server as any)._registeredTools;
+
+    expect(Object.keys(tools)).toEqual(contracts.map((contract) => contract.name));
+    for (const contract of contracts) {
+      const registered = tools[contract.name];
+      const shape = registered.inputSchema?._def?.shape?.() ?? {};
+      expect(registered.description).toBe(contract.description);
+      expect(Object.keys(shape)).toEqual(contract.parameters.map((parameter) => parameter.name));
+      for (const parameter of contract.parameters) {
+        expect(shape[parameter.name].description).toBe(parameter.description);
+        expect(!shape[parameter.name].safeParse(undefined).success).toBe(parameter.required);
+      }
+    }
+
+    const generatedPath = fileURLToPath(new URL('../../../opencode-plugin/tool-contracts.json', import.meta.url));
+    const expected = `${JSON.stringify(contracts, null, 2)}\n`;
+    if (process.env.UPDATE_OPENCODE_TOOL_CONTRACTS === '1') {
+      writeFileSync(generatedPath, expected);
+    } else {
+      expect(readFileSync(generatedPath, 'utf8')).toBe(expected);
+    }
   });
 
   it('tells agents to pass recall session and query ids when opening recalled nodes', async () => {

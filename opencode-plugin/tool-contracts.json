@@ -1,0 +1,183 @@
+[
+  {
+    "name": "lore_guidance",
+    "description": "Load the full Lore usage rules. Call this if your context does not already contain detailed usage guidance.",
+    "parameters": []
+  },
+  {
+    "name": "lore_status",
+    "description": "Check memory backend availability and connection health.",
+    "parameters": []
+  },
+  {
+    "name": "lore_boot",
+    "description": "Load the fixed boot memory view that restores the deterministic startup baseline and core operating context.",
+    "parameters": []
+  },
+  {
+    "name": "lore_get_node",
+    "description": "Open a memory node. REQUIRED when opening a URI from a <recall>: copy the exact session_id and query_id from that <recall> tag.",
+    "parameters": [
+      {
+        "name": "uri",
+        "description": "Full memory URI for the node you want to open, such as core://soul. Use core:// or project:// to browse a domain root; bare words are paths in the default domain.",
+        "required": true
+      },
+      {
+        "name": "nav_only",
+        "description": "If true, skip expensive glossary processing.",
+        "required": false
+      },
+      {
+        "name": "session_id",
+        "description": "REQUIRED when the URI came from <recall>: copy the exact session_id from that <recall> tag.",
+        "required": false
+      },
+      {
+        "name": "query_id",
+        "description": "REQUIRED when the URI came from <recall>: copy the exact query_id from that <recall> tag.",
+        "required": false
+      }
+    ]
+  },
+  {
+    "name": "lore_search",
+    "description": "Search memories by keyword, semantic similarity, or both. Returns full content for top results — use this when you need to read memory content directly without a separate get_node call.",
+    "parameters": [
+      {
+        "name": "query",
+        "description": "Search query text. Not a wildcard — use a meaningful keyword or phrase. Passing an empty string or * with a domain filter browses that domain root.",
+        "required": true
+      },
+      {
+        "name": "domain",
+        "description": "Optional domain filter to narrow the search.",
+        "required": false
+      },
+      {
+        "name": "limit",
+        "description": "Maximum number of results.",
+        "required": false
+      },
+      {
+        "name": "content_limit",
+        "description": "How many top results include full content (default 5).",
+        "required": false
+      }
+    ]
+  },
+  {
+    "name": "lore_list_domains",
+    "description": "Browse the top-level memory domains available in the memory system.",
+    "parameters": []
+  },
+  {
+    "name": "lore_create_node",
+    "description": "Create a new long-term memory concept in the Lore living semantic tree. A URI path names the concept identity with durable snake_case segments; event time belongs in the node narrative or in explicit archive, diary, release, or incident concepts. For multi-segment paths, first make the parent abstraction real with content, disclosure, and glossary, then place the child under that conceptual home. Prefer update or merge when an existing concept already owns the fact.",
+    "parameters": [
+      {
+        "name": "content",
+        "description": "Memory text body.",
+        "required": true
+      },
+      {
+        "name": "priority",
+        "description": "Importance tier (0=core identity, 1=key facts, 2+=general).",
+        "required": true
+      },
+      {
+        "name": "glossary",
+        "description": "Initial glossary keywords written with this node create event.",
+        "required": true
+      },
+      {
+        "name": "uri",
+        "description": "Optional final memory URI. It names a durable concept identity; event time belongs in content or in explicit archive, diary, release, or incident concepts. Intermediate paths grow from real parent abstractions with content.",
+        "required": false
+      },
+      {
+        "name": "domain",
+        "description": "Target memory domain when not using uri.",
+        "required": false
+      },
+      {
+        "name": "parent_path",
+        "description": "Parent concept path inside the chosen domain; for multi-segment paths this parent abstraction explains why the children belong together and carries content, disclosure, and glossary.",
+        "required": false
+      },
+      {
+        "name": "title",
+        "description": "Final concept segment for the new memory; name the reusable idea, module, decision, preference, or archive concept.",
+        "required": false
+      },
+      {
+        "name": "disclosure",
+        "description": "When this memory should be recalled.",
+        "required": false
+      }
+    ]
+  },
+  {
+    "name": "lore_update_node",
+    "description": "Revise an existing long-term memory node. Omitted content, metadata, and glossary mutation fields are left unchanged.",
+    "parameters": [
+      {
+        "name": "uri",
+        "description": "Full memory URI for the node you want to revise.",
+        "required": true
+      },
+      {
+        "name": "content",
+        "description": "New content to replace the existing content; omit to leave content unchanged.",
+        "required": false
+      },
+      {
+        "name": "priority",
+        "description": "New priority level; omit to leave priority unchanged.",
+        "required": false
+      },
+      {
+        "name": "disclosure",
+        "description": "New disclosure / trigger condition; omit to leave disclosure unchanged.",
+        "required": false
+      },
+      {
+        "name": "glossary_add",
+        "description": "Keywords to add as part of this same node update event.",
+        "required": false
+      },
+      {
+        "name": "glossary_remove",
+        "description": "Keywords to remove as part of this same node update event.",
+        "required": false
+      }
+    ]
+  },
+  {
+    "name": "lore_delete_node",
+    "description": "Remove a memory path that is obsolete, duplicated, or no longer wanted.",
+    "parameters": [
+      {
+        "name": "uri",
+        "description": "Full memory URI for the path you want to remove.",
+        "required": true
+      }
+    ]
+  },
+  {
+    "name": "lore_move_node",
+    "description": "Move or rename a memory concept inside the semantic memory tree. The target parent represents the conceptual home; it must already be a real parent abstraction with memory content so the move can reparent the node and its subtree into that abstraction.",
+    "parameters": [
+      {
+        "name": "old_uri",
+        "description": "Current memory URI to move from.",
+        "required": true
+      },
+      {
+        "name": "new_uri",
+        "description": "New memory URI. For multi-segment paths, the target parent is the parent abstraction that becomes the node conceptual home.",
+        "required": true
+      }
+    ]
+  }
+]
