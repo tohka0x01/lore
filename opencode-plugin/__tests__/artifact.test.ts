@@ -1,10 +1,17 @@
 import { execFileSync } from 'node:child_process';
 import { readFileSync } from 'node:fs';
-import { dirname, join } from 'node:path';
+import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 
 const root = dirname(dirname(fileURLToPath(import.meta.url)));
+const repositoryRoot = dirname(root);
+const archivePath = join(repositoryRoot, 'dist/lore-opencode.zip');
+
+function archiveEntries(): string[] {
+  const output = execFileSync('unzip', ['-Z1', archivePath], { encoding: 'utf8' });
+  return output.split(/\r?\n/).map((entry) => entry.trim()).filter(Boolean);
+}
 
 describe('OpenCode release bundle', () => {
   it('builds one managed ESM file without development paths or secrets', () => {
@@ -14,5 +21,35 @@ describe('OpenCode release bundle', () => {
     expect(output).toContain('version=1.3.15-pre.0');
     expect(output).not.toContain('/Users/proxy/');
     expect(output).not.toContain('LORE_API_TOKEN=');
+  });
+
+  it('builds the exact release archive layout without secrets or development paths', () => {
+    execFileSync('bash', [resolve(repositoryRoot, 'scripts/build-opencode-artifact.sh')], {
+      cwd: repositoryRoot,
+      stdio: 'pipe',
+    });
+
+    expect(archiveEntries()).toEqual([
+      'lore-memory.js',
+      'README.md',
+      'THIRD_PARTY_NOTICES.md',
+    ]);
+
+    for (const entry of archiveEntries()) {
+      expect(entry).not.toMatch(/(?:^|\/)node_modules\//);
+      expect(entry).not.toMatch(/(?:^|\/)coverage\//);
+      expect(entry).not.toMatch(/(?:^|\/)\.vitest\//);
+      expect(entry).not.toMatch(/(?:^|\/)\.DS_Store$/);
+      expect(entry).not.toMatch(/(?:^|\/)\.env(?:$|\.)/);
+      expect(entry).not.toMatch(/\.log$/);
+    }
+
+    for (const entry of archiveEntries()) {
+      const content = execFileSync('unzip', ['-p', archivePath, entry], { encoding: 'utf8' });
+      expect(content).not.toContain('/Users/');
+      expect(content).not.toContain('/home/');
+      expect(content).not.toContain('LORE_API_TOKEN=');
+      expect(content).not.toMatch(/Authorization:\s*Bearer\s+[A-Za-z0-9._-]{12,}/);
+    }
   });
 });

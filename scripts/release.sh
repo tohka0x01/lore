@@ -1,16 +1,23 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# Usage: ./scripts/release.sh <version>
-# Example: ./scripts/release.sh 1.0.2
+# Usage:
+#   ./scripts/release.sh <version>
+#   ./scripts/release.sh --prepare-only <version>
+# Example: ./scripts/release.sh --prepare-only 1.3.15-pre.1
+
+PREPARE_ONLY=0
+if [[ "${1:-}" == "--prepare-only" ]]; then
+  PREPARE_ONLY=1
+  shift
+fi
 
 VERSION="${1:-}"
-if [[ -z "$VERSION" ]]; then
-  echo "Usage: $0 <version>  (e.g. 1.0.2)"
+if [[ -z "$VERSION" || $# -ne 1 ]]; then
+  echo "Usage: $0 [--prepare-only] <version>  (e.g. 1.0.2)"
   exit 1
 fi
 
-# Validate semver-ish format
 if ! [[ "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+(-[a-zA-Z0-9.]+)?$ ]]; then
   echo "Error: '$VERSION' doesn't look like a valid version (expected X.Y.Z)"
   exit 1
@@ -19,39 +26,35 @@ fi
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$ROOT"
 
-# Ensure clean working tree
-if ! git diff --quiet || ! git diff --cached --quiet; then
+if [[ $PREPARE_ONLY -eq 0 ]] && { ! git diff --quiet || ! git diff --cached --quiet; }; then
   echo "Error: working tree not clean. Commit or stash changes first."
   exit 1
 fi
 
-echo "Bumping to v${VERSION}..."
-
-# All files with version to update (sed -i '' for macOS, sed -i for Linux)
 SED_INPLACE=(sed -i '')
 if [[ "$(uname)" != "Darwin" ]]; then
   SED_INPLACE=(sed -i)
 fi
 
-# web/package.json
-"${SED_INPLACE[@]}" "s/\"version\": \"[^\"]*\"/\"version\": \"${VERSION}\"/" web/package.json
+prepare_version() {
+  echo "Bumping to v${VERSION}..."
 
-# MCP server
-"${SED_INPLACE[@]}" "s/version: '[^']*'/version: '${VERSION}'/" web/server/mcpServer.ts
+  "${SED_INPLACE[@]}" "s/\"version\": \"[^\"]*\"/\"version\": \"${VERSION}\"/" web/package.json
+  "${SED_INPLACE[@]}" "s/version: '[^']*'/version: '${VERSION}'/" web/server/mcpServer.ts
 
-# Claude Code plugin
-"${SED_INPLACE[@]}" "s/\"version\": \"[^\"]*\"/\"version\": \"${VERSION}\"/" claudecode-plugin/.claude-plugin/plugin.json
-"${SED_INPLACE[@]}" "s/\"version\": \"[^\"]*\"/\"version\": \"${VERSION}\"/" claudecode-plugin/.claude-plugin/marketplace.json
+  "${SED_INPLACE[@]}" "s/\"version\": \"[^\"]*\"/\"version\": \"${VERSION}\"/" claudecode-plugin/.claude-plugin/plugin.json
+  "${SED_INPLACE[@]}" "s/\"version\": \"[^\"]*\"/\"version\": \"${VERSION}\"/" claudecode-plugin/.claude-plugin/marketplace.json
+  "${SED_INPLACE[@]}" "s/\"version\": \"[^\"]*\"/\"version\": \"${VERSION}\"/" codex-plugin/.codex-plugin/plugin.json
+  "${SED_INPLACE[@]}" "s/\"version\": \"[^\"]*\"/\"version\": \"${VERSION}\"/" openclaw-plugin/openclaw.plugin.json
+  "${SED_INPLACE[@]}" "s/\"version\": \"[^\"]*\"/\"version\": \"${VERSION}\"/" openclaw-plugin/package.json
+  "${SED_INPLACE[@]}" "s/\"version\": \"[^\"]*\"/\"version\": \"${VERSION}\"/" pi-extension/package.json
+  "${SED_INPLACE[@]}" "s/^version: .*/version: ${VERSION}/" hermes-plugin/lore_memory/plugin.yaml
+  "${SED_INPLACE[@]}" "s/\"version\": \"[^\"]*\"/\"version\": \"${VERSION}\"/" opencode-plugin/package.json
 
-# Codex plugin
-"${SED_INPLACE[@]}" "s/\"version\": \"[^\"]*\"/\"version\": \"${VERSION}\"/" codex-plugin/.codex-plugin/plugin.json
-
-# OpenClaw plugin
-"${SED_INPLACE[@]}" "s/\"version\": \"[^\"]*\"/\"version\": \"${VERSION}\"/" openclaw-plugin/openclaw.plugin.json
-"${SED_INPLACE[@]}" "s/\"version\": \"[^\"]*\"/\"version\": \"${VERSION}\"/" openclaw-plugin/package.json
-
-# package-lock roots only; never rewrite dependency versions.
-python3 - "${VERSION}" web/package-lock.json openclaw-plugin/package-lock.json <<'PYLOCK'
+  python3 - "${VERSION}" \
+    web/package-lock.json \
+    openclaw-plugin/package-lock.json \
+    opencode-plugin/package-lock.json <<'PYLOCK'
 import json
 import sys
 from pathlib import Path
@@ -66,22 +69,53 @@ for filename in sys.argv[2:]:
         root["version"] = version
     path.write_text(json.dumps(data, indent=2, ensure_ascii=False) + "\n")
 PYLOCK
+}
 
-# Pi extension
-"${SED_INPLACE[@]}" "s/\"version\": \"[^\"]*\"/\"version\": \"${VERSION}\"/" pi-extension/package.json
+verify_versions() {
+  echo ""
+  echo "Updated files:"
+  grep -n "\"version\"" \
+    web/package.json \
+    web/package-lock.json \
+    claudecode-plugin/.claude-plugin/plugin.json \
+    claudecode-plugin/.claude-plugin/marketplace.json \
+    codex-plugin/.codex-plugin/plugin.json \
+    openclaw-plugin/openclaw.plugin.json \
+    openclaw-plugin/package.json \
+    openclaw-plugin/package-lock.json \
+    pi-extension/package.json \
+    opencode-plugin/package.json \
+    opencode-plugin/package-lock.json
+  grep -n "version:" web/server/mcpServer.ts | head -1
+  grep -n "version:" hermes-plugin/lore_memory/plugin.yaml | head -1
 
-# Hermes plugin
-"${SED_INPLACE[@]}" "s/^version: .*/version: ${VERSION}/" hermes-plugin/lore_memory/plugin.yaml
+  python3 - "${VERSION}" opencode-plugin/package.json opencode-plugin/package-lock.json <<'PYVERIFY'
+import json
+import sys
+from pathlib import Path
 
-# Verify
-echo ""
-echo "Updated files:"
-grep -n "\"version\"" web/package.json web/package-lock.json claudecode-plugin/.claude-plugin/plugin.json claudecode-plugin/.claude-plugin/marketplace.json codex-plugin/.codex-plugin/plugin.json openclaw-plugin/openclaw.plugin.json openclaw-plugin/package.json openclaw-plugin/package-lock.json pi-extension/package.json
-grep -n "version:" web/server/mcpServer.ts | head -1
-grep -n "version:" hermes-plugin/lore_memory/plugin.yaml | head -1
-echo ""
+version, manifest_name, lock_name = sys.argv[1:]
+manifest = json.loads(Path(manifest_name).read_text())
+lock = json.loads(Path(lock_name).read_text())
+assert manifest["version"] == version
+assert manifest["dependencies"]["@opencode-ai/plugin"] == "1.18.3"
+assert lock["version"] == version
+assert lock["packages"][""]["version"] == version
+assert lock["packages"][""]["dependencies"]["@opencode-ai/plugin"] == "1.18.3"
+assert lock["packages"]["node_modules/@opencode-ai/plugin"]["version"] == "1.18.3"
+assert lock["packages"]["node_modules/@opencode-ai/sdk"]["version"] == "1.18.3"
+PYVERIFY
+  echo ""
+}
 
-# Commit, tag, push
+prepare_version
+verify_versions
+
+if [[ $PREPARE_ONLY -eq 1 ]]; then
+  echo "Version v${VERSION} prepared, not committed/tagged/pushed."
+  exit 0
+fi
+
 git add -A
 git commit -m "release: v${VERSION}"
 git tag "v${VERSION}"

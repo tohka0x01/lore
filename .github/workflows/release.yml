@@ -147,6 +147,15 @@ jobs:
           cd hermes-plugin
           zip -r ../dist/lore-hermes.zip lore_memory
 
+      - name: Build OpenCode artifact
+        run: |
+          cd opencode-plugin
+          npm ci
+          npm test
+          npm run typecheck
+          cd ..
+          bash scripts/build-opencode-artifact.sh
+
       - name: Upload artifacts to release
         env:
           GH_REPO: ${{ github.repository }}
