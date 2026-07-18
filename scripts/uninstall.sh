@@ -9,7 +9,7 @@ set -euo pipefail
 #   curl -fsSL https://raw.githubusercontent.com/FFatTiger/lore/main/scripts/uninstall.sh | bash -s -- [OPTIONS]
 #
 # Options:
-#   --channels CH,...    Channels: claudecode,codex,pi,openclaw,hermes; default all
+#   --channels CH,...    Channels: claudecode,codex,pi,openclaw,hermes,opencode; default all 6
 #   --purge              Also remove config and Docker data
 #   -y                   Skip confirmation prompt
 #   -h, --help           Show help
@@ -43,7 +43,7 @@ done
 
 # ---- Constants ----
 
-ALL_CHANNELS=(claudecode codex pi openclaw hermes)
+ALL_CHANNELS=(claudecode codex pi openclaw hermes opencode)
 LORE_HOME="${LORE_HOME:-$HOME/.lore}"
 LORE_CONFIG_FILE="$LORE_HOME/config.json"
 
@@ -266,6 +266,29 @@ uninstall_pi() {
   ok "Pi uninstall complete."
 }
 
+# ---- Uninstall: OpenCode ----
+
+uninstall_opencode() {
+  section "OpenCode"
+
+  local target="$HOME/.config/opencode/plugins/lore-memory.js"
+  if [[ -f "$target" ]]; then
+    if grep -Fq '@lore-managed-opencode-plugin' "$target" 2>/dev/null; then
+      rm -f "$target"
+      ok "Removed $target"
+    else
+      warn "$target is not managed by Lore. Preserving it."
+    fi
+  else
+    info "OpenCode Lore plugin not found."
+  fi
+
+  local opencode_dir="$LORE_HOME/opencode"
+  [[ -d "$opencode_dir" ]] && { rm -rf "$opencode_dir"; ok "Removed $opencode_dir"; }
+
+  ok "OpenCode uninstall complete."
+}
+
 # ---- Uninstall: OpenClaw ----
 
 uninstall_openclaw() {
@@ -323,7 +346,9 @@ uninstall_hermes() {
 # ---- Cleanup shared resources ----
 
 cleanup_shared() {
-  [[ $PURGE -eq 1 ]] || return
+  if [[ $PURGE -ne 1 ]]; then
+    return 0
+  fi
 
   section "Purge shared resources"
 
@@ -363,7 +388,7 @@ main() {
     echo "Usage: curl -fsSL .../uninstall.sh | bash -s -- [OPTIONS]"
     echo ""
     echo "Options:"
-    echo "  --channels CH,...  Channels to uninstall (default: all)"
+    echo "  --channels CH,...  Channels: claudecode,codex,pi,openclaw,hermes,opencode (default: all 6)"
     echo "  --purge            Also remove config and Docker data"
     echo "  -y                 Skip confirmation prompt"
     echo "  -h, --help         Show this help"
@@ -386,6 +411,7 @@ main() {
       claudecode) uninstall_claudecode;;
       codex)      uninstall_codex;;
       pi)         uninstall_pi;;
+      opencode)   uninstall_opencode;;
       openclaw)   uninstall_openclaw;;
       hermes)     uninstall_hermes;;
     esac

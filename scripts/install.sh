@@ -12,8 +12,8 @@ set -euo pipefail
 # Options:
 #   --base-url URL       Lore server base URL
 #   --api-token TOKEN    Lore API token
-#   --channels CH,...    Comma-separated: claudecode,codex,pi,openclaw,hermes
-#                        Default: all 5
+#   --channels CH,...    Comma-separated: claudecode,codex,pi,openclaw,hermes,opencode
+#                        Default: all 6
 #   --skip-docker        Don't run docker compose up
 #   --force              Force reinstall even if version unchanged
 #   --pre                Use pre-release channel (pre-latest tag)
@@ -103,7 +103,7 @@ print_usage() {
 选项：
   --base-url URL       使用已有 Lore 服务地址；传入后不会启动 Docker
   --api-token TOKEN    Lore API Token
-  --channels CH,...    安装渠道：claudecode,codex,pi,openclaw,hermes；默认全部
+  --channels CH,...    安装渠道：claudecode,codex,pi,openclaw,hermes,opencode；默认全部 6 个
   --skip-docker        不运行 docker compose
   --force              即使版本相同也重新安装
   --pre                使用 pre-latest 镜像/预发布包
@@ -123,7 +123,7 @@ Usage:
 Options:
   --base-url URL       Use an existing Lore server; skips Docker
   --api-token TOKEN    Lore API token
-  --channels CH,...    Channels: claudecode,codex,pi,openclaw,hermes; default all
+  --channels CH,...    Channels: claudecode,codex,pi,openclaw,hermes,opencode; default all 6
   --skip-docker        Do not run docker compose
   --force              Reinstall even if version is unchanged
   --pre                Use pre-latest image/pre-release artifacts
@@ -244,7 +244,7 @@ PY
 
 # ---- Resolve channels ----
 
-ALL_CHANNELS=(claudecode codex pi openclaw hermes)
+ALL_CHANNELS=(claudecode codex pi openclaw hermes opencode)
 
 resolve_channels() {
   if [[ -n "$CHANNELS_RAW" ]]; then
@@ -547,6 +547,7 @@ artifact_for() {
     pi)         echo "lore-pi.zip";;
     openclaw)   echo "lore-openclaw.zip";;
     hermes)     echo "lore-hermes.zip";;
+    opencode)   echo "lore-opencode.zip";;
   esac
 }
 
@@ -856,6 +857,38 @@ install_pi() {
   ok "Pi configured"
 }
 
+# ---- Channel: OpenCode ----
+
+install_opencode() {
+  section "OpenCode"
+
+  if ! have_command opencode; then warn "opencode CLI not found. Skipping."; return; fi
+
+  local plugin_dir="$LORE_HOME/opencode"
+  download_or_skip "opencode" "$plugin_dir" || return
+
+  local source="$plugin_dir/lore-memory.js"
+  local target="$HOME/.config/opencode/plugins/lore-memory.js"
+  if [[ ! -f "$source" ]]; then
+    warn "OpenCode artifact is missing lore-memory.js. Skipping."
+    return
+  fi
+  if [[ -e "$target" ]] && ! grep -Fq '@lore-managed-opencode-plugin' "$target" 2>/dev/null; then
+    warn "$target is not managed by Lore. Preserving it."
+    return
+  fi
+
+  mkdir -p "$(dirname "$target")"
+  local target_tmp="${target}.tmp.$$"
+  cp "$source" "$target_tmp"
+  chmod 0644 "$target_tmp"
+  mv "$target_tmp" "$target"
+
+  local installed_version
+  installed_version=$(grep -oE '@lore-managed-opencode-plugin version=[^ ]+' "$target" 2>/dev/null | head -n 1 | cut -d= -f2 || true)
+  ok "OpenCode configured (${installed_version:-unknown})"
+}
+
 # ---- Channel: OpenClaw ----
 
 install_openclaw() {
@@ -942,6 +975,7 @@ main() {
       claudecode) install_claudecode;;
       codex)      install_codex;;
       pi)         install_pi;;
+      opencode)   install_opencode;;
       openclaw)   install_openclaw;;
       hermes)     install_hermes;;
       *)          warn "Unknown channel: $ch";;
