@@ -1,9 +1,15 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-vi.mock('../../../../../server/auth', () => ({
-  requireBearerAuth: vi.fn(),
-  normalizeClientType: vi.fn((value: string | null) => value || null),
-}));
+vi.mock('../../../../../server/auth', () => {
+  const clientTypes = new Set(['claudecode', 'openclaw', 'hermes', 'codex', 'pi', 'opencode', 'mcp', 'admin']);
+  return {
+    requireBearerAuth: vi.fn(),
+    normalizeClientType: vi.fn((value: string | null) => {
+      const normalized = String(value || '').trim().toLowerCase();
+      return clientTypes.has(normalized) ? normalized : null;
+    }),
+  };
+});
 vi.mock('../../../../../server/lore/memory/boot', () => ({
   bootView: vi.fn(),
 }));
@@ -109,6 +115,76 @@ describe('lifecycle event route', () => {
     expect(mockRecallMemories).toHaveBeenCalledWith(expect.objectContaining({ query: 'remember agent rules', session_id: 'sess-1' }), { clientType: 'claudecode' });
   });
 
+  it('returns host-ready OpenCode startup and prompt output with exact recall phases', async () => {
+    mockBootView.mockResolvedValueOnce({
+      loaded: 4,
+      total: 4,
+      failed: [],
+      core_memories: [
+        { uri: 'core://agent', content: 'Agent rules', priority: 1, boot_role_label: 'workflow constraints' },
+        { uri: 'core://agent/opencode', content: 'OpenCode rules', priority: 0, boot_role_label: 'opencode runtime constraints', scope: 'client', client_type: 'opencode' },
+      ],
+      recent_memories: [],
+    } as any);
+    mockRecallMemories.mockResolvedValueOnce({
+      items: [{ uri: 'project://runtime/opencode', score_display: 0.91, cues: ['OpenCode'] }],
+      event_log: { query_id: 'q-start' },
+    } as any);
+
+    const startupResponse = await lifecycleRoute.POST(new Request('http://localhost/api/lifecycle/event', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        protocol_version: 'lore.lifecycle.v1',
+        runtime: { runtime_id: 'opencode', runtime_family: 'opencode' },
+        event: { name: 'session.start', native_name: 'session.created' },
+        normalized: { session_id: 'oc-session' },
+        project: { dir_name: 'lore', repo_name: 'lore' },
+      }),
+    }) as any);
+    const startup = await startupResponse.json();
+
+    expect(startup.host_output).toEqual({
+      mode: 'return_value',
+      value: { systemContext: expect.any(String) },
+    });
+    expect(startup.host_output.value.systemContext).toContain('core://agent/opencode');
+    expect(startup.host_output.value.systemContext).toContain(
+      '<recall session_id="oc-session" query_id="q-start" phase="startup">',
+    );
+    expect(mockBootView).toHaveBeenCalledWith({ client_type: 'opencode' });
+    expect(mockRecallMemories).toHaveBeenCalledWith(
+      expect.objectContaining({ session_id: 'oc-session' }),
+      { clientType: 'opencode' },
+    );
+
+    mockRecallMemories.mockResolvedValueOnce({
+      items: [{ uri: 'core://agent/opencode', score_display: 0.88, cues: ['runtime'] }],
+      event_log: { query_id: 'q-prompt' },
+    } as any);
+    const promptResponse = await lifecycleRoute.POST(new Request('http://localhost/api/lifecycle/event', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        runtime: { runtime_id: 'opencode', runtime_family: 'opencode' },
+        event: { name: 'prompt.submit', native_name: 'chat.message' },
+        normalized: { session_id: 'oc-session', prompt: 'OpenCode hooks' },
+      }),
+    }) as any);
+    const prompt = await promptResponse.json();
+
+    expect(prompt.host_output).toEqual({
+      mode: 'return_value',
+      value: { promptContext: expect.any(String) },
+    });
+    expect(prompt.host_output.value.promptContext).toContain('PROMPT RECALL PREAMBLE');
+    expect(prompt.host_output.value.promptContext).toContain(
+      '<recall session_id="oc-session" query_id="q-prompt" phase="prompt">',
+    );
+    expect(prompt.query_id).toBe('q-prompt');
+    expect(prompt.node_uris).toEqual(['core://agent/opencode']);
+  });
+
   it('no-ops unknown runtimes and empty prompts', async () => {
     const unknownRequest = new Request('http://localhost/api/lifecycle/event', {
       method: 'POST',
@@ -138,6 +214,19 @@ describe('lifecycle event route', () => {
     expect(await unsupportedResponse.json()).toMatchObject({
       host_output: { mode: 'none', value: null },
       meta: { reason: 'unsupported_runtime_family' },
+    });
+
+    const unknownOpenCodeAlias = new Request('http://localhost/api/lifecycle/event', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        runtime: { runtime_id: 'opencode-preview', runtime_family: 'opencode-preview' },
+        event: { name: 'session.start' },
+      }),
+    }) as any;
+    const unknownAliasResponse = await lifecycleRoute.POST(unknownOpenCodeAlias);
+    expect(await unknownAliasResponse.json()).toMatchObject({
+      meta: { reason: 'unknown_runtime_family' },
     });
 
     const emptyPromptRequest = new Request('http://localhost/api/lifecycle/event', {

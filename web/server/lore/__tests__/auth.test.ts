@@ -25,12 +25,14 @@ describe('normalizeClientType', () => {
     expect(normalizeClientType(' hermes ')).toBe('hermes');
     expect(normalizeClientType('Codex')).toBe('codex');
     expect(normalizeClientType('Pi')).toBe('pi');
+    expect(normalizeClientType(' OpenCode ')).toBe('opencode');
     expect(normalizeClientType('mcp')).toBe('mcp');
     expect(normalizeClientType('Admin')).toBe('admin');
   });
 
   it('returns null for invalid values', () => {
     expect(normalizeClientType('api')).toBeNull();
+    expect(normalizeClientType('opencode-preview')).toBeNull();
     expect(normalizeClientType('')).toBeNull();
     expect(normalizeClientType(undefined)).toBeNull();
   });

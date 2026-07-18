@@ -16,7 +16,7 @@ export const LIFECYCLE_PROTOCOL_VERSION = 'lore.lifecycle.v1';
 
 export type LifecycleEventName = 'session.start' | 'prompt.submit';
 export type HostOutputMode = 'none' | 'stdout_json' | 'stdout_text' | 'return_value';
-const LIFECYCLE_RUNTIME_FAMILIES: ReadonlySet<ClientType> = new Set(['claudecode', 'codex', 'openclaw', 'hermes', 'pi']);
+const LIFECYCLE_RUNTIME_FAMILIES: ReadonlySet<ClientType> = new Set(['claudecode', 'codex', 'openclaw', 'hermes', 'pi', 'opencode']);
 
 export interface LifecycleEventInput {
   protocol_version?: string;
@@ -154,6 +154,15 @@ function renderHostOutput(args: {
     };
   }
 
+  if (args.family === 'opencode') {
+    return {
+      mode: 'return_value',
+      value: args.eventName === 'session.start'
+        ? { systemContext: context }
+        : { promptContext: context },
+    };
+  }
+
   if (args.family === 'hermes') {
     return {
       mode: 'return_value',
@@ -170,13 +179,15 @@ async function buildStartupRecallContext(
   queries: string[],
   clientType: ClientType | null,
   preamble: string,
+  sessionId: string,
+  phase?: 'startup',
 ): Promise<string> {
   const blocks: string[] = [];
   for (const query of queries) {
     try {
-      const data = await recallMemories({ query, session_id: 'boot' }, { clientType });
+      const data = await recallMemories({ query, session_id: sessionId || 'boot' }, { clientType });
       const queryId = typeof data?.event_log?.query_id === 'string' ? data.event_log.query_id : '';
-      const block = formatLifecycleRecallBlock(data?.items || [], 'boot', queryId);
+      const block = formatLifecycleRecallBlock(data?.items || [], sessionId || 'boot', queryId, phase);
       if (block) blocks.push(block);
     } catch {
       // Startup recall is best effort.
@@ -194,7 +205,13 @@ async function buildSessionStart(input: LifecycleEventInput, family: ClientType,
     loadLifecycleTextConfig(),
     bootView({ client_type: family }),
   ]);
-  const startupRecallContext = await buildStartupRecallContext(queries, family, textConfig.startupRecallPreamble);
+  const startupRecallContext = await buildStartupRecallContext(
+    queries,
+    family,
+    textConfig.startupRecallPreamble,
+    family === 'opencode' ? sessionId : '',
+    family === 'opencode' ? 'startup' : undefined,
+  );
   const context = joinLifecycleContext([
     textConfig.guidance,
     formatLifecycleBootSection(bootData, family, textConfig.bootPreamble),
@@ -228,7 +245,12 @@ async function buildPromptSubmit(input: LifecycleEventInput, family: ClientType,
   const data = await recallMemories({ query: prompt, session_id: sessionId }, { clientType: family });
   const queryId = typeof data?.event_log?.query_id === 'string' ? data.event_log.query_id : '';
   const items = data?.items || [];
-  const recallBlock = formatLifecycleRecallBlock(items, sessionId, queryId);
+  const recallBlock = formatLifecycleRecallBlock(
+    items,
+    sessionId,
+    queryId,
+    family === 'opencode' ? 'prompt' : undefined,
+  );
   const textConfig = recallBlock ? await loadLifecycleTextConfig() : null;
   const context = joinLifecycleContext([textConfig?.promptRecallPreamble, recallBlock]);
   const nodeUris = extractNodeUris(items);

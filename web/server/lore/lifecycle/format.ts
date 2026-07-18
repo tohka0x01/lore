@@ -31,6 +31,7 @@ const CLIENT_LABELS: Partial<Record<ClientType, string>> = {
   openclaw: 'OpenClaw',
   hermes: 'Hermes',
   pi: 'Pi',
+  opencode: 'OpenCode',
   mcp: 'MCP',
   admin: 'Admin',
 };
@@ -41,6 +42,7 @@ const CLIENT_BOOT_LABELS: Partial<Record<ClientType, string>> = {
   openclaw: 'openclaw runtime constraints',
   hermes: 'hermes runtime constraints',
   pi: 'pi runtime constraints',
+  opencode: 'opencode runtime constraints',
   mcp: 'mcp runtime constraints',
   admin: 'admin runtime constraints',
 };
@@ -75,9 +77,18 @@ function readCueList(item: any): string[] {
   return cues.map((x: any) => String(x || '').replace(/\s+/g, ' ').trim()).filter(Boolean).slice(0, 3);
 }
 
-export function formatLifecycleRecallBlock(items: unknown, sessionId?: string, queryId?: string): string {
+export function formatLifecycleRecallBlock(
+  items: unknown,
+  sessionId?: string,
+  queryId?: string,
+  phase?: 'startup' | 'prompt',
+): string {
   if (!Array.isArray(items) || items.length === 0) return '';
-  const attrs = [sessionId && `session_id="${sessionId}"`, queryId && `query_id="${queryId}"`].filter(Boolean).join(' ');
+  const attrs = [
+    sessionId && `session_id="${sessionId}"`,
+    queryId && `query_id="${queryId}"`,
+    phase && `phase="${phase}"`,
+  ].filter(Boolean).join(' ');
   const lines = [attrs ? `<recall ${attrs}>` : '<recall>'];
   for (const item of items) {
     const score = Number.isFinite(item?.score_display) ? Number(item.score_display).toFixed(DEFAULT_RECALL_SCORE_PRECISION) : String(item?.score ?? '');
