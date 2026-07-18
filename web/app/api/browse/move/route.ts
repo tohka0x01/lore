@@ -14,7 +14,11 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     const body = await request.json();
     const clientType = normalizeClientType(new URL(request.url).searchParams.get('client_type'));
     return NextResponse.json(
-      await moveNode(body || {}, { source: 'api:POST /browse/move', client_type: clientType }),
+      await moveNode(body || {}, {
+        source: 'api:POST /browse/move',
+        session_id: body?.session_id || null,
+        client_type: clientType,
+      }),
     );
   } catch (error) {
     return jsonContractError(error, 'Failed to move node');

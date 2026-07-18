@@ -2,7 +2,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 
 vi.mock('../../../db', () => ({ sql: vi.fn() }));
 vi.mock('../../../auth', () => ({
-  CLIENT_TYPES: ['claudecode', 'openclaw', 'hermes', 'codex', 'mcp', 'admin'],
+  CLIENT_TYPES: ['claudecode', 'openclaw', 'hermes', 'codex', 'pi', 'opencode', 'mcp', 'admin'],
   normalizeClientType: vi.fn((value: string | null) => value || null),
 }));
 
@@ -61,6 +61,29 @@ describe('browseActivity helpers', () => {
     });
   });
 
+  it('formats latest OpenCode write metadata with normalized client type', async () => {
+    mockSql.mockResolvedValueOnce({
+      rows: [{
+        node_uuid: 'uuid-opencode',
+        source: 'api:PUT /browse/node',
+        client_type: 'OpenCode',
+        created_at: '2026-07-18T12:00:00Z',
+        id: 11,
+      }],
+      rowCount: 1,
+    } as any);
+    mockNormalizeClientType.mockImplementationOnce((value: string | null) => (
+      String(value || '').trim().toLowerCase() === 'opencode' ? 'opencode' : null
+    ));
+
+    const result = await getLatestWriteMetaByNodeUuid(['uuid-opencode']);
+    expect(result.get('uuid-opencode')).toEqual({
+      last_updated_client_type: 'opencode',
+      last_updated_source: 'api:PUT /browse/node',
+      last_updated_at: new Date('2026-07-18T12:00:00Z').toISOString(),
+    });
+  });
+
   it('formats grouped updater summaries and keeps query grouping semantics', async () => {
     mockSql.mockResolvedValueOnce({
       rows: [
@@ -101,7 +124,7 @@ describe('browseActivity helpers', () => {
     const query = String(mockSql.mock.calls[0][0]);
     expect(query).toContain('COUNT(*) AS event_count');
     expect(query).toContain('GROUP BY node_uuid');
-    expect(query).toContain("LOWER(BTRIM(COALESCE(details->>'client_type', ''))) IN ('claudecode', 'openclaw', 'hermes', 'codex', 'mcp', 'admin')");
+    expect(query).toContain("LOWER(BTRIM(COALESCE(details->>'client_type', ''))) IN ('claudecode', 'openclaw', 'hermes', 'codex', 'pi', 'opencode', 'mcp', 'admin')");
     expect(query).toContain('ORDER BY node_uuid ASC, MAX(created_at) DESC, COUNT(*) DESC, source ASC');
   });
 });

@@ -286,6 +286,40 @@ describe('logRecallEvents', () => {
     expect(meta.client_type).toBe('claudecode');
   });
 
+  it('persists OpenCode client and session attribution across recall tables', async () => {
+    await logRecallEvents({
+      queryId: 'q-opencode',
+      queryText: 'OpenCode native tools',
+      sessionId: 'ses-opencode',
+      clientType: 'opencode',
+      exactRows: [{ uri: 'project://runtime/opencode', exact_score: 0.95, weight: 1 }],
+      rankedCandidates: [{ uri: 'project://runtime/opencode', score: 0.95, matched_on: ['exact'] }],
+      displayedItems: [{ uri: 'project://runtime/opencode' }],
+    });
+
+    const queryInsert = mockClientQuery.mock.calls.find(([query]) => String(query).includes('INSERT INTO recall_queries'));
+    const candidateInsert = mockClientQuery.mock.calls.find(([query]) => String(query).includes('INSERT INTO recall_query_candidates'));
+    const recallInsert = eventInsertCalls()[0];
+
+    expect(queryInsert?.[1]).toEqual(expect.arrayContaining([
+      'q-opencode',
+      'OpenCode native tools',
+      'ses-opencode',
+      'opencode',
+    ]));
+    expect(candidateInsert?.[1]?.slice(0, 3)).toEqual([
+      'q-opencode',
+      'project://runtime/opencode',
+      'opencode',
+    ]);
+    expect(recallInsert?.[1]?.[10]).toBe('ses-opencode');
+    expect(recallInsert?.[1]?.[11]).toBe('opencode');
+    expect(JSON.parse(recallInsert?.[1]?.[8] as string)).toMatchObject({
+      query_id: 'q-opencode',
+      client_type: 'opencode',
+    });
+  });
+
   it('writes query, candidates, and path events in one transaction', async () => {
     const result = await logRecallEvents({
       queryId: 'q-rollup',
@@ -450,6 +484,34 @@ describe('markRecallEventsUsedInAnswer', () => {
     );
     const metaPatch = JSON.parse(updateCalls[0][1]![2] as string);
     expect(metaPatch.answer_client_type).toBe('mcp');
+  });
+
+  it('stores OpenCode answer client and exact session attribution', async () => {
+    mockClientQuery.mockImplementation(async (query: string) => {
+      if (String(query).includes('UPDATE recall_query_candidates')) {
+        return makeResult([{ node_uri: 'project://runtime/opencode' }], 1);
+      }
+      return makeResult();
+    });
+
+    await markRecallEventsUsedInAnswer({
+      queryId: 'q-opencode',
+      sessionId: 'ses-opencode',
+      nodeUris: ['project://runtime/opencode'],
+      source: 'tool:lore_get_node',
+      success: true,
+      clientType: 'opencode',
+    });
+
+    const updateCalls = mockClientQuery.mock.calls.filter(([q]) =>
+      typeof q === 'string' && q.includes('UPDATE recall_events'),
+    );
+    const metaPatch = JSON.parse(updateCalls[0][1]![2] as string);
+    expect(metaPatch).toMatchObject({
+      answer_signal_source: 'tool:lore_get_node',
+      answer_session_id: 'ses-opencode',
+      answer_client_type: 'opencode',
+    });
   });
 
   it('marks candidates first, recalculates query used_count, then syncs events', async () => {

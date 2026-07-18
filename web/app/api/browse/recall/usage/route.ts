@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { requireBearerAuth } from '../../../../../server/auth';
+import { normalizeClientType, requireBearerAuth } from '../../../../../server/auth';
 import { jsonContractError } from '../../../../../server/lore/contracts';
 import { markRecallEventsUsedInAnswer } from '../../../../../server/lore/recall/recallEventLog';
 
@@ -12,6 +12,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
 
   try {
     const body = await request.json();
+    const clientType = normalizeClientType(new URL(request.url).searchParams.get('client_type'));
     return NextResponse.json(await markRecallEventsUsedInAnswer({
       queryId: body?.query_id,
       sessionId: body?.session_id,
@@ -19,6 +20,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
       assistantText: body?.assistant_text,
       source: body?.source || 'agent_end',
       success: body?.success !== false,
+      clientType,
     }));
   } catch (error) {
     return jsonContractError(error, 'Recall usage update failed');

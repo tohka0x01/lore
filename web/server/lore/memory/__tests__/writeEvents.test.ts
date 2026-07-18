@@ -124,6 +124,24 @@ describe('logMemoryEvent', () => {
     expect(JSON.parse(values[9] as string)).toMatchObject({ test: true, client_type: 'claudecode' });
   });
 
+  it('persists OpenCode client and session attribution into details', async () => {
+    await logMemoryEvent({
+      event_type: 'update',
+      node_uri: 'project://runtime/opencode',
+      session_id: 'ses-opencode',
+      client_type: 'opencode',
+      details: { tool: 'lore_update_node' },
+    });
+
+    const insertCall = mockSql.mock.calls.find((c) => c[0].includes('INSERT INTO memory_events'));
+    const values = insertCall![1] as unknown[];
+    expect(values[6]).toBe('ses-opencode');
+    expect(JSON.parse(values[9] as string)).toEqual({
+      tool: 'lore_update_node',
+      client_type: 'opencode',
+    });
+  });
+
   it('does not persist invalid client_type values', async () => {
     await logMemoryEvent({
       event_type: 'create',
@@ -359,6 +377,18 @@ describe('getDreamMemoryEventSummary', () => {
         details: { glossary_added: ['new'], glossary_removed: ['old'] },
         created_at: '2026-05-04T03:00:00.000Z',
       },
+      {
+        id: '12',
+        event_type: 'move',
+        node_uri: 'project://runtime/opencode',
+        node_uuid: 'u-opencode',
+        source: 'api:POST /browse/move',
+        session_id: 'ses-opencode',
+        before_snapshot: null,
+        after_snapshot: null,
+        details: { client_type: 'opencode' },
+        created_at: '2026-05-04T04:00:00.000Z',
+      },
     ]));
 
     const result = await getDreamMemoryEventSummary({ date: '2026-05-04', limit: 20 });
@@ -366,16 +396,16 @@ describe('getDreamMemoryEventSummary', () => {
     expect(result).toMatchObject({
       date: '2026-05-04',
       summary: {
-        total_events: 2,
+        total_events: 3,
         creates: 1,
         updates: 1,
         deletes: 0,
-        moves: 0,
+        moves: 1,
         glossary_changes: 0,
-        distinct_nodes: 2,
+        distinct_nodes: 3,
       },
     });
-    expect(result.events).toHaveLength(2);
+    expect(result.events).toHaveLength(3);
     expect(result.events[0]).toMatchObject({
       event_type: 'create',
       node_uri: 'project://alpha',
@@ -401,6 +431,12 @@ describe('getDreamMemoryEventSummary', () => {
         glossary_added: ['new'],
         glossary_removed: ['old'],
       },
+    });
+    expect(result.events[2]).toMatchObject({
+      event_type: 'move',
+      node_uri: 'project://runtime/opencode',
+      session_id: 'ses-opencode',
+      client_type: 'opencode',
     });
     expect(result.events[0]).not.toHaveProperty('before_snapshot');
     expect(result.events[0]).not.toHaveProperty('after_snapshot');

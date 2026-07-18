@@ -438,6 +438,124 @@ describe('browse route contracts', () => {
     }));
   });
 
+  it('propagates OpenCode identity and session attribution through recall and write routes', async () => {
+    mockNormalizeClientType.mockImplementation((value: string | null) => (
+      String(value || '').trim().toLowerCase() === 'opencode' ? 'opencode' : null
+    ));
+    mockSearchMemories.mockResolvedValueOnce({ results: [], meta: { query: 'OpenCode native tools' } } as any);
+    mockRecallMemories.mockResolvedValueOnce({ items: [], retrieval_meta: {} } as any);
+    mockCreateNode.mockResolvedValueOnce({ success: true, uri: 'project://runtime/opencode', node_uuid: 'uuid-create' } as any);
+    mockUpdateNodeByPath.mockResolvedValueOnce({ success: true, uri: 'project://runtime/opencode', node_uuid: 'uuid-update' } as any);
+    mockDeleteNodeByPath.mockResolvedValueOnce({ success: true, uri: 'project://runtime/opencode', deleted_uri: 'project://runtime/opencode' } as any);
+    mockMoveNode.mockResolvedValueOnce({ success: true, old_uri: 'project://runtime/opencode', new_uri: 'project://runtime/opencode-native' } as any);
+    mockMarkRecallEventsUsedInAnswer.mockResolvedValueOnce({ updated_count: 1, query_id: 'q-opencode' } as any);
+
+    const searchResponse = await searchRoute.POST(new Request('http://localhost/api/browse/search?client_type=OpenCode', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ query: 'OpenCode native tools', domain: 'project', limit: 10, content_limit: 5 }),
+    }) as any);
+    expect(searchResponse.status).toBe(200);
+
+    const recallRequest = new Request('http://localhost/api/browse/recall?client_type=OpenCode', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ query: 'OpenCode native tools', session_id: 'ses-opencode' }),
+    }) as any;
+    recallRequest.nextUrl = new URL(recallRequest.url);
+    await recallRoute.POST(recallRequest);
+
+    await nodeRoute.POST(new Request('http://localhost/api/browse/node?client_type=OpenCode', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        domain: 'project',
+        parent_path: 'runtime',
+        title: 'opencode',
+        content: 'OpenCode contract',
+        priority: 2,
+        session_id: 'ses-opencode',
+      }),
+    }) as any);
+
+    await nodeRoute.PUT(new Request('http://localhost/api/browse/node?domain=project&path=runtime/opencode&client_type=OpenCode', {
+      method: 'PUT',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ content: 'Updated OpenCode contract', session_id: 'ses-opencode' }),
+    }) as any);
+
+    await nodeRoute.DELETE(new Request('http://localhost/api/browse/node?domain=project&path=runtime/opencode&client_type=OpenCode', {
+      method: 'DELETE',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ session_id: 'ses-opencode' }),
+    }) as any);
+
+    const moveRequest = new Request('http://localhost/api/browse/move?client_type=OpenCode', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        old_uri: 'project://runtime/opencode',
+        new_uri: 'project://runtime/opencode-native',
+        session_id: 'ses-opencode',
+      }),
+    }) as any;
+    moveRequest.nextUrl = new URL(moveRequest.url);
+    await moveRoute.POST(moveRequest);
+
+    await recallUsageRoute.POST(new Request('http://localhost/api/browse/recall/usage?client_type=OpenCode', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        query_id: 'q-opencode',
+        session_id: 'ses-opencode',
+        node_uris: ['project://runtime/opencode'],
+        source: 'tool:lore_get_node',
+        success: true,
+      }),
+    }) as any);
+
+    expect(mockSearchMemories).toHaveBeenCalledWith({
+      query: 'OpenCode native tools',
+      domain: 'project',
+      limit: 10,
+      embedding: null,
+      content_limit: 5,
+    });
+    expect(mockRecallMemories).toHaveBeenCalledWith(
+      expect.objectContaining({ session_id: 'ses-opencode' }),
+      { clientType: 'opencode' },
+    );
+    expect(mockCreateNode).toHaveBeenCalledWith(expect.any(Object), {
+      source: 'api:POST /browse/node',
+      session_id: 'ses-opencode',
+      client_type: 'opencode',
+    });
+    expect(mockUpdateNodeByPath).toHaveBeenCalledWith(expect.any(Object), {
+      source: 'api:PUT /browse/node',
+      session_id: 'ses-opencode',
+      client_type: 'opencode',
+    });
+    expect(mockDeleteNodeByPath).toHaveBeenCalledWith(expect.any(Object), {
+      source: 'api:DELETE /browse/node',
+      session_id: 'ses-opencode',
+      client_type: 'opencode',
+    });
+    expect(mockMoveNode).toHaveBeenCalledWith(expect.any(Object), {
+      source: 'api:POST /browse/move',
+      session_id: 'ses-opencode',
+      client_type: 'opencode',
+    });
+    expect(mockMarkRecallEventsUsedInAnswer).toHaveBeenCalledWith({
+      queryId: 'q-opencode',
+      sessionId: 'ses-opencode',
+      nodeUris: ['project://runtime/opencode'],
+      assistantText: undefined,
+      source: 'tool:lore_get_node',
+      success: true,
+      clientType: 'opencode',
+    });
+  });
+
   it('loads node history with domain path and limit', async () => {
     const payload = { events: [{ event_id: 12, operation: 'update' }], next_cursor: null };
     mockGetNodeHistory.mockResolvedValueOnce(payload as any);

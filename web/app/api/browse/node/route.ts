@@ -64,7 +64,11 @@ export async function PUT(request: NextRequest): Promise<NextResponse> {
       glossary: Object.prototype.hasOwnProperty.call(body || {}, 'glossary') && Array.isArray(body?.glossary) ? body.glossary : undefined,
       glossaryAdd: Array.isArray(body?.glossary_add) ? body.glossary_add : [],
       glossaryRemove: Array.isArray(body?.glossary_remove) ? body.glossary_remove : [],
-    }, { source: 'api:PUT /browse/node', client_type: clientType });
+    }, {
+      source: 'api:PUT /browse/node',
+      session_id: body?.session_id || null,
+      client_type: clientType,
+    });
     return NextResponse.json(withContractWarnings(withLegacyNodeCompat(data), policyResult.warnings));
   } catch (error) {
     return jsonContractError(error, 'Failed to update node');
@@ -97,7 +101,11 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
       title: body?.title || '',
       disclosure: body?.disclosure ?? null,
       glossary: Array.isArray(body?.glossary) ? body.glossary : [],
-    }, { source: 'api:POST /browse/node', client_type: clientType });
+    }, {
+      source: 'api:POST /browse/node',
+      session_id: body?.session_id || null,
+      client_type: clientType,
+    });
     return NextResponse.json(
       withContractWarnings(
         withLegacyNodeCompat(data, { content: String(body?.content || '') }),
@@ -119,6 +127,7 @@ export async function DELETE(request: NextRequest): Promise<NextResponse> {
   const clientType = normalizeClientType(searchParams.get('client_type'));
 
   try {
+    const body = await request.json().catch(() => ({}));
     const policyResult = await validateDeletePolicy({ domain, path });
     if (policyResult.errors.length > 0) {
       return NextResponse.json(
@@ -126,7 +135,11 @@ export async function DELETE(request: NextRequest): Promise<NextResponse> {
         { status: 422 },
       );
     }
-    const deleteResult = await deleteNodeByPath({ domain, path }, { source: 'api:DELETE /browse/node', client_type: clientType });
+    const deleteResult = await deleteNodeByPath({ domain, path }, {
+      source: 'api:DELETE /browse/node',
+      session_id: body?.session_id || searchParams.get('session_id') || null,
+      client_type: clientType,
+    });
     return NextResponse.json(withContractWarnings(deleteResult, policyResult.warnings));
   } catch (error) {
     return jsonContractError(error, 'Failed to delete node');
