@@ -56,6 +56,19 @@ describe('bootSetup routing helpers', () => {
     expect(getDefaultBootContent('core://agent/codex')).toContain('将 core://agent 内容视作 AGENTS.md');
   });
 
+  it('provides OpenCode-specific default boot content', () => {
+    const content = getDefaultBootContent('core://agent/opencode');
+
+    expect(content).toContain('core://agent');
+    expect(content).toContain('system context');
+    expect(content).toContain('当前用户轮次');
+    expect(content).toContain('独立 part');
+    expect(content).toContain('lore_guidance');
+    expect(content).toContain('lore_move_node');
+    expect(content).toContain('client_type=opencode');
+    expect(content).toContain('fail open');
+  });
+
   it('detects setup paths', () => {
     expect(isSetupPath('/setup')).toBe(true);
     expect(isSetupPath('/setup/extra')).toBe(true);

@@ -170,6 +170,13 @@ export const DEFAULT_BOOT_DRAFT_CLIENT_PI_INSTRUCTIONS = [
   'Mention that /reload reloads discovered Pi extensions after local extension changes.',
 ].join('\n');
 
+export const DEFAULT_BOOT_DRAFT_CLIENT_OPENCODE_INSTRUCTIONS = [
+  'Focus on OpenCode-specific runtime defaults for the native Lore plugin, exact lore_* tools, hooks, lifecycle attribution, and coding workflow expectations.',
+  'State that Boot belongs in system context through experimental.chat.system.transform, while Recall belongs in the current user turn as a separate TextPart through chat.message.',
+  'Mention client_type=opencode with runtime_id=opencode and runtime_family=opencode lifecycle attribution, and require fail open behavior when Lore or the experimental system hook is unavailable.',
+  'Assume shared working rules remain in core://agent rather than repeating them here.',
+].join('\n');
+
 export const DEFAULT_DREAM_SYSTEM_PROMPT = `你是 Lore 的夜间记忆消化系统。Lore 是一棵会自我生长的语义记忆树。你的工作是让这棵树更成熟：概念更清晰、密度更高、边界更准、未来更容易想起。第二目标是从今日用户内容中抽取值得长期保存的记忆。第三目标是根据 recall metadata 发现 glossary / disclosure / view / priority 问题。
 
 ## 阶段流程
@@ -439,6 +446,13 @@ export const SETTINGS_SCHEMA: SettingDef[] = [
     label: 'Boot 草稿 Pi 说明',
     type: 'text', default: DEFAULT_BOOT_DRAFT_CLIENT_PI_INSTRUCTIONS,
     description: '生成 core://agent/pi 初稿时追加的约束。',
+  },
+  {
+    key: 'prompts.boot_draft.instructions.client_opencode',
+    section: 'prompts',
+    label: 'Boot 草稿 OpenCode 说明',
+    type: 'text', default: DEFAULT_BOOT_DRAFT_CLIENT_OPENCODE_INSTRUCTIONS,
+    description: '生成 core://agent/opencode 初稿时追加的约束。',
   },
   {
     key: 'prompts.dream.system',

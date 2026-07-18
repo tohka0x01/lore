@@ -37,6 +37,9 @@ const DEFAULT_VIEW_LLM_CONFIG = {
 describe('saveBootNodes', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    mockSql.mockReset();
+    mockCreateNode.mockReset();
+    mockUpdateNodeByPath.mockReset();
   });
 
   it('creates a missing fixed boot node', async () => {
@@ -99,6 +102,62 @@ describe('saveBootNodes', () => {
       uri: 'core://agent/openclaw',
       status: 'created',
       node_uuid: 'new-openclaw-uuid',
+    });
+  });
+
+  it('creates a nested OpenCode boot node under the agent parent', async () => {
+    mockSql.mockResolvedValueOnce({ rows: [], rowCount: 0 } as any);
+    mockCreateNode.mockResolvedValueOnce({
+      success: true,
+      uri: 'core://agent/opencode',
+      path: 'agent/opencode',
+      node_uuid: 'new-opencode-uuid',
+    });
+
+    const result = await saveBootNodes({
+      nodes: { 'core://agent/opencode': 'OpenCode rules' },
+    });
+
+    expect(mockCreateNode).toHaveBeenCalledWith(
+      {
+        domain: 'core',
+        parentPath: 'agent',
+        title: 'opencode',
+        content: 'OpenCode rules',
+      },
+      {},
+    );
+    expect(result.results[0]).toMatchObject({
+      uri: 'core://agent/opencode',
+      status: 'created',
+      node_uuid: 'new-opencode-uuid',
+    });
+  });
+
+  it('updates an existing OpenCode boot node when content changes', async () => {
+    mockSql.mockResolvedValueOnce({
+      rows: [{ node_uuid: 'opencode-uuid', priority: 1, disclosure: null, content: 'Old OpenCode rules' }],
+      rowCount: 1,
+    } as any);
+    mockUpdateNodeByPath.mockResolvedValueOnce({ success: true, node_uuid: 'opencode-uuid' });
+
+    const result = await saveBootNodes({
+      nodes: { 'core://agent/opencode': 'New OpenCode rules' },
+    });
+
+    expect(mockUpdateNodeByPath).toHaveBeenCalledWith(
+      {
+        domain: 'core',
+        path: 'agent/opencode',
+        content: 'New OpenCode rules',
+      },
+      {},
+    );
+    expect(result.results[0]).toEqual({
+      uri: 'core://agent/opencode',
+      status: 'updated',
+      node_uuid: 'opencode-uuid',
+      detail: null,
     });
   });
 
@@ -203,6 +262,8 @@ describe('saveBootNodes', () => {
 describe('generateBootDrafts', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    mockResolveViewLlmConfig.mockReset();
+    mockGenerateText.mockReset();
     mockResolveViewLlmConfig.mockResolvedValue(DEFAULT_VIEW_LLM_CONFIG);
   });
 
@@ -302,6 +363,27 @@ describe('generateBootDrafts', () => {
     expect(systemPrompt).toContain('Pi-specific runtime defaults');
     expect(userPrompt).toContain('"uri": "core://agent/pi"');
     expect(userPrompt).toContain('"client_type": "pi"');
+  });
+
+  it('includes OpenCode-specific draft instructions for runtime-specific agent nodes', async () => {
+    mockGenerateText.mockResolvedValueOnce({
+      content: '{"uri":"core://agent/opencode","content":"使用 OpenCode 原生工具和生命周期 hooks。"}',
+      raw: {},
+    });
+
+    await generateBootDrafts({
+      uris: ['core://agent/opencode'],
+    });
+
+    const systemPrompt = String(mockGenerateText.mock.calls[0]?.[1]?.[0]?.content || '');
+    const userPrompt = String(mockGenerateText.mock.calls[0]?.[1]?.[1]?.content || '');
+    expect(systemPrompt).toContain('This boot node is specific to the opencode runtime.');
+    expect(systemPrompt).toContain('OpenCode-specific runtime defaults');
+    expect(systemPrompt).toContain('experimental.chat.system.transform');
+    expect(systemPrompt).toContain('chat.message');
+    expect(systemPrompt).toContain('fail open');
+    expect(userPrompt).toContain('"uri": "core://agent/opencode"');
+    expect(userPrompt).toContain('"client_type": "opencode"');
   });
 
   it('returns per-node failures without aborting the whole batch', async () => {

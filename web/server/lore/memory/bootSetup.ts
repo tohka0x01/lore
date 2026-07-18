@@ -100,6 +100,7 @@ function clientInstructions(config: ServerPromptConfig, clientType: BootClientTy
   if (clientType === 'openclaw') return config.bootDraftClientOpenclawInstructions;
   if (clientType === 'hermes') return config.bootDraftClientHermesInstructions;
   if (clientType === 'codex') return config.bootDraftClientCodexInstructions;
+  if (clientType === 'opencode') return config.bootDraftClientOpencodeInstructions;
   return config.bootDraftClientPiInstructions;
 }
 

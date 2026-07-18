@@ -1,32 +1,12 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect } from 'vitest';
 
-vi.mock('../../memory/boot', () => ({
-  getBootNodeSpec: vi.fn(),
-}));
-
-import { getBootNodeSpec } from '../../memory/boot';
 import {
   inspectProtectedBootOperation,
   describeProtectedBootOperation,
 } from '../protectedBoot';
 
-const mockGetBootNodeSpec = vi.mocked(getBootNodeSpec);
-
 describe('inspectProtectedBootOperation', () => {
-  beforeEach(() => {
-    vi.clearAllMocks();
-    mockGetBootNodeSpec.mockReturnValue(null);
-  });
-
   it('inspects update on protected boot uri', () => {
-    mockGetBootNodeSpec.mockReturnValue({
-      uri: 'core://agent',
-      role: 'agent',
-      role_label: 'workflow constraints',
-      purpose: 'Working rules',
-      dream_protection: 'protected',
-    } as any);
-
     expect(inspectProtectedBootOperation('update_node', { uri: 'core://agent' })).toEqual({
       operation: 'update_node',
       match: 'uri',
@@ -36,19 +16,6 @@ describe('inspectProtectedBootOperation', () => {
   });
 
   it('prefers old_uri when move source is protected', () => {
-    mockGetBootNodeSpec.mockImplementation((uri) => {
-      if (uri === 'core://soul') {
-        return {
-          uri: 'core://soul',
-          role: 'soul',
-          role_label: 'style / persona / self-definition',
-          purpose: 'Persona baseline',
-          dream_protection: 'protected',
-        } as any;
-      }
-      return null;
-    });
-
     expect(inspectProtectedBootOperation('move_node', {
       old_uri: 'core://soul',
       new_uri: 'core://archive/soul',
@@ -59,6 +26,43 @@ describe('inspectProtectedBootOperation', () => {
       requested_old_uri: 'core://soul',
       requested_new_uri: 'core://archive/soul',
       spec: expect.objectContaining({ role: 'soul' }),
+    });
+  });
+
+  it('blocks delete on the OpenCode boot URI', () => {
+    expect(inspectProtectedBootOperation('delete_node', {
+      uri: 'CORE://AGENT/OPENCODE',
+    })).toEqual({
+      operation: 'delete_node',
+      match: 'uri',
+      blocked_uri: 'core://agent/opencode',
+      spec: expect.objectContaining({
+        id: 'agent-opencode',
+        client_type: 'opencode',
+        dream_protection: 'protected',
+      }),
+    });
+  });
+
+  it('blocks moving from the OpenCode boot URI', () => {
+    expect(inspectProtectedBootOperation('move_node', {
+      old_uri: 'core://agent/opencode',
+      new_uri: 'core://archive/opencode',
+    })).toMatchObject({
+      operation: 'move_node',
+      match: 'old_uri',
+      blocked_uri: 'core://agent/opencode',
+    });
+  });
+
+  it('blocks moving another node onto the OpenCode boot URI', () => {
+    expect(inspectProtectedBootOperation('move_node', {
+      old_uri: 'core://scratch/opencode',
+      new_uri: 'core://agent/opencode',
+    })).toMatchObject({
+      operation: 'move_node',
+      match: 'new_uri',
+      blocked_uri: 'core://agent/opencode',
     });
   });
 

@@ -8,7 +8,7 @@ export type BootNodeRole = 'agent' | 'soul' | 'user';
 export type BootNodeState = 'missing' | 'empty' | 'initialized';
 export type BootOverallState = 'uninitialized' | 'partial' | 'complete';
 export type BootNodeScope = 'global' | 'client';
-export type BootClientType = Extract<ClientType, 'claudecode' | 'openclaw' | 'hermes' | 'codex' | 'pi'>;
+export type BootClientType = Extract<ClientType, 'claudecode' | 'openclaw' | 'hermes' | 'codex' | 'pi' | 'opencode'>;
 
 export interface BootNodeSpec {
   id: string;
@@ -200,6 +200,19 @@ const CLIENT_BOOT_NODES: readonly BootNodeSpec[] = [
     setup_title: 'Pi boot memory',
     setup_description: 'Write the Pi-specific agent rules that load together with core://agent.',
   },
+  {
+    id: 'agent-opencode',
+    uri: 'core://agent/opencode',
+    role: 'agent',
+    role_label: 'opencode runtime constraints',
+    purpose: 'OpenCode-specific native tools, system and message hooks, lifecycle attribution, and fail-open runtime behavior.',
+    dream_protection: 'protected',
+    scope: 'client',
+    client_type: 'opencode',
+    setup_slug: 'agent-opencode',
+    setup_title: 'OpenCode boot memory',
+    setup_description: 'Write the OpenCode-specific native tool, context injection, attribution, and fail-open rules that load together with core://agent.',
+  },
 ] as const;
 
 const FIXED_BOOT_NODES: readonly BootNodeSpec[] = [
@@ -233,7 +246,12 @@ function deriveOverallState(nodes: BootStatusNode[]): BootOverallState {
 }
 
 function isRuntimeBootClientType(value: ClientType | null | undefined): value is BootClientType {
-  return value === 'claudecode' || value === 'openclaw' || value === 'hermes' || value === 'codex' || value === 'pi';
+  return value === 'claudecode'
+    || value === 'openclaw'
+    || value === 'hermes'
+    || value === 'codex'
+    || value === 'pi'
+    || value === 'opencode';
 }
 
 function shouldIncludeAllClientBootNodes(options: BootViewOptions): boolean {
