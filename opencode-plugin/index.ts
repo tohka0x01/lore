@@ -1,10 +1,15 @@
 import type { Plugin } from '@opencode-ai/plugin';
 import { loadLorePluginConfig } from './config.js';
+import { createOpenCodeLifecycleAdapter } from './lifecycle.js';
 import { createLoreTools } from './tools.js';
 
-const loreOpenCodePlugin: Plugin = async () => {
+const loreOpenCodePlugin: Plugin = async ({ directory, worktree }) => {
   const config = loadLorePluginConfig();
-  return { tool: createLoreTools(config) };
+  const adapter = createOpenCodeLifecycleAdapter({ config, directory, worktree });
+  return {
+    ...adapter.hooks,
+    tool: createLoreTools(config),
+  };
 };
 
 export default loreOpenCodePlugin;

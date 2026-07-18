@@ -1,5 +1,9 @@
+import { randomUUID } from 'node:crypto';
+import { basename } from 'node:path';
 import type { Hooks } from '@opencode-ai/plugin';
 import type { Part } from '@opencode-ai/sdk';
+import { LoreApiError, loreFetchJson } from './api.js';
+import type { LorePluginConfig } from './config.js';
 
 export const LORE_RECALL_MARKER = 'lore:prompt-context';
 
@@ -68,5 +72,228 @@ export function classifyDirectUserPrompt(
     prompt: originalText.join('\n\n'),
     ...(nonEmpty(input.agent) ? { agent: input.agent.trim() } : {}),
     ...(providerID && modelID ? { model: `${providerID}/${modelID}` } : {}),
+  };
+}
+
+const SYSTEM_CONTEXT_START = '<!-- lore:opencode-system-context:start -->';
+const SYSTEM_CONTEXT_END = '<!-- lore:opencode-system-context:end -->';
+const STARTUP_RETRY_MS = 1_000;
+
+interface HostOutputResponse {
+  host_output?: {
+    mode?: unknown;
+    value?: {
+      systemContext?: unknown;
+      promptContext?: unknown;
+    };
+  };
+}
+
+interface SessionState {
+  abortController: AbortController;
+  startupPromise?: Promise<string | null>;
+  systemContext?: string;
+  retryAt: number;
+  promptMessageIDs: Set<string>;
+}
+
+export interface OpenCodeLifecycleAdapter {
+  hooks: Pick<Hooks, 'event' | 'chat.message' | 'experimental.chat.system.transform' | 'dispose'>;
+  dispose(): Promise<void>;
+}
+
+function projectSnapshot(directory: string, worktree: string): {
+  project: { dir_name: string; repo_name: string | null };
+  native: { directory: string; worktree: string };
+} {
+  return {
+    project: {
+      dir_name: basename(directory) || directory,
+      repo_name: basename(worktree) || null,
+    },
+    native: { directory, worktree },
+  };
+}
+
+function hostValue(response: HostOutputResponse, key: 'systemContext' | 'promptContext'): string | null {
+  if (response.host_output?.mode !== 'return_value') return null;
+  const value = response.host_output.value?.[key];
+  return nonEmpty(value) ? value : null;
+}
+
+function markedSystemContext(value: string): string {
+  return `${SYSTEM_CONTEXT_START}\n${value}\n${SYSTEM_CONTEXT_END}`;
+}
+
+function isMarkedSystemContext(value: string): boolean {
+  return value.includes(SYSTEM_CONTEXT_START) && value.includes(SYSTEM_CONTEXT_END);
+}
+
+function retryable(error: unknown): boolean {
+  return !(error instanceof LoreApiError && error.status === 401);
+}
+
+export function createOpenCodeLifecycleAdapter(args: {
+  config: LorePluginConfig;
+  directory: string;
+  worktree: string;
+  logger?: Pick<Console, 'warn' | 'debug'>;
+}): OpenCodeLifecycleAdapter {
+  const { config, directory, worktree } = args;
+  const logger = args.logger ?? console;
+  const sessions = new Map<string, SessionState>();
+  const project = projectSnapshot(directory, worktree);
+  let warnedSystemCompatibility = false;
+  let disposed = false;
+
+  function warnSystemCompatibility(): void {
+    if (warnedSystemCompatibility) return;
+    warnedSystemCompatibility = true;
+    logger.warn('Lore OpenCode system context is unavailable for this callback; native tools and prompt Recall remain enabled.');
+  }
+
+  function stateFor(sessionID: string): SessionState {
+    const existing = sessions.get(sessionID);
+    if (existing) return existing;
+    const state: SessionState = {
+      abortController: new AbortController(),
+      retryAt: 0,
+      promptMessageIDs: new Set(),
+    };
+    sessions.set(sessionID, state);
+    return state;
+  }
+
+  function startupBody(sessionID: string) {
+    return {
+      protocol_version: 'lore.lifecycle.v1',
+      runtime: { runtime_id: 'opencode', runtime_family: 'opencode' },
+      event: { name: 'session.start', native_name: 'session.created' },
+      normalized: { session_id: sessionID },
+      project: project.project,
+      native_input_snapshot: project.native,
+    };
+  }
+
+  function promptBody(prompt: ClassifiedPrompt) {
+    return {
+      protocol_version: 'lore.lifecycle.v1',
+      runtime: { runtime_id: 'opencode', runtime_family: 'opencode' },
+      event: { name: 'prompt.submit', native_name: 'chat.message' },
+      normalized: { session_id: prompt.sessionID, prompt: prompt.prompt },
+      project: project.project,
+      native_input_snapshot: {
+        message_id: prompt.messageID,
+        ...(prompt.agent ? { agent: prompt.agent } : {}),
+        ...(prompt.model ? { model: prompt.model } : {}),
+        ...project.native,
+      },
+    };
+  }
+
+  async function ensureStartup(sessionID: string): Promise<string | null> {
+    if (disposed) return null;
+    const state = stateFor(sessionID);
+    if (state.systemContext) return state.systemContext;
+    if (state.startupPromise) return state.startupPromise;
+    if (Date.now() < state.retryAt) return null;
+
+    const startupPromise = loreFetchJson<HostOutputResponse>(config, '/lifecycle/event', {
+      method: 'POST',
+      body: startupBody(sessionID),
+      signal: state.abortController.signal,
+      timeoutMs: config.startupTimeoutMs,
+    })
+      .then((response) => {
+        const systemContext = hostValue(response, 'systemContext');
+        if (systemContext) state.systemContext = systemContext;
+        return systemContext;
+      })
+      .catch((error: unknown) => {
+        state.retryAt = retryable(error) ? Date.now() + STARTUP_RETRY_MS : Number.POSITIVE_INFINITY;
+        logger.debug(`Lore OpenCode startup failed open: ${error instanceof Error ? error.message : String(error)}`);
+        return null;
+      })
+      .finally(() => {
+        if (state.startupPromise === startupPromise) state.startupPromise = undefined;
+      });
+    state.startupPromise = startupPromise;
+    return startupPromise;
+  }
+
+  const eventHook: NonNullable<Hooks['event']> = async ({ event }) => {
+    if (event.type === 'session.created') {
+      const sessionID = event.properties.info.id;
+      if (nonEmpty(sessionID)) void ensureStartup(sessionID);
+      return;
+    }
+    if (event.type === 'session.deleted') {
+      const sessionID = event.properties.info.id;
+      const state = sessions.get(sessionID);
+      state?.abortController.abort();
+      sessions.delete(sessionID);
+      return;
+    }
+    if (event.type === 'session.compacted') {
+      return;
+    }
+  };
+
+  const systemHook: NonNullable<Hooks['experimental.chat.system.transform']> = async (input, output) => {
+    if (!nonEmpty(input.sessionID) || !output || !Array.isArray(output.system)) {
+      warnSystemCompatibility();
+      return;
+    }
+    const systemContext = await ensureStartup(input.sessionID);
+    if (!systemContext) return;
+    output.system = output.system.filter((value) => !isMarkedSystemContext(value));
+    output.system.push(markedSystemContext(systemContext));
+  };
+
+  const messageHook: NonNullable<Hooks['chat.message']> = async (input, output) => {
+    const prompt = classifyDirectUserPrompt(input, output);
+    if (!prompt || disposed) return;
+    const state = stateFor(prompt.sessionID);
+    if (state.promptMessageIDs.has(prompt.messageID)) return;
+    state.promptMessageIDs.add(prompt.messageID);
+
+    try {
+      const response = await loreFetchJson<HostOutputResponse>(config, '/lifecycle/event', {
+        method: 'POST',
+        body: promptBody(prompt),
+        signal: state.abortController.signal,
+        timeoutMs: config.requestTimeoutMs,
+      });
+      const promptContext = hostValue(response, 'promptContext');
+      if (!promptContext) return;
+      output.parts.push({
+        id: `prt_lore_${randomUUID().replaceAll('-', '')}`,
+        sessionID: prompt.sessionID,
+        messageID: prompt.messageID,
+        type: 'text',
+        text: promptContext,
+        synthetic: true,
+        metadata: { lore_injected: true, marker: LORE_RECALL_MARKER },
+      });
+    } catch (error) {
+      if (retryable(error)) state.promptMessageIDs.delete(prompt.messageID);
+      logger.debug(`Lore OpenCode prompt Recall failed open: ${error instanceof Error ? error.message : String(error)}`);
+    }
+  };
+
+  async function dispose(): Promise<void> {
+    disposed = true;
+    for (const state of sessions.values()) state.abortController.abort();
+    sessions.clear();
+  }
+
+  return {
+    hooks: {
+      event: eventHook,
+      'chat.message': messageHook,
+      'experimental.chat.system.transform': systemHook,
+      dispose,
+    },
+    dispose,
   };
 }
