@@ -24,6 +24,7 @@ import { requireBearerAuth } from '../../../../../server/auth';
 import { getSettings } from '../../../../../server/lore/config/settings';
 import { bootView } from '../../../../../server/lore/memory/boot';
 import { recallMemories } from '../../../../../server/lore/recall/recall';
+import { lifecycleStartupGate } from '../../../../../server/lore/lifecycle/startupGate';
 import * as lifecycleRoute from '../route';
 
 const mockRequireBearerAuth = vi.mocked(requireBearerAuth);
@@ -34,6 +35,7 @@ const mockRecallMemories = vi.mocked(recallMemories);
 describe('lifecycle event route', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    lifecycleStartupGate.clear();
     mockRequireBearerAuth.mockReturnValue(null);
     mockGetSettings.mockResolvedValue({
       'lifecycle.guidance.enabled': true,
@@ -183,6 +185,45 @@ describe('lifecycle event route', () => {
     );
     expect(prompt.query_id).toBe('q-prompt');
     expect(prompt.node_uris).toEqual(['core://agent/opencode']);
+  });
+
+  it('gates duplicate OpenCode startup Recall without removing current Boot output', async () => {
+    mockBootView.mockResolvedValue({
+      loaded: 4,
+      total: 4,
+      failed: [],
+      core_memories: [
+        { uri: 'core://agent', content: 'Agent rules', priority: 1 },
+        { uri: 'core://agent/opencode', content: 'OpenCode rules', priority: 0, scope: 'client', client_type: 'opencode' },
+      ],
+      recent_memories: [],
+    } as any);
+    mockRecallMemories.mockResolvedValue({
+      items: [{ uri: 'project://runtime/opencode', score_display: 0.91, cues: ['OpenCode'] }],
+      event_log: { query_id: 'q-start' },
+    } as any);
+    const makeRequest = () => new Request('http://localhost/api/lifecycle/event', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        runtime: { runtime_id: 'opencode', runtime_family: 'opencode' },
+        event: { name: 'session.start', native_name: 'session.created' },
+        normalized: { session_id: 'oc-gated-session' },
+        project: { dir_name: 'lore', repo_name: 'lore' },
+      }),
+    }) as any;
+
+    const first = await (await lifecycleRoute.POST(makeRequest())).json();
+    const recallCallsAfterFirst = mockRecallMemories.mock.calls.length;
+    const second = await (await lifecycleRoute.POST(makeRequest())).json();
+
+    expect(first.host_output.value.systemContext).toContain('core://agent/opencode');
+    expect(first.host_output.value.systemContext).toContain('STARTUP RECALL PREAMBLE');
+    expect(second.host_output.value.systemContext).toContain('SERVER GUIDANCE');
+    expect(second.host_output.value.systemContext).toContain('core://agent/opencode');
+    expect(second.host_output.value.systemContext).not.toContain('STARTUP RECALL PREAMBLE');
+    expect(second.meta.startup_gated).toBe(true);
+    expect(mockRecallMemories).toHaveBeenCalledTimes(recallCallsAfterFirst);
   });
 
   it('no-ops unknown runtimes and empty prompts', async () => {

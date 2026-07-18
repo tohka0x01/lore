@@ -2,6 +2,7 @@ import { normalizeClientType, type ClientType } from '../../auth';
 import { bootView } from '../memory/boot';
 import { recallMemories } from '../recall/recall';
 import { loadLifecycleTextConfig } from './config';
+import { lifecycleStartupGate } from './startupGate';
 import {
   buildStartupQueries,
   extractNodeUris,
@@ -205,13 +206,18 @@ async function buildSessionStart(input: LifecycleEventInput, family: ClientType,
     loadLifecycleTextConfig(),
     bootView({ client_type: family }),
   ]);
-  const startupRecallContext = await buildStartupRecallContext(
-    queries,
-    family,
-    textConfig.startupRecallPreamble,
-    family === 'opencode' ? sessionId : '',
-    family === 'opencode' ? 'startup' : undefined,
-  );
+  const shouldRunStartupRecall = family !== 'opencode'
+    || !sessionId
+    || lifecycleStartupGate.firstSeen(family, sessionId);
+  const startupRecallContext = shouldRunStartupRecall
+    ? await buildStartupRecallContext(
+        queries,
+        family,
+        textConfig.startupRecallPreamble,
+        family === 'opencode' ? sessionId : '',
+        family === 'opencode' ? 'startup' : undefined,
+      )
+    : '';
   const context = joinLifecycleContext([
     textConfig.guidance,
     formatLifecycleBootSection(bootData, family, textConfig.bootPreamble),
@@ -233,7 +239,11 @@ async function buildSessionStart(input: LifecycleEventInput, family: ClientType,
     query_id: '',
     node_uris: [],
     has_output: hostOutput.mode !== 'none',
-    meta: { session_id: sessionId, queries },
+    meta: {
+      session_id: sessionId,
+      queries,
+      ...(shouldRunStartupRecall ? {} : { startup_gated: true }),
+    },
   };
 }
 
