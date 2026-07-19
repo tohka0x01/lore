@@ -126,6 +126,21 @@ describe('classifies genuine OpenCode direct-user prompts', () => {
     });
   });
 
+  it('uses the generated output message identity when OpenCode omits the optional input messageID', () => {
+    const [input, output] = fixture(
+      [textPart('prt-1', 'CLI prompt')],
+      { messageID: undefined },
+    );
+
+    expect(classifyDirectUserPrompt(input, output)).toEqual({
+      sessionID: 'ses-1',
+      messageID: 'msg-1',
+      prompt: 'CLI prompt',
+      agent: 'build',
+      model: 'anthropic/claude-sonnet',
+    });
+  });
+
   it('excludes Lore-injected text when original text remains', () => {
     const [input, output] = fixture([
       textPart('prt-1', 'Original prompt'),
@@ -168,7 +183,7 @@ describe('classifies genuine OpenCode direct-user prompts', () => {
   it('rejects summarized/internal, missing, mismatched, and unknown identities', () => {
     const cases: Array<[ChatMessageInput, ChatMessageOutput]> = [
       fixture(undefined, {}, { summary: { title: 'Summary', diffs: [] } }),
-      fixture(undefined, { messageID: undefined }),
+      fixture(undefined, {}, { id: '' as UserMessage['id'] }),
       fixture(undefined, { sessionID: '' }),
       fixture(undefined, { messageID: 'msg-other' }),
       fixture(undefined, {}, { sessionID: 'ses-other' }),
@@ -231,6 +246,25 @@ describe('OpenCode lifecycle adapter', () => {
     expect(fetchMock).toHaveBeenCalledOnce();
     expect(later.system.join('\n').match(/lore:opencode-system-context:start/g)).toHaveLength(1);
     expect(later.system.join('\n')).not.toContain('stale');
+  });
+
+  it('mutates the host system array in place so OpenCode retains the injected Boot context', async () => {
+    vi.spyOn(globalThis, 'fetch').mockResolvedValue(jsonResponse({
+      host_output: {
+        mode: 'return_value',
+        value: { systemContext: 'SERVER BOOT core://agent/opencode' },
+      },
+    }));
+    const lifecycle = adapter();
+    const system = ['Existing system'];
+    const output = { system };
+
+    await lifecycle.hooks['experimental.chat.system.transform']?.(systemInput('ses-cli'), output);
+
+    expect(output.system).toBe(system);
+    expect(system).toHaveLength(2);
+    expect(system[1]).toContain('<!-- lore:opencode-system-context:start -->');
+    expect(system[1]).toContain('SERVER BOOT core://agent/opencode');
   });
 
   it('supports lazy startup, session isolation, bounded retry, compaction, deletion, and dispose', async () => {

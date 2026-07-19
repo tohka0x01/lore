@@ -39,16 +39,19 @@ export function classifyDirectUserPrompt(
   input: ChatMessageInput,
   output: ChatMessageOutput,
 ): ClassifiedPrompt | null {
-  if (!nonEmpty(input.sessionID) || !nonEmpty(input.messageID)) return null;
+  if (!nonEmpty(input.sessionID)) return null;
   if (!output || !output.message || output.message.role !== 'user') return null;
-  if (output.message.sessionID !== input.sessionID || output.message.id !== input.messageID) return null;
+  const messageID = output.message.id;
+  if (!nonEmpty(messageID)) return null;
+  if (nonEmpty(input.messageID) && input.messageID !== messageID) return null;
+  if (output.message.sessionID !== input.sessionID) return null;
   if (output.message.summary) return null;
   if (!Array.isArray(output.parts) || output.parts.length === 0) return null;
 
   const originalText: string[] = [];
   for (const part of output.parts) {
     if (!part || typeof part !== 'object' || !('type' in part)) return null;
-    if (!validPartIdentity(part, input.sessionID, input.messageID)) return null;
+    if (!validPartIdentity(part, input.sessionID, messageID)) return null;
     if (part.type === 'compaction' || part.type === 'subtask') return null;
     if (part.type !== 'text') {
       const supportedNonTextTypes = new Set([
@@ -68,7 +71,7 @@ export function classifyDirectUserPrompt(
 
   return {
     sessionID: input.sessionID,
-    messageID: input.messageID,
+    messageID,
     prompt: originalText.join('\n\n'),
     ...(nonEmpty(input.agent) ? { agent: input.agent.trim() } : {}),
     ...(providerID && modelID ? { model: `${providerID}/${modelID}` } : {}),
@@ -246,8 +249,9 @@ export function createOpenCodeLifecycleAdapter(args: {
     }
     const systemContext = await ensureStartup(input.sessionID);
     if (!systemContext) return;
-    output.system = output.system.filter((value) => !isMarkedSystemContext(value));
-    output.system.push(markedSystemContext(systemContext));
+    const retained = output.system.filter((value) => !isMarkedSystemContext(value));
+    retained.push(markedSystemContext(systemContext));
+    output.system.splice(0, output.system.length, ...retained);
   };
 
   const messageHook: NonNullable<Hooks['chat.message']> = async (input, output) => {
