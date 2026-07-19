@@ -22,7 +22,8 @@ After changing any of these, restart the runtime. Hooks and MCP config are usual
 - If Boot is missing but tools and prompt Recall work, `experimental.chat.system.transform` may be unavailable. This is an expected fail-open mode: the plugin warns once, does not alter the user message, and `chat.message` Recall continues.
 - If all Lore calls fail, validate `~/.lore/config.json`, server health, token, and network access. Every plugin REST call except health identifies `client_type=opencode`.
 - If an unmarked file already exists at `~/.config/opencode/plugins/lore-memory.js`, the installer intentionally preserves it. Move it yourself before retrying if you want Lore to own that path.
-- The standard OpenCode installer must not create an MCP entry. Use `/api/mcp?client_type=opencode` only as a manual fallback when native plugin loading is impossible.
+- If OpenCode shows both `lore` and `lore:lore`, reports an SSE error for one of them, or the SaaS console records multiple client types for one prompt, another plugin is importing Claude Code Lore MCP configuration. The native plugin suppresses those duplicate Lore MCP entries after OpenCode merges config, while leaving Claude Code and third-party files unchanged. Restart OpenCode after installing the updated plugin.
+- The standard OpenCode installer must not create an MCP entry. Use `/api/mcp?client_type=opencode` only as a manual fallback when native plugin loading is impossible. To allow that legacy fallback alongside the native plugin, start OpenCode with `LORE_OPENCODE_ALLOW_MCP=1`; otherwise leave it unset.
 
 To reinstall the prerelease:
 

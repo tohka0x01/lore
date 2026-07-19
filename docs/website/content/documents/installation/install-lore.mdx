@@ -32,6 +32,8 @@ curl -fsSL https://raw.githubusercontent.com/FFatTiger/lore/main/scripts/install
 
 The standard OpenCode installation does not configure MCP. OpenCode receives the exact native `lore_*` tools, so generic `/api/mcp` is only a manual fallback.
 
+The native plugin also suppresses duplicate Lore MCP imports at runtime. This covers compatibility plugins that import Claude Code MCP entries such as `lore` or `lore:lore`, without modifying Claude Code or third-party configuration files. Set `LORE_OPENCODE_ALLOW_MCP=1` before starting OpenCode only when you explicitly need the legacy MCP fallback alongside the native plugin.
+
 You can inspect `~/.lore/` after the installer finishes to see what was written.
 
 ## Common options

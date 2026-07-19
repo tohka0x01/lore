@@ -887,6 +887,7 @@ install_opencode() {
   local installed_version
   installed_version=$(grep -oE '@lore-managed-opencode-plugin version=[^ ]+' "$target" 2>/dev/null | head -n 1 | cut -d= -f2 || true)
   ok "OpenCode configured (${installed_version:-unknown})"
+  info "OpenCode native Lore enabled; duplicate Lore MCP imports are suppressed at runtime"
 }
 
 # ---- Channel: OpenClaw ----

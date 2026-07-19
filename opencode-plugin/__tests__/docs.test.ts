@@ -88,4 +88,35 @@ describe('OpenCode prerelease documentation', () => {
     expect(englishInstall).not.toContain('/api/mcp?client_type=opencode');
     expect(chineseInstall).not.toContain('/api/mcp?client_type=opencode');
   });
+
+  it('documents runtime duplicate-MCP suppression without taking ownership of Claude or third-party config', () => {
+    const english = [
+      read('opencode-plugin/README.md'),
+      read('docs/website/content/documents/installation/install-lore.mdx'),
+      read('docs/website/content/documents/troubleshooting/agent-issues.mdx'),
+    ].join('\n');
+    const chinese = [
+      read('docs/website/content/documents/installation/install-lore.zh-cn.mdx'),
+      read('docs/website/content/documents/troubleshooting/agent-issues.zh-cn.mdx'),
+    ].join('\n');
+
+    for (const required of [
+      'duplicate Lore MCP',
+      'LORE_OPENCODE_ALLOW_MCP=1',
+      'does not modify Claude Code or third-party configuration files',
+      'lore:lore',
+      'multiple client types',
+    ]) {
+      expect(english).toContain(required);
+    }
+    for (const required of [
+      '重复 Lore MCP',
+      'LORE_OPENCODE_ALLOW_MCP=1',
+      '不会修改 Claude Code 或第三方配置文件',
+      'lore:lore',
+      '多个 client type',
+    ]) {
+      expect(chinese).toContain(required);
+    }
+  });
 });

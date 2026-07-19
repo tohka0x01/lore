@@ -128,6 +128,7 @@ assert data['docker_managed'] is True
 assert data['custom'] == {'preserve': True}
 PY
 assert_contains "$OUT_ONE" 'OpenCode configured'
+assert_contains "$OUT_ONE" 'duplicate Lore MCP imports are suppressed at runtime'
 assert_contains "$OUT_ONE" '1.3.15-pre.2'
 
 cat > "$TARGET" <<'JS'

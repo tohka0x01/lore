@@ -32,6 +32,8 @@ curl -fsSL https://raw.githubusercontent.com/FFatTiger/lore/main/scripts/install
 
 OpenCode 标准安装不会配置 MCP。OpenCode 使用精确命名的原生 `lore_*` 工具；通用 `/api/mcp` 仅作为手动兜底。
 
+原生插件还会在运行时抑制重复 Lore MCP 导入。这包括兼容插件从 Claude Code 导入的 `lore` 或 `lore:lore`，而且不会修改 Claude Code 或第三方配置文件。只有明确需要让旧版 MCP 与原生插件并存时，才在启动 OpenCode 前设置 `LORE_OPENCODE_ALLOW_MCP=1`。
+
 安装完成后可以查看 `~/.lore/` 目录确认写入了哪些文件。
 
 ## 常用选项
