@@ -4,7 +4,7 @@ set -euo pipefail
 # Usage:
 #   ./scripts/release.sh <version>
 #   ./scripts/release.sh --prepare-only <version>
-# Example: ./scripts/release.sh --prepare-only 1.3.15-pre.1
+# Example: ./scripts/release.sh --prepare-only 1.3.15-pre.2
 
 PREPARE_ONLY=0
 if [[ "${1:-}" == "--prepare-only" ]]; then

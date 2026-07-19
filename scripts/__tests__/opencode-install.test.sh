@@ -27,7 +27,7 @@ make_fixture_archive() {
   local archive_root="$TMP/archive"
   mkdir -p "$archive_root"
   cat > "$archive_root/lore-memory.js" <<'JS'
-/* @lore-managed-opencode-plugin version=1.3.15-pre.1 */
+/* @lore-managed-opencode-plugin version=1.3.15-pre.2 */
 export const fixture = true;
 JS
   (cd "$archive_root" && /usr/bin/zip -q "$TMP/lore-opencode.zip" lore-memory.js)
@@ -51,7 +51,7 @@ done
 if [[ -n "$out" ]]; then
   cp "$TEST_OPENCODE_ARCHIVE" "$out"
 else
-  printf '[{"tag_name":"v1.3.15-pre.1"}]\n'
+  printf '[{"tag_name":"v1.3.15-pre.2"}]\n'
 fi
 SH
   cat > "$bin/unzip" <<'SH'
@@ -113,7 +113,7 @@ run_install "$HOME_ONE" "$BIN_ONE" "$OUT_ONE"
 TARGET="$HOME_ONE/.config/opencode/plugins/lore-memory.js"
 [[ -f "$TARGET" ]] || fail "managed OpenCode plugin was not installed"
 assert_contains "$TARGET" '@lore-managed-opencode-plugin'
-assert_contains "$TARGET" 'version=1.3.15-pre.1'
+assert_contains "$TARGET" 'version=1.3.15-pre.2'
 cmp -s "$HOME_ONE/.config/opencode/opencode.json" "$TMP/opencode-config.before" || fail "OpenCode config was modified"
 [[ -f "$HOME_ONE/.local/share/opencode/session.json" ]] || fail "OpenCode session data was modified"
 assert_not_contains "$HOME_ONE/.config/opencode/opencode.json" 'client_type=opencode'
@@ -123,12 +123,12 @@ with open(sys.argv[1], encoding='utf-8') as handle:
     data = json.load(handle)
 assert data['base_url'] == 'http://127.0.0.1:18901'
 assert data['api_token'] == 'test-token'
-assert data['installed_version'] == 'v1.3.15-pre.1'
+assert data['installed_version'] == 'v1.3.15-pre.2'
 assert data['docker_managed'] is True
 assert data['custom'] == {'preserve': True}
 PY
 assert_contains "$OUT_ONE" 'OpenCode configured'
-assert_contains "$OUT_ONE" '1.3.15-pre.1'
+assert_contains "$OUT_ONE" '1.3.15-pre.2'
 
 cat > "$TARGET" <<'JS'
 /* @lore-managed-opencode-plugin version=0.0.1 */
@@ -136,7 +136,7 @@ export const stale = true;
 JS
 OUT_REPLACE="$TMP/install-replace.log"
 run_install "$HOME_ONE" "$BIN_ONE" "$OUT_REPLACE"
-assert_contains "$TARGET" 'version=1.3.15-pre.1'
+assert_contains "$TARGET" 'version=1.3.15-pre.2'
 assert_not_contains "$TARGET" 'stale = true'
 
 cat > "$TARGET" <<'JS'
