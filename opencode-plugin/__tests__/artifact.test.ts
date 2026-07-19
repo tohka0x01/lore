@@ -7,6 +7,7 @@ import { describe, expect, it } from 'vitest';
 const root = dirname(dirname(fileURLToPath(import.meta.url)));
 const repositoryRoot = dirname(root);
 const archivePath = join(repositoryRoot, 'dist/lore-opencode.zip');
+const packageVersion = JSON.parse(readFileSync(join(root, 'package.json'), 'utf8')).version as string;
 
 function archiveEntries(): string[] {
   const output = execFileSync('unzip', ['-Z1', archivePath], { encoding: 'utf8' });
@@ -18,7 +19,7 @@ describe('OpenCode release bundle', () => {
     execFileSync('npm', ['run', 'build'], { cwd: root, stdio: 'pipe' });
     const output = readFileSync(join(root, 'dist/lore-memory.js'), 'utf8');
     expect(output).toContain('@lore-managed-opencode-plugin');
-    expect(output).toContain('version=1.3.15-pre.0');
+    expect(output).toContain(`version=${packageVersion}`);
     expect(output).not.toContain('/Users/proxy/');
     expect(output).not.toContain('LORE_API_TOKEN=');
   });
