@@ -1,8 +1,6 @@
-import readline from 'node:readline/promises';
-import { stdin as input, stdout as output } from 'node:process';
+import * as p from '@clack/prompts';
 import { ALL_CHANNELS, type ChannelId, type Lang } from '../core/types.js';
 import type { InstallSnapshot } from '../core/snapshot.js';
-import { multiSelect, selectOne, type SelectStreams } from './select.js';
 
 export type ConnectionMode = 'saas' | 'external' | 'docker';
 export type ExistingAction = 'update' | 'reconfigure' | 'manage' | 'uninstall' | 'status' | 'exit';
@@ -28,14 +26,42 @@ export type PromptService = {
 
 export type CreateTTYPromptOptions = {
   lang?: Lang;
-  io?: SelectStreams;
-  /** Inject selectors for unit tests (skip raw-mode UI). */
-  selectOne?: typeof selectOne;
-  multiSelect?: typeof multiSelect;
+  /**
+   * Test doubles — when provided, skip @clack and return these results.
+   * Production path uses @clack/prompts (arrow keys / space / enter).
+   */
+  selectOne?: <T>(opts: {
+    message: string;
+    options: Array<{ value: T; label: string; hint?: string }>;
+    initialValue?: T;
+  }) => Promise<T>;
+  multiSelect?: <T>(opts: {
+    message: string;
+    options: Array<{ value: T; label: string; hint?: string }>;
+    initialValues?: T[];
+  }) => Promise<T[]>;
+  text?: (opts: {
+    message: string;
+    placeholder?: string;
+    defaultValue?: string;
+    validate?: (value: string) => string | undefined;
+  }) => Promise<string>;
+  confirmFn?: (opts: { message: string; initialValue?: boolean }) => Promise<boolean>;
 };
 
 function q(lang: Lang, en: string, zh: string): string {
   return lang === 'zh' ? zh : en;
+}
+
+function isCancel(value: unknown): boolean {
+  return p.isCancel(value);
+}
+
+function abortOnCancel(value: unknown, lang: Lang): asserts value is Exclude<typeof value, symbol> {
+  if (isCancel(value)) {
+    p.cancel(lang === 'zh' ? '已取消。' : 'Aborted.');
+    throw new Error('Aborted');
+  }
 }
 
 export function createNullPrompt(): PromptService {
@@ -73,72 +99,90 @@ export function createNullPrompt(): PromptService {
 
 export function createTTYPrompt(opts: CreateTTYPromptOptions = {}): PromptService {
   let lang: Lang = opts.lang ?? 'en';
-  const streams: SelectStreams = opts.io ?? {
-    input: input as SelectStreams['input'],
-    output: output as SelectStreams['output'],
-  };
-  const out = streams.output;
-  const doSelectOne = opts.selectOne ?? selectOne;
-  const doMultiSelect = opts.multiSelect ?? multiSelect;
 
-  async function withRl<T>(fn: (rl: readline.Interface) => Promise<T>): Promise<T> {
-    const rl = readline.createInterface({
-      input: streams.input as typeof input,
-      output: streams.output as typeof output,
-      terminal: true,
+  async function selectOneImpl<T>(args: {
+    message: string;
+    options: Array<{ value: T; label: string; hint?: string }>;
+    initialValue?: T;
+  }): Promise<T> {
+    if (opts.selectOne) return opts.selectOne(args);
+    const value = await p.select({
+      message: args.message,
+      // clack Option typing is invariant over value; cast for generic helper
+      options: args.options as never,
+      initialValue: args.initialValue,
     });
-    try {
-      return await fn(rl);
-    } finally {
-      rl.close();
-    }
+    abortOnCancel(value, lang);
+    return value as T;
   }
 
-  async function ask(rl: readline.Interface, prompt: string, defaultValue = ''): Promise<string> {
-    const suffix = defaultValue ? ` [${defaultValue}]` : '';
-    const answer = await rl.question(`${prompt}${suffix}: `);
-    const trimmed = answer.trim();
-    return trimmed || defaultValue;
+  async function multiSelectImpl<T>(args: {
+    message: string;
+    options: Array<{ value: T; label: string; hint?: string }>;
+    initialValues?: T[];
+  }): Promise<T[]> {
+    if (opts.multiSelect) return opts.multiSelect(args);
+    const value = await p.multiselect({
+      message: args.message,
+      options: args.options as never,
+      initialValues: args.initialValues,
+      required: false,
+    });
+    abortOnCancel(value, lang);
+    return value as T[];
   }
 
-  function write(text: string) {
-    out.write(text.endsWith('\n') ? text : `${text}\n`);
+  async function textImpl(args: {
+    message: string;
+    placeholder?: string;
+    defaultValue?: string;
+    validate?: (value: string) => string | undefined;
+  }): Promise<string> {
+    if (opts.text) return opts.text(args);
+    const value = await p.text({
+      message: args.message,
+      placeholder: args.placeholder,
+      defaultValue: args.defaultValue,
+      validate: args.validate,
+    });
+    abortOnCancel(value, lang);
+    return String(value ?? '');
   }
 
-  const navHint = () =>
-    q(lang, '↑/↓ move · enter select', '↑/↓ 移动 · enter 选择');
-  const multiHint = () =>
-    q(
-      lang,
-      '↑/↓ move · space toggle · a all · n none · enter confirm',
-      '↑/↓ 移动 · 空格切换 · a 全选 · n 全不选 · enter 确认',
-    );
+  async function confirmImpl(args: { message: string; initialValue?: boolean }): Promise<boolean> {
+    if (opts.confirmFn) return opts.confirmFn(args);
+    const value = await p.confirm({
+      message: args.message,
+      initialValue: args.initialValue ?? true,
+    });
+    abortOnCancel(value, lang);
+    return Boolean(value);
+  }
 
   return {
     async pickLanguage(defaultLang) {
-      const value = await doSelectOne({
+      const value = await selectOneImpl({
         message: 'Language / 语言',
-        hint: '↑/↓ · enter',
-        initialIndex: defaultLang === 'zh' ? 1 : 0,
-        choices: [
+        initialValue: defaultLang,
+        options: [
           { value: 'en' as Lang, label: 'English' },
           { value: 'zh' as Lang, label: '中文' },
         ],
-        streams,
       });
       lang = value;
       return lang;
     },
 
     showStatus(text: string) {
-      write(`\n${text}\n`);
+      // Clack note keeps formatting without fighting the spinner/select redraw
+      p.note(text, lang === 'zh' ? '当前状态' : 'Current status');
     },
 
     async pickFirstRunAction() {
-      return doSelectOne({
+      return selectOneImpl({
         message: q(lang, 'What do you want to do?', '你要做什么？'),
-        hint: navHint(),
-        choices: [
+        initialValue: 'saas' as FirstRunAction,
+        options: [
           {
             value: 'saas' as const,
             label: q(lang, 'Connect Loremem SaaS', '连接 Loremem SaaS'),
@@ -154,15 +198,14 @@ export function createTTYPrompt(opts: CreateTTYPromptOptions = {}): PromptServic
             label: q(lang, 'Local Docker self-host', '本机 Docker 自托管'),
           },
         ],
-        streams,
       });
     },
 
     async pickExistingAction() {
-      return doSelectOne({
+      return selectOneImpl({
         message: q(lang, 'What do you want to do?', '你要做什么？'),
-        hint: navHint(),
-        choices: [
+        initialValue: 'update' as ExistingAction,
+        options: [
           {
             value: 'update' as const,
             label: q(lang, 'Update selected plugins', '更新所选插件'),
@@ -186,99 +229,88 @@ export function createTTYPrompt(opts: CreateTTYPromptOptions = {}): PromptServic
             label: q(lang, 'Status only / exit', '只看状态 / 退出'),
           },
         ],
-        streams,
       });
     },
 
     async askBaseUrl(defaultValue = 'http://127.0.0.1:18901') {
-      return withRl(async (rl) => {
-        const value = await ask(rl, q(lang, 'Server base URL', '服务地址'), defaultValue);
-        return value.replace(/\/$/, '');
+      const value = await textImpl({
+        message: q(lang, 'Server base URL', '服务地址'),
+        defaultValue,
+        placeholder: defaultValue,
+        validate: (v) => {
+          const s = (v ?? '').trim() || defaultValue;
+          if (!s) return q(lang, 'URL is required', '必须填写地址');
+          return undefined;
+        },
       });
+      return (value.trim() || defaultValue).replace(/\/$/, '');
     },
 
     async askToken(tokenOpts = {}) {
-      return withRl(async (rl) => {
-        const required = tokenOpts.required ?? false;
-        const hasExisting = tokenOpts.hasExisting ?? false;
-        const promptText = hasExisting
-          ? q(lang, 'API token (Enter keeps existing)', 'API Token（回车保留已有）')
-          : q(lang, 'API token', 'API Token');
-        for (;;) {
-          const value = await ask(rl, promptText, '');
-          if (value) return value;
-          if (!required || hasExisting) return '';
-          write(q(lang, 'Token is required for SaaS.', 'SaaS 必须填写 Token。'));
-        }
-      });
+      const required = tokenOpts.required ?? false;
+      const hasExisting = tokenOpts.hasExisting ?? false;
+      const message = hasExisting
+        ? q(lang, 'API token (Enter keeps existing)', 'API Token（回车保留已有）')
+        : q(lang, 'API token', 'API Token');
+
+      for (;;) {
+        const value = await textImpl({
+          message,
+          placeholder: hasExisting ? q(lang, 'leave empty to keep', '留空保留') : 'lm_...',
+          defaultValue: '',
+        });
+        if (value.trim()) return value.trim();
+        if (!required || hasExisting) return '';
+        p.log.error(q(lang, 'Token is required for SaaS.', 'SaaS 必须填写 Token。'));
+      }
     },
 
     async pickChannels(opts) {
-      const defaults = new Set(opts.defaults.length ? opts.defaults : [...ALL_CHANNELS]);
-      const choices = ALL_CHANNELS.map((id) => {
+      const defaults = opts.defaults.length ? opts.defaults : [...ALL_CHANNELS];
+      const options = ALL_CHANNELS.map((id) => {
         const st = opts.snapshot.channels.find((c) => c.id === id);
         const cliOn = opts.snapshot.detectedChannels.includes(id);
         return {
           value: id,
           label: id,
-          hint: `CLI:${cliOn ? 'yes' : 'no'}  ${st?.state ?? 'unknown'}`,
+          hint: `CLI:${cliOn ? 'yes' : 'no'} · ${st?.state ?? 'unknown'}`,
         };
       });
-      const initialSelected = ALL_CHANNELS.map((id) => defaults.has(id));
-      const selected = await doMultiSelect({
+      return multiSelectImpl({
         message: q(
           lang,
           `Select channels (${opts.purpose})`,
           `选择渠道（${opts.purpose === 'uninstall' ? '卸载' : '安装'}）`,
         ),
-        hint: multiHint(),
-        choices,
-        initialSelected,
-        streams,
+        options,
+        initialValues: defaults,
       });
-      return selected;
     },
 
     async pickRelease(defaultRelease = 'stable') {
-      const initial =
-        defaultRelease === 'dev' ? 2 : defaultRelease === 'pre' ? 1 : 0;
-      return doSelectOne({
+      return selectOneImpl({
         message: q(lang, 'Release channel', '发布通道'),
-        hint: navHint(),
-        initialIndex: initial,
-        choices: [
+        initialValue: defaultRelease,
+        options: [
           { value: 'stable' as const, label: 'stable' },
           { value: 'pre' as const, label: 'pre' },
           { value: 'dev' as const, label: 'dev' },
         ],
-        streams,
       });
     },
 
     async confirm(summary: string) {
-      write(`\n${summary}\n`);
-      return doSelectOne({
+      p.note(summary, lang === 'zh' ? '确认' : 'Summary');
+      return confirmImpl({
         message: q(lang, 'Proceed?', '确认开始？'),
-        hint: navHint(),
-        initialIndex: 0,
-        choices: [
-          { value: true, label: q(lang, 'Yes', '是') },
-          { value: false, label: q(lang, 'No', '否') },
-        ],
-        streams,
+        initialValue: true,
       });
     },
 
     async askYesNo(question: string, defaultYes = true) {
-      return doSelectOne({
+      return confirmImpl({
         message: question,
-        hint: navHint(),
-        initialIndex: defaultYes ? 0 : 1,
-        choices: [
-          { value: true, label: q(lang, 'Yes', '是') },
-          { value: false, label: q(lang, 'No', '否') },
-        ],
-        streams,
+        initialValue: defaultYes,
       });
     },
   };

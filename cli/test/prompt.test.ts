@@ -2,7 +2,6 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import { createTTYPrompt } from '../src/ui/prompt.ts';
 import type { InstallSnapshot } from '../src/core/snapshot.ts';
-import type { Choice } from '../src/ui/select.ts';
 
 const emptySnapshot: InstallSnapshot = {
   loreHome: '/tmp/x',
@@ -32,22 +31,16 @@ const emptySnapshot: InstallSnapshot = {
 
 test('TTY prompt pickLanguage uses selectOne', async () => {
   const prompt = createTTYPrompt({
-    lang: 'en',
-    selectOne: async <T,>(opts: { choices: Choice<T>[]; initialIndex?: number }) =>
-      opts.choices[opts.initialIndex === 1 ? 1 : 1]!.value,
+    selectOne: async (opts) => opts.options[1]!.value,
   });
-  // force choose zh by returning choices[1]
-  const lang = await createTTYPrompt({
-    selectOne: async <T,>(opts: { choices: Choice<T>[] }) => opts.choices[1]!.value,
-  }).pickLanguage('en');
+  const lang = await prompt.pickLanguage('en');
   assert.equal(lang, 'zh');
-  void prompt;
 });
 
-test('TTY prompt first-run uses selectOne first choice SaaS', async () => {
+test('TTY prompt first-run uses first option SaaS', async () => {
   const prompt = createTTYPrompt({
     lang: 'en',
-    selectOne: async <T,>(opts: { choices: Choice<T>[] }) => opts.choices[0]!.value,
+    selectOne: async (opts) => opts.options[0]!.value,
   });
   const action = await prompt.pickFirstRunAction();
   assert.equal(action, 'saas');
@@ -66,10 +59,10 @@ test('TTY prompt pickChannels uses multiSelect', async () => {
   assert.deepEqual(channels, ['pi', 'opencode']);
 });
 
-test('TTY prompt confirm false via selectOne', async () => {
+test('TTY prompt confirm false via confirmFn', async () => {
   const prompt = createTTYPrompt({
     lang: 'en',
-    selectOne: async <T,>(opts: { choices: Choice<T>[] }) => opts.choices[1]!.value,
+    confirmFn: async () => false,
   });
   const ok = await prompt.confirm('summary');
   assert.equal(ok, false);
