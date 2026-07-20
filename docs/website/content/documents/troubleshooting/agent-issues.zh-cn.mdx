@@ -22,8 +22,9 @@ Agent 问题通常是本地配置问题，而不是服务器记忆问题。
 - 如果 Boot 缺失，但工具和 prompt Recall 正常，可能是 `experimental.chat.system.transform` 不可用。这是预期的 fail-open 模式：插件只警告一次，不修改用户消息，`chat.message` Recall 仍会继续。
 - 如果所有 Lore 调用失败，检查 `~/.lore/config.json`、服务器健康、token 和网络。除了健康检查，插件 REST 请求都会标记 `client_type=opencode`。
 - 如果 `~/.config/opencode/plugins/lore-memory.js` 已有未标记文件，安装器会有意保留它。若要让 Lore 管理该路径，请自行移走旧文件后重试。
-- 如果 OpenCode 同时显示 `lore` 和 `lore:lore`、其中一个报告 SSE 错误，或者 SaaS 面板对一次 prompt 记录了多个 client type，说明其他插件导入了 Claude Code 的 Lore MCP 配置。原生插件会在 OpenCode 合并配置后抑制这些重复 Lore MCP，同时不会修改 Claude Code 或第三方配置文件。安装更新后的插件后重启 OpenCode。
-- OpenCode 标准安装不得创建 MCP entry。只有原生插件无法加载时，才使用 `/api/mcp?client_type=opencode` 作为手动兜底。若明确需要让旧版 MCP 与原生插件并存，可以设置 `LORE_OPENCODE_ALLOW_MCP=1` 后启动 OpenCode；否则保持未设置。
+- 如果 OpenCode 同时显示 `lore` 和 `lore:lore`、其中一个报告 SSE 错误，或者 SaaS 面板对一次 prompt 记录了多个 client type，说明其他插件导入了 Claude Code 的 Lore 兼容数据。原生插件会在配置合并后删除重复 Lore MCP。安装器会单独阻止更早发生的 Claude Lore 生命周期 hook 导入：仅对已有且可安全解析的用户级 `oh-my-openagent.json[c]` 或旧版 `oh-my-opencode.json[c]` 设置 `claude_code.plugins_override["lore@lore"] = false`。该修改保留无关设置和 JSONC 注释，不会修改 Claude Code 文件；若兼容配置不安全或无法解析，安装器会警告并跳过。重新安装后重启 OpenCode。
+- 卸载 OpenCode 集成会恢复 Lore 记录的 `lore@lore` 原值。如果安装后你自行修改了这个值，卸载器会保留你的新值。
+- OpenCode 标准安装不得创建 MCP entry。只有原生插件无法加载时，才使用 `/api/mcp?client_type=opencode` 作为手动兜底。若明确需要让旧版 MCP 与原生插件并存，请在运行安装器和启动 OpenCode 时都设置 `LORE_OPENCODE_ALLOW_MCP=1`；使用逃生开关重新安装会恢复原兼容值。
 
 重新安装预发布版：
 

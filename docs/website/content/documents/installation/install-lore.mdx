@@ -32,7 +32,9 @@ curl -fsSL https://raw.githubusercontent.com/FFatTiger/lore/main/scripts/install
 
 The standard OpenCode installation does not configure MCP. OpenCode receives the exact native `lore_*` tools, so generic `/api/mcp` is only a manual fallback.
 
-The native plugin also suppresses duplicate Lore MCP imports at runtime. This covers compatibility plugins that import Claude Code MCP entries such as `lore` or `lore:lore`, without modifying Claude Code or third-party configuration files. Set `LORE_OPENCODE_ALLOW_MCP=1` before starting OpenCode only when you explicitly need the legacy MCP fallback alongside the native plugin.
+The native plugin suppresses duplicate Lore MCP imports at runtime. The installer also handles an earlier lifecycle-hook duplication path used by Claude compatibility layers: if an existing user-level `oh-my-openagent.json[c]` or legacy `oh-my-opencode.json[c]` is present and can be parsed safely, it sets `claude_code.plugins_override["lore@lore"] = false`. It preserves all unrelated fields and JSONC comments, records the previous value under `~/.lore/`, and restores the previous value during OpenCode uninstall.
+
+Lore does not modify Claude Code files. The installer never creates an `oh-my-openagent` configuration file; if the existing third-party file is unsafe or unparseable, it warns and skips the compatibility edit. Run the installer with `LORE_OPENCODE_ALLOW_MCP=1` and use the same variable when starting OpenCode only when you explicitly need the legacy MCP fallback alongside the native plugin; reinstalling with the escape hatch restores any value previously changed by Lore.
 
 You can inspect `~/.lore/` after the installer finishes to see what was written.
 

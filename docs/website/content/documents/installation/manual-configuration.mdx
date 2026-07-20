@@ -253,6 +253,8 @@ Boot is injected into system context with `experimental.chat.system.transform`; 
 
 Standard OpenCode installation does not configure `/api/mcp`. If native plugin loading is impossible, generic MCP at `/api/mcp?client_type=opencode` is a manual fallback only and does not reproduce the native lifecycle behavior.
 
+Manual ZIP installation does not apply this compatibility edit: if `oh-my-openagent` or legacy `oh-my-opencode` imports Claude Code plugins, add `claude_code.plugins_override["lore@lore"] = false` to the active user-level JSON/JSONC config before restarting OpenCode. This prevents duplicate Claude Lore lifecycle hooks; the native plugin still removes duplicate Lore MCP entries at runtime. Do not change Claude Code files. If you intentionally want the legacy fallback alongside native Lore, leave that override enabled and start OpenCode with `LORE_OPENCODE_ALLOW_MCP=1`.
+
 To uninstall only the OpenCode integration, use the ownership-aware uninstaller. It removes `lore-memory.js` only when the file contains the Lore management marker and preserves unmarked plugins:
 
 ```bash

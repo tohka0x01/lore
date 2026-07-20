@@ -226,7 +226,7 @@ curl -fsSL https://raw.githubusercontent.com/FFatTiger/lore/main/scripts/install
 | **OpenCode** *（预发布）* | `~/.config/opencode/plugins/lore-memory.js` 下的原生本地插件；精确注册 `lore_guidance` 到 `lore_move_node`；system hook 注入 Boot、message hook 注入 Recall |
 | **通用 MCP** | `http://your-host:18901/api/mcp?client_type=mcp` |
 
-> **OpenCode 预发布注意：** `v1.3.15-pre.3` 已用 OpenCode 1.18.3 验证。安装器下载 `lore-opencode.zip`，把 `lore-memory.js` 安装到 `~/.config/opencode/plugins/lore-memory.js`，服务器 URL/token 读取自 `~/.lore/config.json`。Boot 只通过 `experimental.chat.system.transform` 注入；prompt Recall 通过 `chat.message` 作为当前轮独立 part 注入。实验性 system hook 或 Lore 不可用时，插件会警告并 fail open，不会阻塞会话，prompt Recall 仍会继续尝试。标准安装不配置 MCP；通用 `/api/mcp` 仅作为手动兜底。
+> **OpenCode 预发布注意：** `v1.3.15-pre.3` 已用 OpenCode 1.18.3 验证。安装器下载 `lore-opencode.zip`，把 `lore-memory.js` 安装到 `~/.config/opencode/plugins/lore-memory.js`，服务器 URL/token 读取自 `~/.lore/config.json`。Boot 只通过 `experimental.chat.system.transform` 注入；prompt Recall 通过 `chat.message` 作为当前轮独立 part 注入。实验性 system hook 或 Lore 不可用时，插件会警告并 fail open，不会阻塞会话，prompt Recall 仍会继续尝试。标准安装不配置 MCP。原生插件会在运行时删除重复 Lore MCP；若已有且可安全解析的用户级 `oh-my-openagent.json[c]` 或旧版 `oh-my-opencode.json[c]`，安装器还会设置 `claude_code.plugins_override["lore@lore"] = false`，阻止重复导入 Claude Lore 生命周期 hooks。该操作不修改 Claude Code 文件，遇到不安全兼容配置时警告并跳过，卸载时恢复原值。通用 `/api/mcp` 仅作为手动兜底；显式逃生开关为 `LORE_OPENCODE_ALLOW_MCP=1`。
 
 > **Claude Code 注意：** Claude Code 自带 auto-memory 功能，安装脚本不会关闭它。
 > 如果希望 Lore 作为唯一记忆系统，请设置 `CLAUDE_CODE_DISABLE_AUTO_MEMORY=1`

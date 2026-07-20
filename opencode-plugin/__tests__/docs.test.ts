@@ -89,7 +89,19 @@ describe('OpenCode prerelease documentation', () => {
     expect(chineseInstall).not.toContain('/api/mcp?client_type=opencode');
   });
 
-  it('documents runtime duplicate-MCP suppression without taking ownership of Claude or third-party config', () => {
+  it('documents the manual compatibility-layer step when bypassing the installer', () => {
+    const english = read('docs/website/content/documents/installation/manual-configuration.mdx');
+    const chinese = read('docs/website/content/documents/installation/manual-configuration.zh-cn.mdx');
+
+    expect(english).toContain('claude_code.plugins_override["lore@lore"] = false');
+    expect(english).toContain('Manual ZIP installation does not apply this compatibility edit');
+    expect(english).toContain('LORE_OPENCODE_ALLOW_MCP=1');
+    expect(chinese).toContain('claude_code.plugins_override["lore@lore"] = false');
+    expect(chinese).toContain('手动安装 ZIP 不会自动执行这个兼容修改');
+    expect(chinese).toContain('LORE_OPENCODE_ALLOW_MCP=1');
+  });
+
+  it('documents two-layer duplicate suppression and the reversible compatibility edit', () => {
     const english = [
       read('opencode-plugin/README.md'),
       read('docs/website/content/documents/installation/install-lore.mdx'),
@@ -103,7 +115,11 @@ describe('OpenCode prerelease documentation', () => {
     for (const required of [
       'duplicate Lore MCP',
       'LORE_OPENCODE_ALLOW_MCP=1',
-      'does not modify Claude Code or third-party configuration files',
+      'does not modify Claude Code files',
+      'existing user-level',
+      'claude_code.plugins_override["lore@lore"] = false',
+      'warns and skips',
+      'restores the previous value',
       'lore:lore',
       'multiple client types',
     ]) {
@@ -112,7 +128,11 @@ describe('OpenCode prerelease documentation', () => {
     for (const required of [
       '重复 Lore MCP',
       'LORE_OPENCODE_ALLOW_MCP=1',
-      '不会修改 Claude Code 或第三方配置文件',
+      '不会修改 Claude Code 文件',
+      '已有且可安全解析的用户级',
+      'claude_code.plugins_override["lore@lore"] = false',
+      '警告并跳过',
+      '恢复原值',
       'lore:lore',
       '多个 client type',
     ]) {
