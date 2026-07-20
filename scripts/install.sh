@@ -61,6 +61,10 @@ LORE_CONFIG_FILE="$LORE_HOME/config.json"
 LORE_DOCKER_DIR="$LORE_HOME/docker"
 REPO_RAW="https://raw.githubusercontent.com/${REPO}/main"
 LORE_INSTALL_LANG="${LORE_INSTALL_LANG:-en}"
+SCRIPT_DIR=""
+if [[ -n "${BASH_SOURCE[0]:-}" && -f "${BASH_SOURCE[0]}" && ! -L "${BASH_SOURCE[0]}" ]]; then
+  SCRIPT_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd -P)
+fi
 
 # ---- Colors ----
 
@@ -859,6 +863,71 @@ install_pi() {
 
 # ---- Channel: OpenCode ----
 
+resolve_opencode_compat_helper() {
+  local candidate=""
+  if [[ -n "$SCRIPT_DIR" ]]; then
+    candidate="$SCRIPT_DIR/opencode-compat.py"
+    if [[ -f "$candidate" && ! -L "$candidate" ]]; then
+      printf '%s\n' "$candidate"
+      return 0
+    fi
+  fi
+
+  candidate="$LORE_HOME/opencode-compat.py"
+  if [[ -f "$candidate" && ! -L "$candidate" ]]; then
+    printf '%s\n' "$candidate"
+    return 0
+  fi
+
+  local release_ref="${RELEASE_VERSION:-main}"
+  [[ "$release_ref" == "dev" ]] && release_ref="main"
+  local helper_tmp="${TMPDIR:-/tmp}/lore-opencode-compat.$$.py"
+  if curl -fsSL "https://raw.githubusercontent.com/${REPO}/${release_ref}/scripts/opencode-compat.py" -o "$helper_tmp" 2>/dev/null; then
+    chmod 0600 "$helper_tmp"
+    printf '%s\n' "$helper_tmp"
+    return 0
+  fi
+  rm -f "$helper_tmp"
+  return 1
+}
+
+configure_opencode_compatibility() {
+  if ! have_command python3; then
+    warn "python3 not found; cannot patch existing oh-my-openagent compatibility config."
+    return
+  fi
+
+  local helper
+  if ! helper=$(resolve_opencode_compat_helper); then
+    warn "Could not load the OpenCode compatibility helper; Claude Lore hooks may be imported twice."
+    return
+  fi
+
+  local helper_output
+  helper_output=$(python3 "$helper" install --home "$HOME" --lore-home "$LORE_HOME" 2>&1) || {
+    warn "Could not safely apply the oh-my-openagent compatibility patch."
+    [[ "$helper" == "${TMPDIR:-/tmp}/lore-opencode-compat.$$.py" ]] && rm -f "$helper"
+    return
+  }
+  if [[ -n "$helper_output" ]]; then
+    while IFS= read -r line; do
+      if [[ "$line" == WARNING:* ]]; then warn "${line#WARNING: }"; else info "$line"; fi
+    done <<< "$helper_output"
+  fi
+
+  if [[ -f "$LORE_HOME/opencode-compat.json" ]]; then
+    local managed_helper="$LORE_HOME/opencode-compat.py"
+    local managed_tmp="${managed_helper}.tmp.$$"
+    cp "$helper" "$managed_tmp"
+    chmod 0600 "$managed_tmp"
+    mv "$managed_tmp" "$managed_helper"
+  else
+    rm -f "$LORE_HOME/opencode-compat.py"
+  fi
+  [[ "$helper" == "${TMPDIR:-/tmp}/lore-opencode-compat.$$.py" ]] && rm -f "$helper"
+  return 0
+}
+
 install_opencode() {
   section "OpenCode"
 
@@ -883,6 +952,8 @@ install_opencode() {
   cp "$source" "$target_tmp"
   chmod 0644 "$target_tmp"
   mv "$target_tmp" "$target"
+
+  configure_opencode_compatibility
 
   local installed_version
   installed_version=$(grep -oE '@lore-managed-opencode-plugin version=[^ ]+' "$target" 2>/dev/null | head -n 1 | cut -d= -f2 || true)

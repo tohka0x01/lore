@@ -46,6 +46,10 @@ done
 ALL_CHANNELS=(claudecode codex pi openclaw hermes opencode)
 LORE_HOME="${LORE_HOME:-$HOME/.lore}"
 LORE_CONFIG_FILE="$LORE_HOME/config.json"
+SCRIPT_DIR=""
+if [[ -n "${BASH_SOURCE[0]:-}" && -f "${BASH_SOURCE[0]}" && ! -L "${BASH_SOURCE[0]}" ]]; then
+  SCRIPT_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd -P)
+fi
 
 # ---- Colors ----
 
@@ -268,6 +272,51 @@ uninstall_pi() {
 
 # ---- Uninstall: OpenCode ----
 
+resolve_opencode_compat_helper() {
+  local candidate=""
+  if [[ -n "$SCRIPT_DIR" ]]; then
+    candidate="$SCRIPT_DIR/opencode-compat.py"
+    if [[ -f "$candidate" && ! -L "$candidate" ]]; then
+      printf '%s\n' "$candidate"
+      return 0
+    fi
+  fi
+  candidate="$LORE_HOME/opencode-compat.py"
+  if [[ -f "$candidate" && ! -L "$candidate" ]]; then
+    printf '%s\n' "$candidate"
+    return 0
+  fi
+  return 1
+}
+
+restore_opencode_compatibility() {
+  local state="$LORE_HOME/opencode-compat.json"
+  [[ -f "$state" ]] || return 0
+  if ! have_command python3; then
+    warn "python3 not found; preserving OpenCode compatibility rollback state."
+    return
+  fi
+  local helper
+  if ! helper=$(resolve_opencode_compat_helper); then
+    warn "OpenCode compatibility helper not found; preserving rollback state."
+    return
+  fi
+  local helper_output
+  helper_output=$(python3 "$helper" uninstall --home "$HOME" --lore-home "$LORE_HOME" 2>&1) || {
+    warn "Could not safely restore the oh-my-openagent compatibility setting."
+    return
+  }
+  if [[ -n "$helper_output" ]]; then
+    while IFS= read -r line; do
+      if [[ "$line" == WARNING:* ]]; then warn "${line#WARNING: }"; else info "$line"; fi
+    done <<< "$helper_output"
+  fi
+  if [[ ! -f "$state" ]]; then
+    rm -f "$LORE_HOME/opencode-compat.py"
+  fi
+  return 0
+}
+
 uninstall_opencode() {
   section "OpenCode"
 
@@ -282,6 +331,8 @@ uninstall_opencode() {
   else
     info "OpenCode Lore plugin not found."
   fi
+
+  restore_opencode_compatibility
 
   local opencode_dir="$LORE_HOME/opencode"
   [[ -d "$opencode_dir" ]] && { rm -rf "$opencode_dir"; ok "Removed $opencode_dir"; }

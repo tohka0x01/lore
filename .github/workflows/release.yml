@@ -154,6 +154,9 @@ jobs:
           npm test
           npm run typecheck
           cd ..
+          bash scripts/__tests__/opencode-install.test.sh
+          bash scripts/__tests__/opencode-uninstall.test.sh
+          python3 -m py_compile scripts/opencode-compat.py
           bash scripts/build-opencode-artifact.sh
 
       - name: Upload artifacts to release

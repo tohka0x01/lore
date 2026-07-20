@@ -16,6 +16,9 @@ grep -Fq 'cd opencode-plugin' "$WORKFLOW" || fail 'OpenCode package directory mi
 grep -Fq 'npm ci' "$WORKFLOW" || fail 'OpenCode npm ci missing'
 grep -Fq 'npm test' "$WORKFLOW" || fail 'OpenCode tests missing'
 grep -Fq 'npm run typecheck' "$WORKFLOW" || fail 'OpenCode typecheck missing'
+grep -Fq 'bash scripts/__tests__/opencode-install.test.sh' "$WORKFLOW" || fail 'OpenCode installer compatibility tests missing'
+grep -Fq 'bash scripts/__tests__/opencode-uninstall.test.sh' "$WORKFLOW" || fail 'OpenCode uninstaller compatibility tests missing'
+grep -Fq 'python3 -m py_compile scripts/opencode-compat.py' "$WORKFLOW" || fail 'OpenCode compatibility helper syntax check missing'
 grep -Fq 'bash scripts/build-opencode-artifact.sh' "$WORKFLOW" || fail 'OpenCode artifact builder missing'
 grep -Fq 'for f in dist/lore-*.zip' "$WORKFLOW" || fail 'release upload loop missing'
 
