@@ -53,31 +53,29 @@ function q(lang: Lang, en: string, zh: string): string {
   return lang === 'zh' ? zh : en;
 }
 
-/** Keybinding hints shown on every interactive step. */
+/** Compact same-line keybinding hints (keep short so the left bar stays clean). */
 function keysSelect(lang: Lang): string {
-  return q(lang, '↑/↓ move · enter confirm', '↑/↓ 选择 · enter 确认');
+  return q(lang, '↑/↓  enter', '↑/↓  enter');
 }
 
 function keysMulti(lang: Lang): string {
-  return q(
-    lang,
-    '↑/↓ move · space toggle · a all · n none · enter confirm',
-    '↑/↓ 移动 · space 勾选 · a 全选 · n 清空 · enter 确认',
-  );
+  return q(lang, '↑/↓  space  a/n  enter', '↑/↓  space  a/n  enter');
 }
 
 function keysConfirm(lang: Lang): string {
-  return q(lang, '←/→ or ↑/↓ toggle · enter confirm', '←/→ 或 ↑/↓ 切换 · enter 确认');
+  return q(lang, '←/→  enter', '←/→  enter');
 }
 
 function keysText(lang: Lang): string {
-  return q(lang, 'type value · enter confirm',
-    '输入内容 · enter 确认');
+  return q(lang, 'type  enter', '输入  enter');
 }
 
+/**
+ * Keep key hints on the same line as the title.
+ * A newline breaks @clack's left bar and looks like duplicated/glitched chrome.
+ */
 function withKeys(message: string, keys: string): string {
-  return `${message}
-${keys}`;
+  return `${message}  ·  ${keys}`;
 }
 
 function isCancel(value: unknown): boolean {
@@ -202,7 +200,7 @@ export function createTTYPrompt(opts: CreateTTYPromptOptions = {}): PromptServic
     async pickLanguage(defaultLang) {
       const value = await selectOneImpl({
         message: 'Language / 语言',
-        keys: '↑/↓ move · enter confirm  |  ↑/↓ 选择 · enter 确认',
+        keys: '↑/↓ · enter  |  ↑/↓ · enter',
         initialValue: defaultLang,
         options: [
           { value: 'en' as Lang, label: 'English' },
