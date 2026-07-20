@@ -166,5 +166,5 @@ jobs:
         run: |
           TAG="${{ needs.tags.outputs.version_tag }}"
           for f in dist/lore-*.zip; do
-            gh release upload "v${TAG}" "$f" --clobber
+            gh release upload "v${TAG}" "$f"
           done

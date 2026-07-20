@@ -21,6 +21,9 @@ grep -Fq 'bash scripts/__tests__/opencode-uninstall.test.sh' "$WORKFLOW" || fail
 grep -Fq 'python3 -m py_compile scripts/opencode-compat.py' "$WORKFLOW" || fail 'OpenCode compatibility helper syntax check missing'
 grep -Fq 'bash scripts/build-opencode-artifact.sh' "$WORKFLOW" || fail 'OpenCode artifact builder missing'
 grep -Fq 'for f in dist/lore-*.zip' "$WORKFLOW" || fail 'release upload loop missing'
+if grep -Fq -- '--clobber' "$WORKFLOW"; then
+  fail 'release workflow must not overwrite immutable assets'
+fi
 
 BUILD_LINE=$(grep -n 'name: Build OpenCode artifact' "$WORKFLOW" | cut -d: -f1)
 UPLOAD_LINE=$(grep -n 'name: Upload artifacts to release' "$WORKFLOW" | cut -d: -f1)
