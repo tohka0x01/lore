@@ -1,24 +1,8 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { PassThrough } from 'node:stream';
 import { createTTYPrompt } from '../src/ui/prompt.ts';
 import type { InstallSnapshot } from '../src/core/snapshot.ts';
-
-function mockIO(answers: string[]) {
-  const input = new PassThrough();
-  const output = new PassThrough();
-  let i = 0;
-  const pushNext = () => {
-    if (i < answers.length) {
-      input.write(`${answers[i++]}\n`);
-    }
-  };
-  output.on('data', () => {
-    setImmediate(pushNext);
-  });
-  setImmediate(pushNext);
-  return { input, output };
-}
+import type { Choice } from '../src/ui/select.ts';
 
 const emptySnapshot: InstallSnapshot = {
   loreHome: '/tmp/x',
@@ -46,23 +30,34 @@ const emptySnapshot: InstallSnapshot = {
   detectedChannels: ['claudecode', 'pi'],
 };
 
-test('TTY prompt pickLanguage zh on 2', async () => {
-  const io = mockIO(['2']);
-  const prompt = createTTYPrompt({ lang: 'en', io });
-  const lang = await prompt.pickLanguage('en');
+test('TTY prompt pickLanguage uses selectOne', async () => {
+  const prompt = createTTYPrompt({
+    lang: 'en',
+    selectOne: async <T,>(opts: { choices: Choice<T>[]; initialIndex?: number }) =>
+      opts.choices[opts.initialIndex === 1 ? 1 : 1]!.value,
+  });
+  // force choose zh by returning choices[1]
+  const lang = await createTTYPrompt({
+    selectOne: async <T,>(opts: { choices: Choice<T>[] }) => opts.choices[1]!.value,
+  }).pickLanguage('en');
   assert.equal(lang, 'zh');
+  void prompt;
 });
 
-test('TTY prompt first-run SaaS is option 1', async () => {
-  const io = mockIO(['1']);
-  const prompt = createTTYPrompt({ lang: 'en', io });
+test('TTY prompt first-run uses selectOne first choice SaaS', async () => {
+  const prompt = createTTYPrompt({
+    lang: 'en',
+    selectOne: async <T,>(opts: { choices: Choice<T>[] }) => opts.choices[0]!.value,
+  });
   const action = await prompt.pickFirstRunAction();
   assert.equal(action, 'saas');
 });
 
-test('TTY prompt pickChannels parses list', async () => {
-  const io = mockIO(['pi,opencode']);
-  const prompt = createTTYPrompt({ lang: 'en', io });
+test('TTY prompt pickChannels uses multiSelect', async () => {
+  const prompt = createTTYPrompt({
+    lang: 'en',
+    multiSelect: async () => ['pi', 'opencode'] as never,
+  });
   const channels = await prompt.pickChannels({
     defaults: ['pi'],
     snapshot: emptySnapshot,
@@ -71,9 +66,11 @@ test('TTY prompt pickChannels parses list', async () => {
   assert.deepEqual(channels, ['pi', 'opencode']);
 });
 
-test('TTY prompt confirm no aborts', async () => {
-  const io = mockIO(['n']);
-  const prompt = createTTYPrompt({ lang: 'en', io });
+test('TTY prompt confirm false via selectOne', async () => {
+  const prompt = createTTYPrompt({
+    lang: 'en',
+    selectOne: async <T,>(opts: { choices: Choice<T>[] }) => opts.choices[1]!.value,
+  });
   const ok = await prompt.confirm('summary');
   assert.equal(ok, false);
 });

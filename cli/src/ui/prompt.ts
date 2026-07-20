@@ -2,6 +2,7 @@ import readline from 'node:readline/promises';
 import { stdin as input, stdout as output } from 'node:process';
 import { ALL_CHANNELS, type ChannelId, type Lang } from '../core/types.js';
 import type { InstallSnapshot } from '../core/snapshot.js';
+import { multiSelect, selectOne, type SelectStreams } from './select.js';
 
 export type ConnectionMode = 'saas' | 'external' | 'docker';
 export type ExistingAction = 'update' | 'reconfigure' | 'manage' | 'uninstall' | 'status' | 'exit';
@@ -27,7 +28,10 @@ export type PromptService = {
 
 export type CreateTTYPromptOptions = {
   lang?: Lang;
-  io?: { input: NodeJS.ReadableStream; output: NodeJS.WritableStream };
+  io?: SelectStreams;
+  /** Inject selectors for unit tests (skip raw-mode UI). */
+  selectOne?: typeof selectOne;
+  multiSelect?: typeof multiSelect;
 };
 
 function q(lang: Lang, en: string, zh: string): string {
@@ -69,13 +73,18 @@ export function createNullPrompt(): PromptService {
 
 export function createTTYPrompt(opts: CreateTTYPromptOptions = {}): PromptService {
   let lang: Lang = opts.lang ?? 'en';
-  const io = opts.io ?? { input, output };
-  const out = io.output;
+  const streams: SelectStreams = opts.io ?? {
+    input: input as SelectStreams['input'],
+    output: output as SelectStreams['output'],
+  };
+  const out = streams.output;
+  const doSelectOne = opts.selectOne ?? selectOne;
+  const doMultiSelect = opts.multiSelect ?? multiSelect;
 
   async function withRl<T>(fn: (rl: readline.Interface) => Promise<T>): Promise<T> {
     const rl = readline.createInterface({
-      input: io.input as typeof input,
-      output: io.output as typeof output,
+      input: streams.input as typeof input,
+      output: streams.output as typeof output,
       terminal: true,
     });
     try {
@@ -96,14 +105,29 @@ export function createTTYPrompt(opts: CreateTTYPromptOptions = {}): PromptServic
     out.write(text.endsWith('\n') ? text : `${text}\n`);
   }
 
+  const navHint = () =>
+    q(lang, '↑/↓ move · enter select', '↑/↓ 移动 · enter 选择');
+  const multiHint = () =>
+    q(
+      lang,
+      '↑/↓ move · space toggle · a all · n none · enter confirm',
+      '↑/↓ 移动 · 空格切换 · a 全选 · n 全不选 · enter 确认',
+    );
+
   return {
     async pickLanguage(defaultLang) {
-      return withRl(async (rl) => {
-        write('\nLanguage / 语言\n  1) English\n  2) 中文\n');
-        const answer = await ask(rl, 'Choose 1 or 2 / 选择 1 或 2', defaultLang === 'zh' ? '2' : '1');
-        lang = answer.startsWith('2') || answer.toLowerCase() === 'zh' ? 'zh' : 'en';
-        return lang;
+      const value = await doSelectOne({
+        message: 'Language / 语言',
+        hint: '↑/↓ · enter',
+        initialIndex: defaultLang === 'zh' ? 1 : 0,
+        choices: [
+          { value: 'en' as Lang, label: 'English' },
+          { value: 'zh' as Lang, label: '中文' },
+        ],
+        streams,
       });
+      lang = value;
+      return lang;
     },
 
     showStatus(text: string) {
@@ -111,36 +135,58 @@ export function createTTYPrompt(opts: CreateTTYPromptOptions = {}): PromptServic
     },
 
     async pickFirstRunAction() {
-      return withRl(async (rl) => {
-        write(
-          q(
-            lang,
-            '\nWhat do you want to do?\n  1) Connect Loremem SaaS (token only)\n  2) Connect external server (URL + token)\n  3) Local Docker self-host\n',
-            '\n你要做什么？\n  1) 连接 Loremem SaaS（只填 Token）\n  2) 连接外部服务（地址 + Token）\n  3) 本机 Docker 自托管\n',
-          ),
-        );
-        const answer = await ask(rl, q(lang, 'Choose 1/2/3', '选择 1/2/3'), '1');
-        if (answer.startsWith('3')) return 'docker';
-        if (answer.startsWith('2')) return 'external';
-        return 'saas';
+      return doSelectOne({
+        message: q(lang, 'What do you want to do?', '你要做什么？'),
+        hint: navHint(),
+        choices: [
+          {
+            value: 'saas' as const,
+            label: q(lang, 'Connect Loremem SaaS', '连接 Loremem SaaS'),
+            hint: q(lang, 'token only', '只填 Token'),
+          },
+          {
+            value: 'external' as const,
+            label: q(lang, 'Connect external server', '连接外部服务'),
+            hint: q(lang, 'URL + token', '地址 + Token'),
+          },
+          {
+            value: 'docker' as const,
+            label: q(lang, 'Local Docker self-host', '本机 Docker 自托管'),
+          },
+        ],
+        streams,
       });
     },
 
     async pickExistingAction() {
-      return withRl(async (rl) => {
-        write(
-          q(
-            lang,
-            '\nWhat do you want to do?\n  1) Update selected plugins (keep server/token)\n  2) Reconfigure connection (SaaS / external / Docker)\n  3) Manage plugins only\n  4) Uninstall plugins\n  5) Status only / exit\n',
-            '\n你要做什么？\n  1) 更新所选插件（保留服务与 Token）\n  2) 重新配置连接（SaaS / 外部 / Docker）\n  3) 仅管理插件\n  4) 卸载插件\n  5) 只看状态 / 退出\n',
-          ),
-        );
-        const answer = await ask(rl, q(lang, 'Choose 1-5', '选择 1-5'), '1');
-        if (answer.startsWith('2')) return 'reconfigure';
-        if (answer.startsWith('3')) return 'manage';
-        if (answer.startsWith('4')) return 'uninstall';
-        if (answer.startsWith('5')) return 'status';
-        return 'update';
+      return doSelectOne({
+        message: q(lang, 'What do you want to do?', '你要做什么？'),
+        hint: navHint(),
+        choices: [
+          {
+            value: 'update' as const,
+            label: q(lang, 'Update selected plugins', '更新所选插件'),
+            hint: q(lang, 'keep server/token', '保留服务与 Token'),
+          },
+          {
+            value: 'reconfigure' as const,
+            label: q(lang, 'Reconfigure connection', '重新配置连接'),
+            hint: 'SaaS / external / Docker',
+          },
+          {
+            value: 'manage' as const,
+            label: q(lang, 'Manage plugins only', '仅管理插件'),
+          },
+          {
+            value: 'uninstall' as const,
+            label: q(lang, 'Uninstall plugins', '卸载插件'),
+          },
+          {
+            value: 'status' as const,
+            label: q(lang, 'Status only / exit', '只看状态 / 退出'),
+          },
+        ],
+        streams,
       });
     },
 
@@ -156,13 +202,8 @@ export function createTTYPrompt(opts: CreateTTYPromptOptions = {}): PromptServic
         const required = tokenOpts.required ?? false;
         const hasExisting = tokenOpts.hasExisting ?? false;
         const promptText = hasExisting
-          ? q(
-              lang,
-              'API token (Enter keeps existing)',
-              'API Token（回车保留已有）',
-            )
+          ? q(lang, 'API token (Enter keeps existing)', 'API Token（回车保留已有）')
           : q(lang, 'API token', 'API Token');
-        // loop until provided when required and no existing
         for (;;) {
           const value = await ask(rl, promptText, '');
           if (value) return value;
@@ -173,68 +214,71 @@ export function createTTYPrompt(opts: CreateTTYPromptOptions = {}): PromptServic
     },
 
     async pickChannels(opts) {
-      return withRl(async (rl) => {
-        const defaults = opts.defaults.length ? opts.defaults : [...ALL_CHANNELS];
-        write(
-          q(
-            lang,
-            `\nSelect channels (comma-separated). Purpose: ${opts.purpose}\n  all = every channel, none = empty\n`,
-            `\n选择渠道（逗号分隔）。用途：${opts.purpose === 'uninstall' ? '卸载' : '安装'}\n  all = 全部，none = 空\n`,
-          ),
-        );
-        for (const id of ALL_CHANNELS) {
-          const st = opts.snapshot.channels.find((c) => c.id === id);
-          const cliOn = opts.snapshot.detectedChannels.includes(id);
-          write(
-            `  ${id.padEnd(12)} CLI:${cliOn ? 'yes' : 'no'.padEnd(3)}  state:${st?.state ?? 'unknown'}`,
-          );
-        }
-        write(q(lang, `Default: ${defaults.join(',')}`, `默认：${defaults.join(',')}`));
-        const answer = await ask(rl, q(lang, 'Channels', '渠道'), defaults.join(','));
-        const normalized = answer.trim().toLowerCase();
-        if (normalized === 'all') return [...ALL_CHANNELS];
-        if (normalized === 'none' || normalized === '') return [];
-        const parts = answer
-          .split(',')
-          .map((s) => s.trim())
-          .filter(Boolean) as ChannelId[];
-        const valid = parts.filter((p) => ALL_CHANNELS.includes(p));
-        return valid.length ? valid : defaults;
+      const defaults = new Set(opts.defaults.length ? opts.defaults : [...ALL_CHANNELS]);
+      const choices = ALL_CHANNELS.map((id) => {
+        const st = opts.snapshot.channels.find((c) => c.id === id);
+        const cliOn = opts.snapshot.detectedChannels.includes(id);
+        return {
+          value: id,
+          label: id,
+          hint: `CLI:${cliOn ? 'yes' : 'no'}  ${st?.state ?? 'unknown'}`,
+        };
       });
+      const initialSelected = ALL_CHANNELS.map((id) => defaults.has(id));
+      const selected = await doMultiSelect({
+        message: q(
+          lang,
+          `Select channels (${opts.purpose})`,
+          `选择渠道（${opts.purpose === 'uninstall' ? '卸载' : '安装'}）`,
+        ),
+        hint: multiHint(),
+        choices,
+        initialSelected,
+        streams,
+      });
+      return selected;
     },
 
     async pickRelease(defaultRelease = 'stable') {
-      return withRl(async (rl) => {
-        write(
-          q(
-            lang,
-            '\nRelease channel:\n  1) stable\n  2) pre\n  3) dev\n',
-            '\n发布通道：\n  1) stable\n  2) pre\n  3) dev\n',
-          ),
-        );
-        const def =
-          defaultRelease === 'dev' ? '3' : defaultRelease === 'pre' ? '2' : '1';
-        const answer = await ask(rl, q(lang, 'Choose 1/2/3', '选择 1/2/3'), def);
-        if (answer.startsWith('3') || answer === 'dev') return 'dev';
-        if (answer.startsWith('2') || answer === 'pre') return 'pre';
-        return 'stable';
+      const initial =
+        defaultRelease === 'dev' ? 2 : defaultRelease === 'pre' ? 1 : 0;
+      return doSelectOne({
+        message: q(lang, 'Release channel', '发布通道'),
+        hint: navHint(),
+        initialIndex: initial,
+        choices: [
+          { value: 'stable' as const, label: 'stable' },
+          { value: 'pre' as const, label: 'pre' },
+          { value: 'dev' as const, label: 'dev' },
+        ],
+        streams,
       });
     },
 
     async confirm(summary: string) {
-      return withRl(async (rl) => {
-        write(`\n${summary}\n`);
-        const answer = await ask(rl, q(lang, 'Proceed? [Y/n]', '确认开始？[Y/n]'), 'Y');
-        return !/^n(o)?$/i.test(answer.trim());
+      write(`\n${summary}\n`);
+      return doSelectOne({
+        message: q(lang, 'Proceed?', '确认开始？'),
+        hint: navHint(),
+        initialIndex: 0,
+        choices: [
+          { value: true, label: q(lang, 'Yes', '是') },
+          { value: false, label: q(lang, 'No', '否') },
+        ],
+        streams,
       });
     },
 
     async askYesNo(question: string, defaultYes = true) {
-      return withRl(async (rl) => {
-        const def = defaultYes ? 'Y/n' : 'y/N';
-        const answer = await ask(rl, `${question} [${def}]`, defaultYes ? 'Y' : 'N');
-        if (!answer) return defaultYes;
-        return /^y(es)?$/i.test(answer.trim());
+      return doSelectOne({
+        message: question,
+        hint: navHint(),
+        initialIndex: defaultYes ? 0 : 1,
+        choices: [
+          { value: true, label: q(lang, 'Yes', '是') },
+          { value: false, label: q(lang, 'No', '否') },
+        ],
+        streams,
       });
     },
   };
