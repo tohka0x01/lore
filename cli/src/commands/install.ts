@@ -5,12 +5,15 @@ import { readConfig, writeConfig } from '../core/config.js';
 import { ensureDockerServer } from '../core/docker.js';
 import { fetchReleaseTag, resolveNeedInstall } from '../core/release.js';
 import { createExec, type ExecFn } from '../core/exec.js';
-import { detectAgents } from '../core/detect.js';
 import { getInstaller } from '../channels/registry.js';
+import { collectInstallSnapshot } from '../core/snapshot.js';
 import { createLogger } from '../ui/log.js';
 import { banner } from '../ui/banner.js';
 import { t } from '../ui/i18n.js';
 import { createTTYPrompt, type PromptService } from '../ui/prompt.js';
+import { runInteractiveWizard, type InstallPlan } from '../ui/wizard.js';
+import { runUninstall } from './uninstall.js';
+import { runStatus } from './status.js';
 
 export type InstallDeps = {
   env?: NodeJS.ProcessEnv;
@@ -32,28 +35,9 @@ function resolveChannels(args: GlobalArgs): ChannelId[] {
   return args.channels?.length ? args.channels : [...ALL_CHANNELS];
 }
 
-function detectedChannelIds(agents: Awaited<ReturnType<typeof detectAgents>>): ChannelId[] {
-  const map: Array<[ChannelId, boolean]> = [
-    ['claudecode', agents.claude],
-    ['codex', agents.codex],
-    ['pi', agents.pi],
-    ['openclaw', agents.openclaw],
-    ['opencode', agents.opencode],
-    // hermes has no reliable CLI probe in detectAgents (often absent); still optional
-    ['hermes', agents.hermes],
-  ];
-  return map.filter(([, on]) => on).map(([id]) => id);
-}
-
-/**
- * When should we open the interactive wizard?
- * - bare `npx @loremem/cli` (interactiveDefault)
- * - or TTY install without enough non-interactive intent flags
- */
 function shouldPrompt(args: GlobalArgs, isTTY: boolean): boolean {
   if (!isTTY) return false;
   if (args.interactiveDefault) return true;
-  // install with no explicit base-url/channels/pre/dev/skip-docker/force/token → guide user
   if (
     args.command === 'install' &&
     !args.explicitBaseUrl &&
@@ -69,109 +53,62 @@ function shouldPrompt(args: GlobalArgs, isTTY: boolean): boolean {
   return false;
 }
 
-export async function runInstall(args: GlobalArgs, deps: InstallDeps = {}): Promise<number> {
-  const env = deps.env ?? process.env;
-  const run = deps.run ?? createExec();
-  const fetchImpl = deps.fetchImpl ?? fetch;
-  const isTTY = deps.isTTY ?? Boolean(process.stdin.isTTY && process.stdout.isTTY);
-  const log = deps.log ?? createLogger();
-  let lang = resolveLang(args, env);
-  const loreHome = getLoreHome(env);
-  const configPath = getConfigPath(loreHome);
-
-  if (!isTTY && args.interactiveDefault) {
-    console.error('Interactive install requires a TTY. Pass flags (e.g. --base-url, --channels).');
-    return 2;
-  }
-
-  let baseUrl = args.baseUrl;
-  let apiToken = args.apiToken;
-  let channels = resolveChannels(args);
-  let pre = args.pre;
-  let dev = args.dev;
-  let skipDocker = args.skipDocker;
-  let explicitBaseUrl = args.explicitBaseUrl;
-  let force = args.force;
-
+async function executeInstallPlan(
+  plan: {
+    lang: Lang;
+    baseUrl?: string;
+    apiToken?: string;
+    channels: ChannelId[];
+    pre: boolean;
+    dev: boolean;
+    force: boolean;
+    skipDocker: boolean;
+    explicitBaseUrl: boolean;
+  },
+  deps: {
+    env: NodeJS.ProcessEnv;
+    run: ExecFn;
+    fetchImpl: typeof fetch;
+    log: ReturnType<typeof createLogger>;
+    loreHome: string;
+    configPath: string;
+  },
+): Promise<number> {
+  const { env, run, fetchImpl, log, loreHome, configPath } = deps;
   const saved = await readConfig(configPath);
-  if (!apiToken && !args.explicitApiToken) apiToken = saved.api_token;
-
-  if (shouldPrompt(args, isTTY)) {
-    const prompt = deps.prompt === null ? null : (deps.prompt ?? createTTYPrompt({ lang }));
-    if (prompt) {
-      banner(lang);
-      const agents = await detectAgents();
-      const detected = detectedChannelIds(agents);
-      log.info(
-        lang === 'zh'
-          ? `检测到 CLI：${Object.entries(agents)
-              .filter(([, v]) => v)
-              .map(([k]) => k)
-              .join(', ') || '无'}`
-          : `Detected CLIs: ${Object.entries(agents)
-              .filter(([, v]) => v)
-              .map(([k]) => k)
-              .join(', ') || 'none'}`,
-      );
-
-      const mode = await prompt.selectMode();
-      if (mode === 'external') {
-        baseUrl = await prompt.askBaseUrl(baseUrl || saved.base_url || 'https://api.loremem.com');
-        const tokenIn = await prompt.askToken();
-        if (tokenIn) apiToken = tokenIn;
-        skipDocker = true;
-        explicitBaseUrl = true;
-      } else {
-        // local docker path — may still reuse saved external if config says so inside docker module
-        const release = await prompt.pickRelease();
-        pre = release === 'pre';
-        dev = release === 'dev';
-        // if user already has external config, still allow docker managed update only when docker_managed
-        if (saved.base_url && !saved.docker_managed && !args.force) {
-          // keep going; ensureDockerServer will use saved external unless skipDocker false and no explicit
-        }
-      }
-
-      channels = await prompt.pickChannels(detected.length ? detected : [...ALL_CHANNELS]);
-      if (!channels.length) channels = [...ALL_CHANNELS];
-
-      const summary =
-        lang === 'zh'
-          ? `将执行安装\n  服务: ${baseUrl ?? '(本机 Docker / 已保存配置)'}\n  渠道: ${channels.join(', ')}\n  通道: ${dev ? 'dev' : pre ? 'pre' : 'stable'}\n  token: ${apiToken ? '已设置' : '未设置'}`
-          : `About to install\n  server: ${baseUrl ?? '(local Docker / saved config)'}\n  channels: ${channels.join(', ')}\n  release: ${dev ? 'dev' : pre ? 'pre' : 'stable'}\n  token: ${apiToken ? 'set' : 'absent'}`;
-
-      const ok = await prompt.confirm(summary);
-      if (!ok) {
-        log.err(lang === 'zh' ? '已取消。' : 'Aborted.');
-        return 1;
-      }
-    }
-  }
+  let apiToken = plan.apiToken;
+  if (!apiToken) apiToken = saved.api_token;
 
   const docker = await ensureDockerServer({
     loreHome,
-    explicitBaseUrl: explicitBaseUrl ? baseUrl : undefined,
-    skipDocker,
-    pre,
-    dev,
+    explicitBaseUrl: plan.explicitBaseUrl ? plan.baseUrl : undefined,
+    skipDocker: plan.skipDocker,
+    pre: plan.pre,
+    dev: plan.dev,
     saved,
     run,
     fetchImpl,
   });
 
-  const resolvedBase = (docker.baseUrl || baseUrl || saved.base_url || 'http://127.0.0.1:18901').replace(
-    /\/$/,
-    '',
-  );
+  const resolvedBase = (
+    docker.baseUrl ||
+    plan.baseUrl ||
+    saved.base_url ||
+    'http://127.0.0.1:18901'
+  ).replace(/\/$/, '');
 
-  const releaseInfo = await fetchReleaseTag({ pre, dev, fetchImpl });
+  const releaseInfo = await fetchReleaseTag({
+    pre: plan.pre,
+    dev: plan.dev,
+    fetchImpl,
+  });
   let needInstall: NeedInstall = releaseInfo.needInstallHint;
   let releaseVersion = releaseInfo.tag ?? undefined;
   if (releaseVersion) {
     needInstall = resolveNeedInstall({
       installed: saved.installed_version,
       release: releaseVersion,
-      force,
+      force: plan.force,
     });
   } else if (releaseInfo.needInstallHint === 1) {
     needInstall = 1;
@@ -187,10 +124,12 @@ export async function runInstall(args: GlobalArgs, deps: InstallDeps = {}): Prom
   );
 
   log.info(`Server: ${resolvedBase}`);
-  log.info(`Channels: ${channels.join(',')} (${dev ? 'dev' : pre ? 'pre-release' : 'stable'})`);
+  log.info(
+    `Channels: ${plan.channels.join(',')} (${plan.dev ? 'dev' : plan.pre ? 'pre-release' : 'stable'})`,
+  );
 
   const results: ChannelResult[] = [];
-  for (const id of channels) {
+  for (const id of plan.channels) {
     log.section(id);
     try {
       const installer = getInstaller(id);
@@ -200,8 +139,8 @@ export async function runInstall(args: GlobalArgs, deps: InstallDeps = {}): Prom
         apiToken,
         releaseVersion,
         needInstall,
-        force,
-        lang,
+        force: plan.force,
+        lang: plan.lang,
         run,
         homeDir: env.HOME || undefined,
       });
@@ -228,16 +167,112 @@ export async function runInstall(args: GlobalArgs, deps: InstallDeps = {}): Prom
 
   const failed = results.filter((r) => r.status === 'failed');
   const okCount = results.filter((r) => r.status === 'ok').length;
-  log.ok(t(lang, 'install.complete', { version: releaseVersion ?? 'unknown' }));
-  log.info(t(lang, 'config.path', { path: configPath }));
-  log.info(t(lang, 'setup.url', { baseUrl: resolvedBase }));
-  log.info(t(lang, 'restart.next', { baseUrl: resolvedBase }));
+  log.ok(t(plan.lang, 'install.complete', { version: releaseVersion ?? 'unknown' }));
+  log.info(t(plan.lang, 'config.path', { path: configPath }));
+  log.info(t(plan.lang, 'setup.url', { baseUrl: resolvedBase }));
+  log.info(t(plan.lang, 'restart.next', { baseUrl: resolvedBase }));
 
   if (failed.length && okCount === 0) return 1;
   return 0;
 }
 
+export async function runInstall(args: GlobalArgs, deps: InstallDeps = {}): Promise<number> {
+  const env = deps.env ?? process.env;
+  const run = deps.run ?? createExec();
+  const fetchImpl = deps.fetchImpl ?? fetch;
+  const isTTY = deps.isTTY ?? Boolean(process.stdin.isTTY && process.stdout.isTTY);
+  const log = deps.log ?? createLogger();
+  let lang = resolveLang(args, env);
+  const loreHome = getLoreHome(env);
+  const configPath = getConfigPath(loreHome);
+  const homeDir = env.HOME || undefined;
+
+  if (!isTTY && args.interactiveDefault) {
+    console.error('Interactive install requires a TTY. Pass flags (e.g. --base-url, --channels).');
+    return 2;
+  }
+
+  const saved = await readConfig(configPath);
+
+  if (shouldPrompt(args, isTTY)) {
+    const prompt = deps.prompt === null ? null : (deps.prompt ?? createTTYPrompt({ lang }));
+    if (prompt) {
+      banner(lang);
+      const snapshot = await collectInstallSnapshot({
+        loreHome,
+        configPath,
+        config: saved,
+        homeDir,
+        env,
+      });
+      const wizard = await runInteractiveWizard({
+        prompt,
+        snapshot,
+        initialLang: lang,
+        langLocked: Boolean(args.lang || env.LORE_INSTALL_LANG),
+        env,
+      });
+
+      if (wizard.kind === 'exit') {
+        const exitLang = wizard.lang;
+        log.err(exitLang === 'zh' ? '已取消。' : 'Aborted.');
+        return 1;
+      }
+      if (wizard.kind === 'status') {
+        return runStatus({ ...args, lang: wizard.lang }, { env, log });
+      }
+      if (wizard.kind === 'uninstall') {
+        return runUninstall(
+          {
+            ...args,
+            command: 'uninstall',
+            channels: wizard.channels,
+            purge: wizard.purge,
+            yes: true,
+            lang: wizard.lang,
+          },
+          { env, run, isTTY, log },
+        );
+      }
+
+      const plan = wizard.plan;
+      return executeInstallPlan(
+        {
+          lang: plan.lang,
+          baseUrl: plan.baseUrl,
+          apiToken: plan.apiToken,
+          channels: plan.channels,
+          pre: plan.pre,
+          dev: plan.dev,
+          force: plan.force,
+          skipDocker: plan.skipDocker,
+          explicitBaseUrl: plan.explicitBaseUrl,
+        },
+        { env, run, fetchImpl, log, loreHome, configPath },
+      );
+    }
+  }
+
+  // Non-interactive / flag path
+  return executeInstallPlan(
+    {
+      lang,
+      baseUrl: args.baseUrl,
+      apiToken: args.apiToken ?? saved.api_token,
+      channels: resolveChannels(args),
+      pre: args.pre,
+      dev: args.dev,
+      force: args.force,
+      skipDocker: args.skipDocker,
+      explicitBaseUrl: args.explicitBaseUrl,
+    },
+    { env, run, fetchImpl, log, loreHome, configPath },
+  );
+}
+
 export async function runUpdate(args: GlobalArgs, deps: InstallDeps = {}): Promise<number> {
-  // Update reuses install path but is non-interactive by default.
   return runInstall({ ...args, interactiveDefault: false, command: 'install' }, deps);
 }
+
+/** Exposed for tests */
+export type { InstallPlan };
