@@ -3,7 +3,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { downloadOrSkipDetailed } from '../core/artifact.js';
 import { haveCommand } from '../core/detect.js';
-import { createExec, type ExecFn } from '../core/exec.js';
+import { createExec, runChecked, type ExecFn } from '../core/exec.js';
 import { channelDir } from '../core/paths.js';
 import { ensureDir } from '../core/fs.js';
 import type { ChannelResult, ChannelStatus } from '../core/types.js';
@@ -11,6 +11,9 @@ import type { ChannelContext, ChannelInstaller, UninstallContext } from './types
 
 const MANAGED_MARKER = '@lore-managed-opencode-plugin';
 const DEFAULT_REPO = 'FFatTiger/lore';
+
+type CompatibilityResult = { ok: true } | { ok: false; error: string };
+type CompatHelper = { path: string; temporary: boolean };
 
 function pluginTarget(homeDir: string): string {
   return path.join(homeDir, '.config', 'opencode', 'plugins', 'lore-memory.js');
@@ -20,11 +23,11 @@ async function resolveCompatHelper(
   loreHome: string,
   releaseVersion: string | undefined,
   run: ExecFn,
-): Promise<string | null> {
+): Promise<CompatHelper | null> {
   const managed = path.join(loreHome, 'opencode-compat.py');
   try {
     const st = await fs.lstat(managed);
-    if (st.isFile() && !st.isSymbolicLink()) return managed;
+    if (st.isFile() && !st.isSymbolicLink()) return { path: managed, temporary: false };
   } catch {
     // missing
   }
@@ -40,7 +43,7 @@ async function resolveCompatHelper(
       return null;
     }
     await fs.chmod(tmp, 0o600);
-    return tmp;
+    return { path: tmp, temporary: true };
   } catch {
     await fs.rm(tmp, { force: true }).catch(() => undefined);
     return null;
@@ -52,30 +55,42 @@ async function configureCompatibility(
   homeDir: string,
   releaseVersion: string | undefined,
   run: ExecFn,
-): Promise<void> {
-  if (!(await haveCommand('python3'))) return;
+): Promise<CompatibilityResult> {
+  if (!(await haveCommand('python3'))) return { ok: true };
   const helper = await resolveCompatHelper(loreHome, releaseVersion, run);
-  if (!helper) return;
+  if (!helper) return { ok: true };
 
   try {
-    await run(
-      ['python3', helper, 'install', '--home', homeDir, '--lore-home', loreHome],
+    await runChecked(
+      run,
+      'OpenCode compatibility installation',
+      ['python3', helper.path, 'install', '--home', homeDir, '--lore-home', loreHome],
       { quiet: true },
     );
     const state = path.join(loreHome, 'opencode-compat.json');
     try {
       await fs.access(state);
       const managed = path.join(loreHome, 'opencode-compat.py');
-      const tmp = `${managed}.tmp.${process.pid}`;
-      await fs.copyFile(helper, tmp);
-      await fs.chmod(tmp, 0o600);
-      await fs.rename(tmp, managed);
-    } catch {
+      if (helper.path !== managed) {
+        const tmp = `${managed}.tmp.${process.pid}`;
+        try {
+          await fs.copyFile(helper.path, tmp);
+          await fs.chmod(tmp, 0o600);
+          await fs.rename(tmp, managed);
+        } finally {
+          await fs.rm(tmp, { force: true }).catch(() => undefined);
+        }
+      }
+    } catch (err) {
+      if ((err as NodeJS.ErrnoException).code !== 'ENOENT') throw err;
       await fs.rm(path.join(loreHome, 'opencode-compat.py'), { force: true }).catch(() => undefined);
     }
+    return { ok: true };
+  } catch (err) {
+    return { ok: false, error: err instanceof Error ? err.message : String(err) };
   } finally {
-    if (helper.includes(`lore-opencode-compat.${process.pid}.py`)) {
-      await fs.rm(helper, { force: true }).catch(() => undefined);
+    if (helper.temporary) {
+      await fs.rm(helper.path, { force: true }).catch(() => undefined);
     }
   }
 }
@@ -84,33 +99,48 @@ async function restoreCompatibility(
   loreHome: string,
   homeDir: string,
   run: ExecFn,
-): Promise<void> {
+): Promise<CompatibilityResult> {
   const state = path.join(loreHome, 'opencode-compat.json');
   try {
     await fs.access(state);
-  } catch {
-    return;
+  } catch (err) {
+    if ((err as NodeJS.ErrnoException).code === 'ENOENT') return { ok: true };
+    return { ok: false, error: err instanceof Error ? err.message : String(err) };
   }
-  if (!(await haveCommand('python3'))) return;
+  if (!(await haveCommand('python3'))) {
+    return { ok: false, error: 'OpenCode compatibility restore requires python3' };
+  }
 
   const managed = path.join(loreHome, 'opencode-compat.py');
-  let helper: string | null = null;
   try {
     const st = await fs.lstat(managed);
-    if (st.isFile() && !st.isSymbolicLink()) helper = managed;
-  } catch {
-    helper = null;
+    if (!st.isFile() || st.isSymbolicLink()) {
+      return { ok: false, error: 'OpenCode compatibility restore helper is unavailable' };
+    }
+  } catch (err) {
+    if ((err as NodeJS.ErrnoException).code === 'ENOENT') {
+      return { ok: false, error: 'OpenCode compatibility restore helper is unavailable' };
+    }
+    return { ok: false, error: err instanceof Error ? err.message : String(err) };
   }
-  if (!helper) return;
 
-  await run(
-    ['python3', helper, 'uninstall', '--home', homeDir, '--lore-home', loreHome],
-    { quiet: true },
-  );
   try {
-    await fs.access(state);
-  } catch {
-    await fs.rm(managed, { force: true }).catch(() => undefined);
+    await runChecked(
+      run,
+      'OpenCode compatibility restore',
+      ['python3', managed, 'uninstall', '--home', homeDir, '--lore-home', loreHome],
+      { quiet: true },
+    );
+    try {
+      await fs.access(state);
+      return { ok: false, error: 'OpenCode compatibility restore did not clear its recovery state' };
+    } catch (err) {
+      if ((err as NodeJS.ErrnoException).code !== 'ENOENT') throw err;
+    }
+    await fs.rm(managed, { force: true });
+    return { ok: true };
+  } catch (err) {
+    return { ok: false, error: err instanceof Error ? err.message : String(err) };
   }
 }
 
@@ -171,7 +201,10 @@ export const opencodeInstaller: ChannelInstaller = {
     await fs.rename(tmp, target);
 
     const run = ctx.run ?? createExec();
-    await configureCompatibility(ctx.loreHome, homeDir, ctx.releaseVersion, run);
+    const compatibility = await configureCompatibility(ctx.loreHome, homeDir, ctx.releaseVersion, run);
+    if (!compatibility.ok) {
+      return { id: 'opencode', status: 'failed', message: compatibility.error };
+    }
 
     const body = await fs.readFile(target, 'utf8');
     const match = body.match(/@lore-managed-opencode-plugin version=([^\s]+)/);
@@ -185,6 +218,12 @@ export const opencodeInstaller: ChannelInstaller = {
 
   async uninstall(ctx: UninstallContext): Promise<ChannelResult> {
     const homeDir = ctx.homeDir ?? os.homedir();
+    const run = ctx.run ?? createExec();
+    const compatibility = await restoreCompatibility(ctx.loreHome, homeDir, run);
+    if (!compatibility.ok) {
+      return { id: 'opencode', status: 'failed', message: compatibility.error };
+    }
+
     const target = pluginTarget(homeDir);
     try {
       const body = await fs.readFile(target, 'utf8');
@@ -194,9 +233,6 @@ export const opencodeInstaller: ChannelInstaller = {
     } catch {
       // missing
     }
-
-    const run = ctx.run ?? createExec();
-    await restoreCompatibility(ctx.loreHome, homeDir, run);
 
     try {
       await fs.rm(channelDir(ctx.loreHome, 'opencode'), { recursive: true, force: true });

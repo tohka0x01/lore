@@ -30,7 +30,7 @@ export const hermesInstaller: ChannelInstaller = {
     return {
       id: 'hermes',
       status: 'ok',
-      message: `Hermes files ready. Symlink ${memoryPath} into your Hermes plugin/skills path (e.g. ~/.hermes/skills/lore_memory).`,
+      message: `Hermes files ready. Manual setup required: symlink ${memoryPath} into your Hermes plugin/skills path (e.g. ~/.hermes/skills/lore_memory).`,
     };
   },
 

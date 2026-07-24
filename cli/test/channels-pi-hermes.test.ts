@@ -36,7 +36,7 @@ test('registry lists pi and hermes', () => {
   assert.equal(getInstaller('hermes').id, 'hermes');
 });
 
-test('hermes install downloads and returns symlink instruction', async () => {
+test('hermes install downloads and returns manual symlink instruction', async () => {
   const { home, loreHome } = await tempHome();
   const dest = path.join(loreHome, 'hermes');
   let downloaded = false;
@@ -69,7 +69,9 @@ test('hermes install downloads and returns symlink instruction', async () => {
   );
   assert.equal(result.status, 'ok');
   assert.match(result.message ?? '', /lore_memory/);
+  assert.match(result.message ?? '', /manual/i);
   assert.match(result.message ?? '', /symlink|Hermes/i);
+  assert.doesNotMatch(result.message ?? '', /configured successfully/i);
   void downloaded;
 });
 
@@ -132,6 +134,34 @@ test('pi install runs install-local.sh when pi present', async () => {
     );
     assert.equal(result.status, 'ok');
     assert.ok(calls.some((c) => c[0] === 'bash' && c[1]?.includes('install-local.sh')));
+  } finally {
+    process.env.PATH = origPath;
+  }
+});
+
+test('pi install reports checked script failure without token leakage', async () => {
+  const { home, loreHome } = await tempHome();
+  const dest = path.join(loreHome, 'pi');
+  await fs.mkdir(path.join(dest, 'scripts'), { recursive: true });
+  await fs.writeFile(path.join(dest, 'scripts', 'install-local.sh'), '#!/bin/bash\nexit 1\n');
+  const bin = path.join(home, 'bin');
+  await fs.mkdir(bin, { recursive: true });
+  await fs.writeFile(path.join(bin, 'pi'), '#!/bin/bash\nexit 0\n');
+  await fs.chmod(path.join(bin, 'pi'), 0o755);
+  const origPath = process.env.PATH;
+  process.env.PATH = `${bin}${path.delimiter}${origPath ?? ''}`;
+  try {
+    const result = await piInstaller.install(baseCtx({
+      loreHome,
+      homeDir: home,
+      needInstall: 2,
+      apiToken: 'lm_secret',
+      run: async () => ({ code: 1, stdout: '', stderr: 'failed for lm_secret' }),
+    }));
+    assert.equal(result.status, 'failed');
+    assert.match(result.message ?? '', /Pi local installation failed/i);
+    assert.match(result.message ?? '', /\[REDACTED\]/);
+    assert.doesNotMatch(result.message ?? '', /lm_secret/);
   } finally {
     process.env.PATH = origPath;
   }

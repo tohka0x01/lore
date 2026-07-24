@@ -4,7 +4,7 @@ import os from 'node:os';
 import { downloadOrSkipDetailed } from '../core/artifact.js';
 import { channelDir } from '../core/paths.js';
 import { haveCommand } from '../core/detect.js';
-import { createExec } from '../core/exec.js';
+import { createExec, runChecked } from '../core/exec.js';
 import type { ChannelInstaller, ChannelContext, UninstallContext } from './types.js';
 import type { ChannelResult, ChannelStatus } from '../core/types.js';
 
@@ -38,23 +38,23 @@ export const piInstaller: ChannelInstaller = {
 
     const script = path.join(dest, 'scripts', 'install-local.sh');
     const run = ctx.run ?? createExec();
+    const env = ctx.env ?? process.env;
     try {
-      const res = await run(['bash', script], {
-        quiet: true,
-        env: {
-          ...process.env,
-          LORE_BASE_URL: ctx.baseUrl,
-          LORE_API_TOKEN: ctx.apiToken ?? '',
-          HOME: ctx.homeDir ?? process.env.HOME,
+      await runChecked(
+        run,
+        'Pi local installation',
+        ['bash', script],
+        {
+          quiet: true,
+          env: {
+            ...env,
+            LORE_BASE_URL: ctx.baseUrl,
+            LORE_API_TOKEN: ctx.apiToken ?? '',
+            HOME: ctx.homeDir ?? env.HOME,
+          },
         },
-      });
-      if (res.code !== 0) {
-        return {
-          id: 'pi',
-          status: 'failed',
-          message: res.stderr.trim() || `install-local.sh exited ${res.code}`,
-        };
-      }
+        { redact: [ctx.apiToken ?? ''] },
+      );
     } catch (err) {
       return {
         id: 'pi',

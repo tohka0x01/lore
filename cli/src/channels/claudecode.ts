@@ -3,8 +3,8 @@ import os from 'node:os';
 import path from 'node:path';
 import { downloadOrSkipDetailed } from '../core/artifact.js';
 import { haveCommand } from '../core/detect.js';
-import { createExec } from '../core/exec.js';
-import { readJsonFile, writeJsonAtomic, ensureDir } from '../core/fs.js';
+import { createExec, runChecked } from '../core/exec.js';
+import { readJsonFile, readJsonFileStrict, writeJsonAtomic, ensureDir } from '../core/fs.js';
 import { channelDir } from '../core/paths.js';
 import type { ChannelResult, ChannelStatus } from '../core/types.js';
 import type { ChannelContext, ChannelInstaller, UninstallContext } from './types.js';
@@ -16,6 +16,21 @@ type ClaudeSettings = {
 
 function settingsPath(homeDir: string): string {
   return path.join(homeDir, '.claude', 'settings.json');
+}
+
+function asSettings(value: unknown, filePath: string): ClaudeSettings {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) {
+    throw new Error(`Invalid JSON object in ${filePath}`);
+  }
+  return value as ClaudeSettings;
+}
+
+function failure(err: unknown): ChannelResult {
+  return {
+    id: 'claudecode',
+    status: 'failed',
+    message: err instanceof Error ? err.message : String(err),
+  };
 }
 
 export const claudecodeInstaller: ChannelInstaller = {
@@ -43,67 +58,95 @@ export const claudecodeInstaller: ChannelInstaller = {
     }
 
     const homeDir = ctx.homeDir ?? os.homedir();
+    const env = ctx.env ?? process.env;
     const run = ctx.run ?? createExec();
-
-    await fs.rm(path.join(homeDir, '.claude', 'plugins', 'cache', 'lore'), {
-      recursive: true,
-      force: true,
-    }).catch(() => undefined);
-
-    await run(['claude', 'plugin', 'marketplace', 'add', dest], { quiet: true });
-
-    const list = await run(['claude', 'plugin', 'list'], { quiet: true });
-    if (!list.stdout.includes('lore@lore')) {
-      await run(['claude', 'plugin', 'install', 'lore@lore'], { quiet: true });
-    }
-
     const sf = settingsPath(homeDir);
-    await ensureDir(path.dirname(sf));
-    const settings = await readJsonFile<ClaudeSettings>(sf, {});
-    const env = (settings.env ??= {});
-    env.LORE_BASE_URL = ctx.baseUrl.replace(/\/$/, '');
-    if (ctx.apiToken) env.LORE_API_TOKEN = ctx.apiToken;
-    await writeJsonAtomic(sf, settings);
 
-    const mcpUrl = `${ctx.baseUrl.replace(/\/$/, '')}/api/mcp?client_type=claudecode`;
-    await run(['claude', 'mcp', 'remove', 'lore'], { quiet: true });
-    const mcpArgs = [
-      'claude',
-      'mcp',
-      'add',
-      '--transport',
-      'http',
-      '--scope',
-      'user',
-      'lore',
-      mcpUrl,
-    ];
-    if (ctx.apiToken) {
-      mcpArgs.push('--header', `Authorization: Bearer ${ctx.apiToken}`);
-    }
-    await run(mcpArgs, { quiet: true });
-
-    await fs.rm(path.join(homeDir, '.claude', 'lore-guidance.md'), { force: true }).catch(() => undefined);
-    const claudeMd = path.join(homeDir, '.claude', 'CLAUDE.md');
     try {
-      const body = await fs.readFile(claudeMd, 'utf8');
-      const filtered = body
-        .split(/\r?\n/)
-        .filter(
-          (line) =>
-            line !== '@~/.claude/lore-guidance.md' &&
-            line !== '@import ~/.claude/lore-guidance.md',
-        )
-        .join('\n')
-        .replace(/^\n+/, '');
-      if (filtered !== body) {
-        await fs.writeFile(claudeMd, filtered.endsWith('\n') ? filtered : `${filtered}\n`, 'utf8');
-      }
-    } catch {
-      // missing
-    }
+      const existingSettings = await readJsonFileStrict<unknown>(sf);
+      const settings = existingSettings === undefined ? {} : asSettings(existingSettings, sf);
+      const commandOpts = { quiet: true, env };
+      const redact = [ctx.apiToken ?? ''];
 
-    return { id: 'claudecode', status: 'ok', message: 'Claude Code configured' };
+      await fs.rm(path.join(homeDir, '.claude', 'plugins', 'cache', 'lore'), {
+        recursive: true,
+        force: true,
+      }).catch(() => undefined);
+
+      await runChecked(
+        run,
+        'Claude marketplace registration',
+        ['claude', 'plugin', 'marketplace', 'add', dest],
+        commandOpts,
+        { redact },
+      );
+
+      const list = await runChecked(
+        run,
+        'Claude plugin listing',
+        ['claude', 'plugin', 'list'],
+        commandOpts,
+        { redact },
+      );
+      if (!list.stdout.includes('lore@lore')) {
+        await runChecked(
+          run,
+          'Claude plugin installation',
+          ['claude', 'plugin', 'install', 'lore@lore'],
+          commandOpts,
+          { redact },
+        );
+      }
+
+      await ensureDir(path.dirname(sf));
+      const settingsEnv = (settings.env ??= {});
+      settingsEnv.LORE_BASE_URL = ctx.baseUrl.replace(/\/$/, '');
+      if (ctx.apiToken) settingsEnv.LORE_API_TOKEN = ctx.apiToken;
+      else if (ctx.tokenAction === 'clear') delete settingsEnv.LORE_API_TOKEN;
+      await writeJsonAtomic(sf, settings);
+
+      const mcpUrl = `${ctx.baseUrl.replace(/\/$/, '')}/api/mcp?client_type=claudecode`;
+      await run(['claude', 'mcp', 'remove', 'lore'], commandOpts).catch(() => undefined);
+      const mcpArgs = [
+        'claude',
+        'mcp',
+        'add',
+        '--transport',
+        'http',
+        '--scope',
+        'user',
+        'lore',
+        mcpUrl,
+      ];
+      if (ctx.apiToken) {
+        mcpArgs.push('--header', `Authorization: Bearer ${ctx.apiToken}`);
+      }
+      await runChecked(run, 'Claude MCP registration', mcpArgs, commandOpts, { redact });
+
+      await fs.rm(path.join(homeDir, '.claude', 'lore-guidance.md'), { force: true }).catch(() => undefined);
+      const claudeMd = path.join(homeDir, '.claude', 'CLAUDE.md');
+      try {
+        const body = await fs.readFile(claudeMd, 'utf8');
+        const filtered = body
+          .split(/\r?\n/)
+          .filter(
+            (line) =>
+              line !== '@~/.claude/lore-guidance.md' &&
+              line !== '@import ~/.claude/lore-guidance.md',
+          )
+          .join('\n')
+          .replace(/^\n+/, '');
+        if (filtered !== body) {
+          await fs.writeFile(claudeMd, filtered.endsWith('\n') ? filtered : `${filtered}\n`, 'utf8');
+        }
+      } catch {
+        // missing
+      }
+
+      return { id: 'claudecode', status: 'ok', message: 'Claude Code configured' };
+    } catch (err) {
+      return failure(err);
+    }
   },
 
   async uninstall(ctx: UninstallContext): Promise<ChannelResult> {

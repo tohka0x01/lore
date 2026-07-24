@@ -85,6 +85,109 @@ test('claude install writes settings and mcp args', async () => {
   });
 });
 
+test('Claude marketplace failure returns failed with token redacted', async () => {
+  const { home, loreHome } = await tempHome();
+  await fs.mkdir(path.join(loreHome, 'claudecode'), { recursive: true });
+  const run: ExecFn = async (argv) => {
+    if (argv.slice(0, 4).join(' ') === 'claude plugin marketplace add') {
+      return { code: 1, stdout: '', stderr: 'marketplace rejected lm_x' };
+    }
+    return { code: 0, stdout: '', stderr: '' };
+  };
+
+  await withBin(home, 'claude', async () => {
+    const result = await claudecodeInstaller.install(ctx({ loreHome, homeDir: home, run }));
+    assert.equal(result.status, 'failed');
+    assert.match(result.message ?? '', /Claude marketplace registration failed/i);
+    assert.match(result.message ?? '', /\[REDACTED\]/);
+    assert.doesNotMatch(result.message ?? '', /lm_x/);
+  });
+});
+
+test('Claude MCP add failure returns failed without leaking token', async () => {
+  const { home, loreHome } = await tempHome();
+  await fs.mkdir(path.join(loreHome, 'claudecode'), { recursive: true });
+  const run: ExecFn = async (argv) => {
+    if (argv.join(' ') === 'claude plugin list') {
+      return { code: 0, stdout: 'lore@lore', stderr: '' };
+    }
+    if (argv[0] === 'claude' && argv[1] === 'mcp' && argv[2] === 'add') {
+      return { code: 1, stdout: '', stderr: 'bad bearer lm_x' };
+    }
+    return { code: 0, stdout: '', stderr: '' };
+  };
+
+  await withBin(home, 'claude', async () => {
+    const result = await claudecodeInstaller.install(ctx({ loreHome, homeDir: home, run }));
+    assert.equal(result.status, 'failed');
+    assert.match(result.message ?? '', /Claude MCP registration failed/i);
+    assert.match(result.message ?? '', /\[REDACTED\]/);
+    assert.doesNotMatch(result.message ?? '', /lm_x/);
+  });
+});
+
+test('Claude clear token removes settings token and omits MCP header', async () => {
+  const { home, loreHome } = await tempHome();
+  await fs.mkdir(path.join(loreHome, 'claudecode'), { recursive: true });
+  const settingsPath = path.join(home, '.claude', 'settings.json');
+  await fs.mkdir(path.dirname(settingsPath), { recursive: true });
+  await fs.writeFile(settingsPath, JSON.stringify({
+    theme: 'dark',
+    env: { LORE_BASE_URL: 'https://old.example', LORE_API_TOKEN: 'lm_old', KEEP: 'yes' },
+  }));
+  const calls: string[][] = [];
+  const run: ExecFn = async (argv) => {
+    calls.push(argv);
+    if (argv.join(' ') === 'claude plugin list') {
+      return { code: 0, stdout: 'lore@lore', stderr: '' };
+    }
+    return { code: 0, stdout: '', stderr: '' };
+  };
+
+  await withBin(home, 'claude', async () => {
+    const result = await claudecodeInstaller.install(ctx({
+      loreHome,
+      homeDir: home,
+      run,
+      apiToken: undefined,
+      tokenAction: 'clear',
+    }));
+    assert.equal(result.status, 'ok');
+    const settings = JSON.parse(await fs.readFile(settingsPath, 'utf8')) as {
+      theme: string;
+      env: Record<string, string>;
+    };
+    assert.equal(settings.theme, 'dark');
+    assert.equal(settings.env.KEEP, 'yes');
+    assert.equal(settings.env.LORE_BASE_URL, 'https://core.example');
+    assert.equal(settings.env.LORE_API_TOKEN, undefined);
+    const add = calls.find((argv) => argv[0] === 'claude' && argv[1] === 'mcp' && argv[2] === 'add');
+    assert.ok(add);
+    assert.equal(add.includes('--header'), false);
+  });
+});
+
+test('Claude malformed settings fail without overwriting the file', async () => {
+  const { home, loreHome } = await tempHome();
+  await fs.mkdir(path.join(loreHome, 'claudecode'), { recursive: true });
+  const settingsPath = path.join(home, '.claude', 'settings.json');
+  await fs.mkdir(path.dirname(settingsPath), { recursive: true });
+  await fs.writeFile(settingsPath, '{broken', 'utf8');
+  let calls = 0;
+  const run: ExecFn = async () => {
+    calls += 1;
+    return { code: 0, stdout: '', stderr: '' };
+  };
+
+  await withBin(home, 'claude', async () => {
+    const result = await claudecodeInstaller.install(ctx({ loreHome, homeDir: home, run }));
+    assert.equal(result.status, 'failed');
+    assert.match(result.message ?? '', /Invalid JSON/i);
+    assert.equal(await fs.readFile(settingsPath, 'utf8'), '{broken');
+    assert.equal(calls, 0);
+  });
+});
+
 test('codex final TOML preserves Authorization after host MCP mutation', async () => {
   const { home, loreHome } = await tempHome();
   await seedCodexArtifact(loreHome);

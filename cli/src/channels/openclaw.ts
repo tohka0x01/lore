@@ -3,8 +3,8 @@ import os from 'node:os';
 import path from 'node:path';
 import { downloadOrSkipDetailed } from '../core/artifact.js';
 import { haveCommand } from '../core/detect.js';
-import { createExec } from '../core/exec.js';
-import { readJsonFile, writeJsonAtomic } from '../core/fs.js';
+import { createExec, runChecked } from '../core/exec.js';
+import { readJsonFile, readJsonFileStrict, writeJsonAtomic } from '../core/fs.js';
 import { channelDir } from '../core/paths.js';
 import type { ChannelResult, ChannelStatus } from '../core/types.js';
 import type { ChannelContext, ChannelInstaller, UninstallContext } from './types.js';
@@ -32,6 +32,21 @@ type OpenClawConfig = {
   [k: string]: unknown;
 };
 
+function asConfig(value: unknown, filePath: string): OpenClawConfig {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) {
+    throw new Error(`Invalid JSON object in ${filePath}`);
+  }
+  return value as OpenClawConfig;
+}
+
+function failure(err: unknown): ChannelResult {
+  return {
+    id: 'openclaw',
+    status: 'failed',
+    message: err instanceof Error ? err.message : String(err),
+  };
+}
+
 export const openclawInstaller: ChannelInstaller = {
   id: 'openclaw',
 
@@ -57,45 +72,74 @@ export const openclawInstaller: ChannelInstaller = {
     }
 
     const homeDir = ctx.homeDir ?? os.homedir();
+    const env = ctx.env ?? process.env;
     const run = ctx.run ?? createExec();
-
-    await fs.rm(openclawExtPath(homeDir), { recursive: true, force: true }).catch(() => undefined);
-
-    // npm install (retry once like shell), build best-effort, then plugin install/enable
-    let npmOk = false;
-    for (let i = 0; i < 2 && !npmOk; i++) {
-      const res = await run(['npm', 'install', '--silent'], { cwd: dest, quiet: true });
-      npmOk = res.code === 0;
-    }
-    await run(['npm', 'run', 'build'], { cwd: dest, quiet: true }).catch(() => ({
-      code: 1,
-      stdout: '',
-      stderr: '',
-    }));
-
-    await run(
-      ['openclaw', 'plugins', 'install', '.', '--force', '--dangerously-force-unsafe-install'],
-      { cwd: dest, quiet: true },
-    );
-    await run(['openclaw', 'plugins', 'enable', 'lore'], { quiet: true });
-
     const cfgPath = openclawConfigPath(homeDir);
-    try {
-      await fs.access(cfgPath);
-      const data = await readJsonFile<OpenClawConfig>(cfgPath, {});
-      const plugins = (data.plugins ??= {});
-      const entries = (plugins.entries ??= {});
-      const lore = (entries.lore ??= {});
-      const config = (lore.config ??= {});
-      config.baseUrl = ctx.baseUrl.replace(/\/$/, '');
-      if (ctx.apiToken) config.apiToken = ctx.apiToken;
-      if (lore.enabled === undefined) lore.enabled = true;
-      await writeJsonAtomic(cfgPath, data);
-    } catch {
-      // config optional if missing
-    }
 
-    return { id: 'openclaw', status: 'ok', message: 'OpenClaw configured' };
+    try {
+      const existing = await readJsonFileStrict<unknown>(cfgPath);
+      const data = existing === undefined ? undefined : asConfig(existing, cfgPath);
+      const commandOpts = { quiet: true, env };
+      const redact = [ctx.apiToken ?? ''];
+
+      await fs.rm(openclawExtPath(homeDir), { recursive: true, force: true }).catch(() => undefined);
+
+      let installError: unknown;
+      let installed = false;
+      for (let attempt = 0; attempt < 2 && !installed; attempt += 1) {
+        try {
+          await runChecked(
+            run,
+            'OpenClaw dependency installation',
+            ['npm', 'install', '--silent'],
+            { cwd: dest, quiet: true, env },
+            { redact },
+          );
+          installed = true;
+        } catch (err) {
+          installError = err;
+        }
+      }
+      if (!installed) throw installError;
+
+      await runChecked(
+        run,
+        'OpenClaw build',
+        ['npm', 'run', 'build'],
+        { cwd: dest, quiet: true, env },
+        { redact },
+      );
+      await runChecked(
+        run,
+        'OpenClaw plugin installation',
+        ['openclaw', 'plugins', 'install', '.', '--force', '--dangerously-force-unsafe-install'],
+        { cwd: dest, quiet: true, env },
+        { redact },
+      );
+      await runChecked(
+        run,
+        'OpenClaw plugin enable',
+        ['openclaw', 'plugins', 'enable', 'lore'],
+        commandOpts,
+        { redact },
+      );
+
+      if (data !== undefined) {
+        const plugins = (data.plugins ??= {});
+        const entries = (plugins.entries ??= {});
+        const lore = (entries.lore ??= {});
+        const config = (lore.config ??= {});
+        config.baseUrl = ctx.baseUrl.replace(/\/$/, '');
+        if (ctx.apiToken) config.apiToken = ctx.apiToken;
+        else if (ctx.tokenAction === 'clear') delete config.apiToken;
+        if (lore.enabled === undefined) lore.enabled = true;
+        await writeJsonAtomic(cfgPath, data);
+      }
+
+      return { id: 'openclaw', status: 'ok', message: 'OpenClaw configured' };
+    } catch (err) {
+      return failure(err);
+    }
   },
 
   async uninstall(ctx: UninstallContext): Promise<ChannelResult> {
