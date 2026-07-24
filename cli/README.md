@@ -1,21 +1,30 @@
 # @loremem/cli
 
-Interactive installer and manager for Lore agent runtime integrations.
+`@loremem/cli` is the supported installer and manager for Lore agent runtime integrations. The legacy `scripts/install.sh` path remains available as frozen compatibility code, but new install behavior is implemented here.
 
-## Install / connect
+## Install or connect
 
 ```bash
-# interactive
+# Interactive setup
 npx @loremem/cli
 
-# non-interactive (SaaS / external server)
-npx @loremem/cli install --base-url https://core.example --api-token lm_...
+# Loremem SaaS — an API token is required
+npx @loremem/cli install \
+  --base-url https://api.loremem.com \
+  --api-token lm_...
 
-# subset of channels
+# Another external Lore server
+npx @loremem/cli install \
+  --base-url https://core.example \
+  --api-token lm_...
+
+# Install a subset of integrations from the prerelease channel
 npx @loremem/cli install --channels pi,opencode --pre
 ```
 
-## Update / uninstall / status
+A token-bearing remote connection must use HTTPS. Plain HTTP is allowed only for loopback development servers such as `localhost`, `127.0.0.1`, or `::1`.
+
+## Update, status, and uninstall
 
 ```bash
 npx @loremem/cli update
@@ -24,13 +33,58 @@ npx @loremem/cli uninstall --channels opencode -y
 npx @loremem/cli uninstall --purge -y
 ```
 
-## Requirements
+By default, `update` targets integrations whose local state is `installed` or `partial`. It fails instead of claiming success when the target GitHub release cannot be resolved, a selected integration fails, or a selected integration is skipped. Use `--channels` to select update targets explicitly.
 
-- Node.js >= 20
-- Host CLIs for selected channels (`claude`, `codex`, `pi`, `openclaw`, `opencode`, …)
+## Connection and token safety
+
+Shared connection settings are stored in `~/.lore/config.json`; set `LORE_HOME` to override the Lore state directory.
+
+- Files containing Lore credentials are written with mode `0600`.
+- A saved token is reused only when the normalized server URL is unchanged.
+- Changing the server without supplying a replacement token clears the old token.
+- Loremem SaaS requires a token in both interactive and non-interactive setup.
+- Existing malformed host configuration is rejected instead of being overwritten as an empty configuration.
+
+Passing `--api-token` places the token in the process arguments and may leave it in shell history. Use the normal secret-handling controls for your environment.
+
+## Codex hooks
+
+Codex uses the hooks bundled with the Lore plugin by default. The installer removes obsolete Lore entries from user-level `~/.codex/hooks.json` while preserving unrelated hooks, preventing duplicate lifecycle execution.
+
+Set the following only for an older Codex build that requires legacy user-level compatibility hooks:
+
+```bash
+LORE_CODEX_INSTALL_USER_HOOKS=1 npx @loremem/cli install \
+  --base-url https://api.loremem.com \
+  --api-token lm_... \
+  --channels codex
+```
+
+## Channel behavior
+
+- Claude Code, Codex, Pi, OpenClaw, and OpenCode require their corresponding host CLI for automatic setup.
+- Hermes downloads and prepares the `lore_memory` files, but linking them into the Hermes skills/plugin path is a manual step.
+- Missing host CLIs are reported as skipped rather than silently treated as configured.
+- Required marketplace, MCP, build, plugin, compatibility, and Docker commands report failures with bounded, token-redacted diagnostics.
+
+## Requirements and platform support
+
+The current installer supports macOS and Linux. Some integrations still invoke POSIX shell scripts and are not Windows-native.
+
+- Node.js 20 or newer
+- Bash for Bash-dependent integration helpers
 - `curl` and `unzip` for GitHub release artifacts
-- Docker only for local self-host mode
+- Host CLIs for the selected integrations (`claude`, `codex`, `pi`, `openclaw`, `opencode`, and others as applicable)
+- Docker plus Docker Compose only for local self-host mode
+- Python 3 for optional OpenCode compatibility handling when that compatibility state is present
 
-Config is stored in `~/.lore/config.json` (`LORE_HOME` overrides).
+## Known deferred limitations
 
-Legacy shell installers under `scripts/install.sh` are frozen; this package is the supported entrypoint.
+The following are intentionally not part of the `1.3.19` safety patch:
+
+- per-channel artifact version markers and mixed-version recovery;
+- fully layered status checks for artifact, host plugin, MCP, hooks, and runtime health;
+- redesign of subset purge and the complete Docker shutdown/data lifecycle;
+- Windows-native installers that remove the remaining Bash dependencies.
+
+The frozen curl installer remains a compatibility fallback, not a second evolving implementation. The `npx @loremem/cli` entrypoint is the source of supported install, update, uninstall, and status behavior.
