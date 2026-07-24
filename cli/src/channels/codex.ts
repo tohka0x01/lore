@@ -4,7 +4,7 @@ import path from 'node:path';
 import { downloadOrSkipDetailed } from '../core/artifact.js';
 import { haveCommand } from '../core/detect.js';
 import { createExec, runChecked } from '../core/exec.js';
-import { ensureDir, readJsonFile, readJsonFileStrict, writeJsonAtomic } from '../core/fs.js';
+import { ensureDir, readJsonFileStrict, writeJsonAtomic } from '../core/fs.js';
 import { channelDir } from '../core/paths.js';
 import { removeTomlSection, setTomlSectionKeys } from '../core/toml.js';
 import type { ChannelResult, ChannelStatus } from '../core/types.js';
@@ -206,7 +206,8 @@ export const codexInstaller: ChannelInstaller = {
         'url',
       ]);
       cfg = setTomlSectionKeys(cfg, '[features]', { hooks: 'true' }, ['hooks', 'codex_hooks']);
-      await fs.writeFile(cfgPath, cfg, 'utf8');
+      await fs.writeFile(cfgPath, cfg, { encoding: 'utf8', mode: 0o600 });
+      await fs.chmod(cfgPath, 0o600);
 
       await removeLegacyLoreHooks(cHome, legacyHooks);
 
@@ -253,23 +254,10 @@ export const codexInstaller: ChannelInstaller = {
 
     const hooksJson = path.join(cHome, 'hooks.json');
     try {
-      const data = await readJsonFile<{ hooks?: Record<string, unknown[]> }>(hooksJson, {});
-      if (data.hooks) {
-        for (const [event, entries] of Object.entries(data.hooks)) {
-          if (!Array.isArray(entries)) continue;
-          const filtered = entries.filter((entry) => {
-            const hooks = (entry as { hooks?: Array<{ command?: string }> }).hooks;
-            if (!Array.isArray(hooks)) return true;
-            return !hooks.some((h) => isLoreLegacyCommand(String(h.command ?? '')));
-          });
-          if (filtered.length) data.hooks[event] = filtered;
-          else delete data.hooks[event];
-        }
-        if (Object.keys(data.hooks).length === 0) delete data.hooks;
-        await writeJsonAtomic(hooksJson, data);
-      }
+      const data = await readLegacyHooks(hooksJson);
+      await removeLegacyLoreHooks(cHome, data);
     } catch {
-      // ignore
+      // preserve malformed/unreadable user hooks during best-effort uninstall
     }
 
     const cfgPath = path.join(cHome, 'config.toml');

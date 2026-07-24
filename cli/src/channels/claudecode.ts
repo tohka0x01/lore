@@ -64,7 +64,7 @@ export const claudecodeInstaller: ChannelInstaller = {
 
     try {
       const existingSettings = await readJsonFileStrict<unknown>(sf);
-      const settings = existingSettings === undefined ? {} : asSettings(existingSettings, sf);
+      if (existingSettings !== undefined) asSettings(existingSettings, sf);
       const commandOpts = { quiet: true, env };
       const redact = [ctx.apiToken ?? ''];
 
@@ -98,13 +98,6 @@ export const claudecodeInstaller: ChannelInstaller = {
         );
       }
 
-      await ensureDir(path.dirname(sf));
-      const settingsEnv = (settings.env ??= {});
-      settingsEnv.LORE_BASE_URL = ctx.baseUrl.replace(/\/$/, '');
-      if (ctx.apiToken) settingsEnv.LORE_API_TOKEN = ctx.apiToken;
-      else if (ctx.tokenAction === 'clear') delete settingsEnv.LORE_API_TOKEN;
-      await writeJsonAtomic(sf, settings);
-
       const mcpUrl = `${ctx.baseUrl.replace(/\/$/, '')}/api/mcp?client_type=claudecode`;
       await run(['claude', 'mcp', 'remove', 'lore'], commandOpts).catch(() => undefined);
       const mcpArgs = [
@@ -122,6 +115,15 @@ export const claudecodeInstaller: ChannelInstaller = {
         mcpArgs.push('--header', `Authorization: Bearer ${ctx.apiToken}`);
       }
       await runChecked(run, 'Claude MCP registration', mcpArgs, commandOpts, { redact });
+
+      await ensureDir(path.dirname(sf));
+      const latestSettings = await readJsonFileStrict<unknown>(sf);
+      const settings = latestSettings === undefined ? {} : asSettings(latestSettings, sf);
+      const settingsEnv = (settings.env ??= {});
+      settingsEnv.LORE_BASE_URL = ctx.baseUrl.replace(/\/$/, '');
+      if (ctx.apiToken) settingsEnv.LORE_API_TOKEN = ctx.apiToken;
+      else if (ctx.tokenAction === 'clear') delete settingsEnv.LORE_API_TOKEN;
+      await writeJsonAtomic(sf, settings);
 
       await fs.rm(path.join(homeDir, '.claude', 'lore-guidance.md'), { force: true }).catch(() => undefined);
       const claudeMd = path.join(homeDir, '.claude', 'CLAUDE.md');

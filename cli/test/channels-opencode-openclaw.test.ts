@@ -130,6 +130,38 @@ test('openclaw install patches config and runs plugin install', async () => {
   });
 });
 
+test('OpenClaw patches a config created by the host command and preserves host fields', async () => {
+  const { home, loreHome } = await tempHome();
+  const dest = path.join(loreHome, 'openclaw');
+  await fs.mkdir(dest, { recursive: true });
+  await fs.writeFile(path.join(dest, 'package.json'), '{"name":"@local/lore"}\n');
+  const cfg = path.join(home, '.openclaw', 'openclaw.json');
+  const run: ExecFn = async (argv) => {
+    if (argv[0] === 'openclaw' && argv[1] === 'plugins' && argv[2] === 'enable') {
+      await fs.mkdir(path.dirname(cfg), { recursive: true });
+      await fs.writeFile(
+        cfg,
+        JSON.stringify({ hostAdded: true, plugins: { entries: { other: { enabled: true } } } }),
+        'utf8',
+      );
+    }
+    return { code: 0, stdout: '', stderr: '' };
+  };
+
+  await withBin(home, 'openclaw', async () => {
+    const result = await openclawInstaller.install(
+      ctx({ loreHome, homeDir: home, apiToken: 'lm_x', run }),
+    );
+    assert.equal(result.status, 'ok');
+    const data = JSON.parse(await fs.readFile(cfg, 'utf8')) as any;
+    assert.equal(data.hostAdded, true);
+    assert.equal(data.plugins.entries.other.enabled, true);
+    assert.equal(data.plugins.entries.lore.enabled, true);
+    assert.equal(data.plugins.entries.lore.config.baseUrl, 'http://127.0.0.1:18901');
+    assert.equal(data.plugins.entries.lore.config.apiToken, 'lm_x');
+  });
+});
+
 for (const failure of [
   { name: 'npm install', matches: (argv: string[]) => argv[0] === 'npm' && argv[1] === 'install' },
   { name: 'npm build', matches: (argv: string[]) => argv[0] === 'npm' && argv[1] === 'run' && argv[2] === 'build' },

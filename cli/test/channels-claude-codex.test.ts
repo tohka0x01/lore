@@ -85,6 +85,41 @@ test('claude install writes settings and mcp args', async () => {
   });
 });
 
+test('Claude preserves host configuration written during installation', async () => {
+  const { home, loreHome } = await tempHome();
+  await fs.mkdir(path.join(loreHome, 'claudecode'), { recursive: true });
+  const settingsPath = path.join(home, '.claude', 'settings.json');
+  await fs.mkdir(path.dirname(settingsPath), { recursive: true });
+  await fs.writeFile(settingsPath, JSON.stringify({ before: true }), 'utf8');
+  const run: ExecFn = async (argv) => {
+    if (argv.slice(0, 4).join(' ') === 'claude plugin marketplace add') {
+      await fs.writeFile(
+        settingsPath,
+        JSON.stringify({ before: true, hostAdded: { marketplace: 'lore' } }),
+        'utf8',
+      );
+    }
+    if (argv.join(' ') === 'claude plugin list') {
+      return { code: 0, stdout: 'lore@lore', stderr: '' };
+    }
+    return { code: 0, stdout: '', stderr: '' };
+  };
+
+  await withBin(home, 'claude', async () => {
+    const result = await claudecodeInstaller.install(ctx({ loreHome, homeDir: home, run }));
+    assert.equal(result.status, 'ok');
+    const settings = JSON.parse(await fs.readFile(settingsPath, 'utf8')) as {
+      before: boolean;
+      hostAdded: { marketplace: string };
+      env: Record<string, string>;
+    };
+    assert.equal(settings.before, true);
+    assert.equal(settings.hostAdded.marketplace, 'lore');
+    assert.equal(settings.env.LORE_BASE_URL, 'https://core.example');
+    assert.equal(settings.env.LORE_API_TOKEN, 'lm_x');
+  });
+});
+
 test('Claude marketplace failure returns failed with token redacted', async () => {
   const { home, loreHome } = await tempHome();
   await fs.mkdir(path.join(loreHome, 'claudecode'), { recursive: true });
@@ -215,6 +250,7 @@ test('codex final TOML preserves Authorization after host MCP mutation', async (
     assert.match(cfg, /http_headers = \{ Authorization = "Bearer lm_x" \}/);
     assert.match(cfg, /\[plugins\."lore@lore"\]/);
     assert.match(cfg, /hooks = true/);
+    assert.equal((await fs.stat(cfgPath)).mode & 0o777, 0o600);
   });
 });
 
@@ -369,6 +405,51 @@ test('codex clear token removes stale MCP auth keys', async () => {
     assert.doesNotMatch(cfg, /http_headers/);
     assert.doesNotMatch(cfg, /env_http_headers/);
     assert.match(cfg, /url = "https:\/\/core\.example\/api\/mcp\?client_type=codex"/);
+    assert.equal((await fs.stat(cfgPath)).mode & 0o777, 0o600);
+  });
+});
+
+test('codex uninstall preserves non-Lore handlers in a mixed legacy hook entry', async () => {
+  const { home, loreHome } = await tempHome();
+  const hooksPath = path.join(home, '.codex', 'hooks.json');
+  await fs.mkdir(path.dirname(hooksPath), { recursive: true });
+  await fs.writeFile(
+    hooksPath,
+    JSON.stringify({
+      description: 'mixed user hooks',
+      hooks: {
+        SessionStart: [
+          {
+            matcher: 'startup',
+            label: 'keep metadata',
+            hooks: [
+              { type: 'command', command: 'node "/root/.codex/hooks/lore/hooks/rules-inject.mjs"' },
+              { type: 'command', command: 'echo keep-user-handler' },
+            ],
+          },
+        ],
+      },
+    }, null, 2),
+    'utf8',
+  );
+
+  await withBin(home, 'codex', async () => {
+    const result = await codexInstaller.uninstall({
+      loreHome,
+      homeDir: home,
+      run: async () => ({ code: 0, stdout: '', stderr: '' }),
+    });
+    assert.equal(result.status, 'ok');
+    const data = JSON.parse(await fs.readFile(hooksPath, 'utf8')) as {
+      description: string;
+      hooks: { SessionStart: Array<{ matcher: string; label: string; hooks: Array<{ command: string }> }> };
+    };
+    assert.equal(data.description, 'mixed user hooks');
+    assert.equal(data.hooks.SessionStart[0].matcher, 'startup');
+    assert.equal(data.hooks.SessionStart[0].label, 'keep metadata');
+    assert.deepEqual(data.hooks.SessionStart[0].hooks, [
+      { type: 'command', command: 'echo keep-user-handler' },
+    ]);
   });
 });
 

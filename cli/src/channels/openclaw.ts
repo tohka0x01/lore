@@ -78,7 +78,7 @@ export const openclawInstaller: ChannelInstaller = {
 
     try {
       const existing = await readJsonFileStrict<unknown>(cfgPath);
-      const data = existing === undefined ? undefined : asConfig(existing, cfgPath);
+      if (existing !== undefined) asConfig(existing, cfgPath);
       const commandOpts = { quiet: true, env };
       const redact = [ctx.apiToken ?? ''];
 
@@ -124,7 +124,9 @@ export const openclawInstaller: ChannelInstaller = {
         { redact },
       );
 
-      if (data !== undefined) {
+      const latest = await readJsonFileStrict<unknown>(cfgPath);
+      if (latest !== undefined) {
+        const data = asConfig(latest, cfgPath);
         const plugins = (data.plugins ??= {});
         const entries = (plugins.entries ??= {});
         const lore = (entries.lore ??= {});
