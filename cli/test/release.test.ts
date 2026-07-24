@@ -85,6 +85,55 @@ test('fetchReleaseTag falls back to API when redirect fails', async () => {
   assert.equal(res.tag, 'v1.2.0');
 });
 
+test('fetchReleaseTag prerelease selects the first prerelease only', async () => {
+  const res = await fetchReleaseTag({
+    pre: true,
+    dev: false,
+    fetchImpl: async (url) => {
+      assert.match(String(url), /api\.github\.com\/repos\/FFatTiger\/lore\/releases\?per_page=10/);
+      return new Response(JSON.stringify([
+        { tag_name: 'v1.3.19', prerelease: false },
+        { tag_name: 'v1.3.20-pre.1', prerelease: true },
+        { tag_name: 'v1.3.20-pre.0', prerelease: true },
+      ]), { status: 200 });
+    },
+  });
+  assert.equal(res.tag, 'v1.3.20-pre.1');
+  assert.equal(res.needInstallHint, 0);
+});
+
+test('fetchReleaseTag prerelease does not fall back to stable when API fails', async () => {
+  const requests: string[] = [];
+  const res = await fetchReleaseTag({
+    pre: true,
+    dev: false,
+    fetchImpl: async (url) => {
+      requests.push(String(url));
+      return new Response('rate limited', { status: 403 });
+    },
+  });
+  assert.equal(res.tag, null);
+  assert.equal(res.needInstallHint, 1);
+  assert.ok(res.error);
+  assert.deepEqual(requests, [
+    'https://api.github.com/repos/FFatTiger/lore/releases?per_page=10',
+  ]);
+});
+
+test('fetchReleaseTag prerelease does not accept a stable-only release list', async () => {
+  const res = await fetchReleaseTag({
+    pre: true,
+    dev: false,
+    fetchImpl: async () => new Response(JSON.stringify([
+      { tag_name: 'v1.3.19', prerelease: false },
+      { tag_name: 'v1.3.18', prerelease: false },
+    ]), { status: 200 }),
+  });
+  assert.equal(res.tag, null);
+  assert.equal(res.needInstallHint, 1);
+  assert.ok(res.error);
+});
+
 test('fetchReleaseTag network failure => needInstall 1 + error', async () => {
   const res = await fetchReleaseTag({
     pre: false,

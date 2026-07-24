@@ -146,10 +146,7 @@ export async function fetchLatestTagViaRedirect(opts: {
   }
 }
 
-/**
- * Pre-release: try API list first; if rate-limited, fall back to latest redirect
- * (best-effort — may return stable when pre list is unavailable).
- */
+/** Resolve the newest actual prerelease. Never substitute a stable release for --pre. */
 async function fetchPreTag(opts: {
   repo: string;
   fetchImpl: typeof fetch;
@@ -159,22 +156,17 @@ async function fetchPreTag(opts: {
       `https://api.github.com/repos/${opts.repo}/releases?per_page=10`,
       { headers: githubHeaders() },
     );
-    if (res.ok) {
-      const data: unknown = await res.json();
-      if (Array.isArray(data)) {
-        // Prefer first prerelease, else first item (shell used per_page=1)
-        for (const item of data) {
-          const row = item as { tag_name?: string; prerelease?: boolean };
-          if (row.prerelease && row.tag_name) return row.tag_name;
-        }
-        const first = data[0] as { tag_name?: string } | undefined;
-        if (first?.tag_name) return first.tag_name;
-      }
+    if (!res.ok) return null;
+    const data: unknown = await res.json();
+    if (!Array.isArray(data)) return null;
+    for (const item of data) {
+      const row = item as { tag_name?: string; prerelease?: boolean };
+      if (row.prerelease === true && row.tag_name) return row.tag_name;
     }
+    return null;
   } catch {
-    // fall through
+    return null;
   }
-  return fetchLatestTagViaRedirect({ repo: opts.repo, fetchImpl: opts.fetchImpl });
 }
 
 async function fetchStableTag(opts: {

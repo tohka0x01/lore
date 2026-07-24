@@ -33,6 +33,28 @@ function failure(err: unknown): ChannelResult {
   };
 }
 
+async function removeLegacyGuidance(homeDir: string): Promise<void> {
+  await fs.rm(path.join(homeDir, '.claude', 'lore-guidance.md'), { force: true }).catch(() => undefined);
+  const claudeMd = path.join(homeDir, '.claude', 'CLAUDE.md');
+  try {
+    const body = await fs.readFile(claudeMd, 'utf8');
+    const filtered = body
+      .split(/\r?\n/)
+      .filter(
+        (line) =>
+          line !== '@~/.claude/lore-guidance.md' &&
+          line !== '@import ~/.claude/lore-guidance.md',
+      )
+      .join('\n')
+      .replace(/^\n+/, '');
+    if (filtered !== body) {
+      await fs.writeFile(claudeMd, filtered.endsWith('\n') ? filtered : `${filtered}\n`, 'utf8');
+    }
+  } catch {
+    // missing
+  }
+}
+
 export const claudecodeInstaller: ChannelInstaller = {
   id: 'claudecode',
 
@@ -125,25 +147,7 @@ export const claudecodeInstaller: ChannelInstaller = {
       else if (ctx.tokenAction === 'clear') delete settingsEnv.LORE_API_TOKEN;
       await writeJsonAtomic(sf, settings);
 
-      await fs.rm(path.join(homeDir, '.claude', 'lore-guidance.md'), { force: true }).catch(() => undefined);
-      const claudeMd = path.join(homeDir, '.claude', 'CLAUDE.md');
-      try {
-        const body = await fs.readFile(claudeMd, 'utf8');
-        const filtered = body
-          .split(/\r?\n/)
-          .filter(
-            (line) =>
-              line !== '@~/.claude/lore-guidance.md' &&
-              line !== '@import ~/.claude/lore-guidance.md',
-          )
-          .join('\n')
-          .replace(/^\n+/, '');
-        if (filtered !== body) {
-          await fs.writeFile(claudeMd, filtered.endsWith('\n') ? filtered : `${filtered}\n`, 'utf8');
-        }
-      } catch {
-        // missing
-      }
+      await removeLegacyGuidance(homeDir);
 
       return { id: 'claudecode', status: 'ok', message: 'Claude Code configured' };
     } catch (err) {
@@ -173,7 +177,7 @@ export const claudecodeInstaller: ChannelInstaller = {
       // ignore
     }
 
-    await fs.rm(path.join(homeDir, '.claude', 'lore-guidance.md'), { force: true }).catch(() => undefined);
+    await removeLegacyGuidance(homeDir);
     await fs.rm(path.join(homeDir, '.claude', 'plugins', 'cache', 'lore'), {
       recursive: true,
       force: true,

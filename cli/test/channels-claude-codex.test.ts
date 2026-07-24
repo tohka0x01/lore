@@ -223,6 +223,41 @@ test('Claude malformed settings fail without overwriting the file', async () => 
   });
 });
 
+test('Claude uninstall removes legacy guidance imports and preserves unrelated content', async () => {
+  const { home, loreHome } = await tempHome();
+  const claudeDir = path.join(home, '.claude');
+  const claudeMd = path.join(claudeDir, 'CLAUDE.md');
+  const guidance = path.join(claudeDir, 'lore-guidance.md');
+  await fs.mkdir(claudeDir, { recursive: true });
+  await fs.mkdir(path.join(loreHome, 'claudecode'), { recursive: true });
+  await fs.writeFile(guidance, 'legacy guidance\n', 'utf8');
+  await fs.writeFile(
+    claudeMd,
+    [
+      '# Keep this heading',
+      '@~/.claude/lore-guidance.md',
+      'Keep this instruction',
+      '@import ~/.claude/lore-guidance.md',
+      '',
+    ].join('\n'),
+    'utf8',
+  );
+
+  const origPath = process.env.PATH;
+  process.env.PATH = path.join(home, 'empty-bin');
+  await fs.mkdir(process.env.PATH, { recursive: true });
+  try {
+    const result = await claudecodeInstaller.uninstall({ loreHome, homeDir: home });
+    assert.equal(result.status, 'ok');
+  } finally {
+    process.env.PATH = origPath;
+  }
+
+  await assert.rejects(fs.access(guidance));
+  const body = await fs.readFile(claudeMd, 'utf8');
+  assert.equal(body, '# Keep this heading\nKeep this instruction\n');
+});
+
 test('codex final TOML preserves Authorization after host MCP mutation', async () => {
   const { home, loreHome } = await tempHome();
   await seedCodexArtifact(loreHome);
