@@ -19,6 +19,7 @@ function ctx(p: Partial<ChannelContext> & { loreHome: string; homeDir: string })
   return {
     baseUrl: 'https://core.example',
     apiToken: 'lm_x',
+    tokenAction: 'set',
     needInstall: 2,
     force: false,
     lang: 'en',

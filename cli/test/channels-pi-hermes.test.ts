@@ -19,6 +19,7 @@ async function tempHome(): Promise<{ home: string; loreHome: string }> {
 function baseCtx(partial: Partial<ChannelContext> & { loreHome: string; homeDir: string }): ChannelContext {
   return {
     baseUrl: 'http://127.0.0.1:18901',
+    tokenAction: partial.apiToken ? 'set' : 'clear',
     needInstall: 0,
     force: false,
     lang: 'en',

@@ -1,13 +1,23 @@
-import { ALL_CHANNELS, type ChannelId, type ChannelResult, type Lang, type NeedInstall } from '../core/types.js';
+import {
+  ALL_CHANNELS,
+  type ChannelId,
+  type ChannelResult,
+  type ConnectionMode,
+  type InstallOperation,
+  type Lang,
+  type NeedInstall,
+} from '../core/types.js';
 import type { GlobalArgs } from '../core/args.js';
 import { getConfigPath, getLoreHome } from '../core/paths.js';
 import { readConfig, writeConfig } from '../core/config.js';
+import { assertTokenTransport, normalizeBaseUrl, resolveTokenDecision } from '../core/connection.js';
 import { ensureDockerServer } from '../core/docker.js';
 import { fetchReleaseTag, resolveNeedInstall } from '../core/release.js';
 import { createExec, type ExecFn } from '../core/exec.js';
 import { getInstaller } from '../channels/registry.js';
 import { collectInstallSnapshot } from '../core/snapshot.js';
 import { summarizeChannelResults } from '../core/result.js';
+import { isSaasBaseUrl } from '../core/saas.js';
 import { createLogger } from '../ui/log.js';
 import { banner } from '../ui/banner.js';
 import { t } from '../ui/i18n.js';
@@ -25,21 +35,30 @@ export type InstallDeps = {
   log?: ReturnType<typeof createLogger>;
 };
 
+type ExecutionPlan = {
+  operation: InstallOperation;
+  connectionMode: ConnectionMode;
+  lang: Lang;
+  baseUrl?: string;
+  apiToken?: string;
+  explicitToken: boolean;
+  channels: ChannelId[];
+  pre: boolean;
+  dev: boolean;
+  force: boolean;
+  skipDocker: boolean;
+};
+
 function resolveLang(args: GlobalArgs, env: NodeJS.ProcessEnv): Lang {
   if (args.lang) return args.lang;
   const fromEnv = env.LORE_INSTALL_LANG?.trim().toLowerCase();
-  if (fromEnv === 'zh') return 'zh';
-  return 'en';
-}
-
-function resolveChannels(args: GlobalArgs): ChannelId[] {
-  return args.channels?.length ? args.channels : [...ALL_CHANNELS];
+  return fromEnv === 'zh' ? 'zh' : 'en';
 }
 
 function shouldPrompt(args: GlobalArgs, isTTY: boolean): boolean {
   if (!isTTY) return false;
   if (args.interactiveDefault) return true;
-  if (
+  return (
     args.command === 'install' &&
     !args.explicitBaseUrl &&
     !args.channels &&
@@ -48,24 +67,16 @@ function shouldPrompt(args: GlobalArgs, isTTY: boolean): boolean {
     !args.skipDocker &&
     !args.force &&
     !args.explicitApiToken
-  ) {
-    return true;
-  }
-  return false;
+  );
+}
+
+function usageError(log: ReturnType<typeof createLogger>, error: unknown): number {
+  log.err(error instanceof Error ? error.message : String(error));
+  return 2;
 }
 
 async function executeInstallPlan(
-  plan: {
-    lang: Lang;
-    baseUrl?: string;
-    apiToken?: string;
-    channels: ChannelId[];
-    pre: boolean;
-    dev: boolean;
-    force: boolean;
-    skipDocker: boolean;
-    explicitBaseUrl: boolean;
-  },
+  plan: ExecutionPlan,
   deps: {
     env: NodeJS.ProcessEnv;
     run: ExecFn;
@@ -76,36 +87,94 @@ async function executeInstallPlan(
   },
 ): Promise<number> {
   const { env, run, fetchImpl, log, loreHome, configPath } = deps;
-  const saved = await readConfig(configPath);
-  let apiToken = plan.apiToken;
-  if (!apiToken) apiToken = saved.api_token;
 
-  const docker = await ensureDockerServer({
-    loreHome,
-    connectionMode: plan.explicitBaseUrl ? 'external' : 'preserve',
-    explicitBaseUrl: plan.explicitBaseUrl ? plan.baseUrl : undefined,
-    skipDocker: plan.skipDocker,
-    pre: plan.pre,
-    dev: plan.dev,
-    saved,
-    run,
-    fetchImpl,
-  });
+  if (!plan.channels.length) {
+    log.err(t(plan.lang, 'install.no_channels'));
+    return 1;
+  }
 
-  const resolvedBase = (
-    (docker.ok ? docker.baseUrl : '') ||
-    plan.baseUrl ||
-    saved.base_url ||
-    'http://127.0.0.1:18901'
-  ).replace(/\/$/, '');
+  let saved;
+  try {
+    saved = await readConfig(configPath);
+  } catch (error) {
+    log.err(error instanceof Error ? error.message : String(error));
+    return 1;
+  }
+
+  let explicitBaseUrl: string | undefined;
+  if (plan.connectionMode === 'external') {
+    try {
+      if (!plan.baseUrl) throw new Error('External Lore server URL is required');
+      explicitBaseUrl = normalizeBaseUrl(plan.baseUrl);
+    } catch (error) {
+      return usageError(log, error);
+    }
+  }
+
+  let docker;
+  try {
+    docker = await ensureDockerServer({
+      loreHome,
+      connectionMode: plan.connectionMode,
+      explicitBaseUrl,
+      skipDocker: plan.skipDocker,
+      pre: plan.pre,
+      dev: plan.dev,
+      saved,
+      run,
+      fetchImpl,
+    });
+  } catch (error) {
+    log.err(error instanceof Error ? error.message : String(error));
+    return 1;
+  }
+  if (!docker.ok) {
+    log.err(docker.error);
+    return 1;
+  }
+
+  let resolvedBase: string;
+  let tokenDecision;
+  try {
+    resolvedBase = normalizeBaseUrl(docker.baseUrl);
+    tokenDecision = resolveTokenDecision({
+      savedBaseUrl: saved.base_url,
+      savedToken: saved.api_token,
+      targetBaseUrl: resolvedBase,
+      requestedToken: plan.apiToken,
+      explicitToken: plan.explicitToken,
+      forceClear: plan.connectionMode === 'docker',
+    });
+  } catch (error) {
+    log.err(error instanceof Error ? error.message : String(error));
+    return 1;
+  }
+
+  const apiToken = tokenDecision.apiToken;
+  try {
+    if (isSaasBaseUrl(resolvedBase, env) && !apiToken) {
+      throw new Error('Loremem SaaS requires an API token');
+    }
+    assertTokenTransport(resolvedBase, apiToken);
+  } catch (error) {
+    return usageError(log, error);
+  }
 
   const releaseInfo = await fetchReleaseTag({
     pre: plan.pre,
     dev: plan.dev,
     fetchImpl,
   });
+  if (!releaseInfo.tag && plan.operation === 'update') {
+    log.err(t(plan.lang, 'install.release_unknown'));
+    if (releaseInfo.error) {
+      log.err(t(plan.lang, 'install.release_unknown_detail', { detail: releaseInfo.error }));
+    }
+    return 1;
+  }
+
   let needInstall: NeedInstall = releaseInfo.needInstallHint;
-  let releaseVersion = releaseInfo.tag ?? undefined;
+  const releaseVersion = releaseInfo.tag ?? undefined;
   if (releaseVersion) {
     needInstall = resolveNeedInstall({
       installed: saved.installed_version,
@@ -116,16 +185,20 @@ async function executeInstallPlan(
     needInstall = 1;
   }
 
-  // Always persist connection config even if plugin install fails later.
-  await writeConfig(
-    configPath,
-    { base_url: resolvedBase, api_token: apiToken },
-    {
-      writeVersion: false,
-      dockerManaged:
-        docker.ok && docker.dockerManaged !== null ? docker.dockerManaged : undefined,
-    },
-  );
+  try {
+    await writeConfig(
+      configPath,
+      { base_url: resolvedBase, api_token: apiToken },
+      {
+        tokenAction: tokenDecision.action,
+        writeVersion: false,
+        dockerManaged: docker.dockerManaged,
+      },
+    );
+  } catch (error) {
+    log.err(error instanceof Error ? error.message : String(error));
+    return 1;
+  }
 
   log.info(`Server: ${resolvedBase}`);
   log.info(
@@ -141,33 +214,29 @@ async function executeInstallPlan(
     log.info(`Release: ${releaseVersion}`);
   }
 
-  if (!plan.channels.length) {
-    log.err(t(plan.lang, 'install.no_channels'));
-    return 1;
-  }
-
   const results: ChannelResult[] = [];
   for (const id of plan.channels) {
     log.section(id);
     try {
-      const installer = getInstaller(id);
-      const result = await installer.install({
+      const result = await getInstaller(id).install({
         loreHome,
         baseUrl: resolvedBase,
         apiToken,
+        tokenAction: tokenDecision.action,
         releaseVersion,
         needInstall,
         force: plan.force,
         lang: plan.lang,
         run,
+        env,
         homeDir: env.HOME || undefined,
       });
       results.push(result);
       if (result.status === 'ok') log.ok(result.message ?? `${id} ok`);
       else if (result.status === 'skipped') log.warn(result.message ?? `${id} skipped`);
       else log.err(result.message ?? `${id} failed`);
-    } catch (err) {
-      const message = err instanceof Error ? err.message : String(err);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
       results.push({ id, status: 'failed', message });
       log.err(`${id}: ${message}`);
     }
@@ -175,21 +244,28 @@ async function executeInstallPlan(
 
   const outcome = summarizeChannelResults(results);
   const versionLabel = releaseVersion ?? 'unknown';
-
-  // Only bump installed_version when we actually applied a known release and had some success.
   const shouldBumpVersion =
-    Boolean(releaseVersion) && needInstall !== 2 && outcome.ok > 0;
+    Boolean(releaseVersion) &&
+    needInstall !== 2 &&
+    outcome.ok > 0 &&
+    outcome.failed === 0 &&
+    outcome.skipped === 0;
 
-  await writeConfig(
-    configPath,
-    { base_url: resolvedBase, api_token: apiToken },
-    {
-      writeVersion: shouldBumpVersion,
-      releaseVersion,
-      dockerManaged:
-        docker.ok && docker.dockerManaged !== null ? docker.dockerManaged : undefined,
-    },
-  );
+  try {
+    await writeConfig(
+      configPath,
+      { base_url: resolvedBase, api_token: apiToken },
+      {
+        tokenAction: tokenDecision.action,
+        writeVersion: shouldBumpVersion,
+        releaseVersion,
+        dockerManaged: docker.dockerManaged,
+      },
+    );
+  } catch (error) {
+    log.err(error instanceof Error ? error.message : String(error));
+    return 1;
+  }
 
   if (outcome.kind === 'success') {
     log.ok(t(plan.lang, 'install.complete', { version: versionLabel }));
@@ -219,17 +295,20 @@ async function executeInstallPlan(
     );
   }
   log.info(t(plan.lang, 'config.path', { path: configPath }));
-  // Do not print restart/success next-steps on failure.
   return outcome.exitCode;
 }
 
-export async function runInstall(args: GlobalArgs, deps: InstallDeps = {}): Promise<number> {
+async function runInstallOperation(
+  operation: InstallOperation,
+  args: GlobalArgs,
+  deps: InstallDeps,
+): Promise<number> {
   const env = deps.env ?? process.env;
   const run = deps.run ?? createExec();
   const fetchImpl = deps.fetchImpl ?? fetch;
   const isTTY = deps.isTTY ?? Boolean(process.stdin.isTTY && process.stdout.isTTY);
   const log = deps.log ?? createLogger();
-  let lang = resolveLang(args, env);
+  const lang = resolveLang(args, env);
   const loreHome = getLoreHome(env);
   const configPath = getConfigPath(loreHome);
   const homeDir = env.HOME || undefined;
@@ -239,9 +318,15 @@ export async function runInstall(args: GlobalArgs, deps: InstallDeps = {}): Prom
     return 2;
   }
 
-  const saved = await readConfig(configPath);
+  let saved;
+  try {
+    saved = await readConfig(configPath);
+  } catch (error) {
+    log.err(error instanceof Error ? error.message : String(error));
+    return 1;
+  }
 
-  if (shouldPrompt(args, isTTY)) {
+  if (operation === 'install' && shouldPrompt(args, isTTY)) {
     const prompt = deps.prompt === null ? null : (deps.prompt ?? createTTYPrompt({ lang }));
     if (prompt) {
       banner(lang);
@@ -261,8 +346,7 @@ export async function runInstall(args: GlobalArgs, deps: InstallDeps = {}): Prom
       });
 
       if (wizard.kind === 'exit') {
-        const exitLang = wizard.lang;
-        log.err(exitLang === 'zh' ? '已取消。' : 'Aborted.');
+        log.err(wizard.lang === 'zh' ? '已取消。' : 'Aborted.');
         return 1;
       }
       if (wizard.kind === 'status') {
@@ -285,40 +369,75 @@ export async function runInstall(args: GlobalArgs, deps: InstallDeps = {}): Prom
       const plan = wizard.plan;
       return executeInstallPlan(
         {
+          operation: plan.operation,
+          connectionMode: plan.connectionMode,
           lang: plan.lang,
           baseUrl: plan.baseUrl,
           apiToken: plan.apiToken,
+          explicitToken: Boolean(plan.apiToken),
           channels: plan.channels,
           pre: plan.pre,
           dev: plan.dev,
           force: plan.force,
           skipDocker: plan.skipDocker,
-          explicitBaseUrl: plan.explicitBaseUrl,
         },
         { env, run, fetchImpl, log, loreHome, configPath },
       );
     }
   }
 
-  // Non-interactive / flag path
+  let channels: ChannelId[];
+  if (args.channels?.length) {
+    channels = args.channels;
+  } else if (operation === 'update') {
+    const snapshot = await collectInstallSnapshot({
+      loreHome,
+      configPath,
+      config: saved,
+      homeDir,
+      env,
+    });
+    channels = snapshot.channels
+      .filter((channel) => channel.state === 'installed' || channel.state === 'partial')
+      .map((channel) => channel.id);
+    if (!channels.length) {
+      log.err('Update failed — no installed or partial channels found');
+      return 1;
+    }
+  } else {
+    channels = [...ALL_CHANNELS];
+  }
+
+  const connectionMode: ConnectionMode = args.explicitBaseUrl
+    ? 'external'
+    : args.skipDocker || operation === 'update'
+      ? 'preserve'
+      : 'docker';
+
   return executeInstallPlan(
     {
+      operation,
+      connectionMode,
       lang,
       baseUrl: args.baseUrl,
-      apiToken: args.apiToken ?? saved.api_token,
-      channels: resolveChannels(args),
+      apiToken: args.apiToken,
+      explicitToken: args.explicitApiToken,
+      channels,
       pre: args.pre,
       dev: args.dev,
       force: args.force,
       skipDocker: args.skipDocker,
-      explicitBaseUrl: args.explicitBaseUrl,
     },
     { env, run, fetchImpl, log, loreHome, configPath },
   );
 }
 
+export async function runInstall(args: GlobalArgs, deps: InstallDeps = {}): Promise<number> {
+  return runInstallOperation('install', args, deps);
+}
+
 export async function runUpdate(args: GlobalArgs, deps: InstallDeps = {}): Promise<number> {
-  return runInstall({ ...args, interactiveDefault: false, command: 'install' }, deps);
+  return runInstallOperation('update', args, deps);
 }
 
 /** Exposed for tests */

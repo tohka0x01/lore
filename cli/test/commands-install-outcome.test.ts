@@ -3,8 +3,10 @@ import test from 'node:test';
 import fs from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
-import { runInstall } from '../src/commands/install.ts';
+import { runInstall, runUpdate } from '../src/commands/install.ts';
 import { parseArgv } from '../src/core/args.ts';
+import { getConfigPath } from '../src/core/paths.ts';
+import { readConfig, writeConfig } from '../src/core/config.ts';
 
 function silentLog() {
   const lines: string[] = [];
@@ -76,4 +78,97 @@ test('when release unknown, surfaces explicit release error before channels', as
   );
   assert.equal(exit, 1);
   assert.ok(lines.some((l) => /release|GitHub|版本/i.test(l)));
+});
+
+test('update fails immediately when the release cannot be resolved', async () => {
+  const loreHome = await fs.mkdtemp(path.join(os.tmpdir(), 'lore-update-release-'));
+  await writeConfig(
+    getConfigPath(loreHome),
+    { base_url: 'https://core.example', api_token: 'lm_x' },
+    { tokenAction: 'set', writeVersion: true, releaseVersion: 'v1.3.18' },
+  );
+  await fs.mkdir(path.join(loreHome, 'hermes', 'lore_memory'), { recursive: true });
+  const { lines, log } = silentLog();
+
+  const exit = await runUpdate(parseArgv(['update', '--channels', 'hermes']), {
+    isTTY: false,
+    env: { ...process.env, LORE_HOME: loreHome, HOME: loreHome },
+    log,
+    fetchImpl: async () => { throw new Error('offline'); },
+    run: async () => ({ code: 0, stdout: '', stderr: '' }),
+  });
+
+  assert.equal(exit, 1);
+  assert.ok(!lines.some((line) => line.startsWith('ok:') && /complete|完成/i.test(line)));
+  assert.equal((await readConfig(getConfigPath(loreHome))).installed_version, 'v1.3.18');
+});
+
+test('failed selected channel prevents global version advancement', async () => {
+  const loreHome = await fs.mkdtemp(path.join(os.tmpdir(), 'lore-version-gate-'));
+  await writeConfig(
+    getConfigPath(loreHome),
+    { base_url: 'https://core.example', api_token: 'lm_x' },
+    { tokenAction: 'set', writeVersion: true, releaseVersion: 'v1.3.18' },
+  );
+  const bin = path.join(loreHome, 'bin');
+  await fs.mkdir(bin, { recursive: true });
+  await fs.writeFile(path.join(bin, 'pi'), '#!/bin/bash\nexit 0\n');
+  await fs.chmod(path.join(bin, 'pi'), 0o755);
+  const oldPath = process.env.PATH;
+  process.env.PATH = `${bin}${path.delimiter}${oldPath ?? ''}`;
+  try {
+    const exit = await runInstall(
+      parseArgv([
+        'install', '--base-url', 'https://core.example', '--api-token', 'lm_x',
+        '--channels', 'hermes,pi', '--skip-docker',
+      ]),
+      {
+        isTTY: false,
+        env: { ...process.env, LORE_HOME: loreHome, HOME: loreHome },
+        fetchImpl: async (input) => {
+          if (String(input).endsWith('/releases/latest')) {
+            return new Response(null, { status: 302, headers: { location: 'https://github.com/FFatTiger/lore/releases/tag/v1.3.19' } });
+          }
+          return new Response('ok', { status: 200 });
+        },
+        run: async (argv) => {
+          if (argv[0] === 'curl') return { code: 22, stdout: '', stderr: 'download failed' };
+          return { code: 0, stdout: '', stderr: '' };
+        },
+      },
+    );
+    assert.equal(exit, 1);
+    assert.equal((await readConfig(getConfigPath(loreHome))).installed_version, 'v1.3.18');
+  } finally {
+    process.env.PATH = oldPath;
+  }
+});
+
+test('non-interactive update defaults to installed and partial channels', async () => {
+  const loreHome = await fs.mkdtemp(path.join(os.tmpdir(), 'lore-update-defaults-'));
+  await writeConfig(
+    getConfigPath(loreHome),
+    { base_url: 'https://core.example', api_token: 'lm_x' },
+    { tokenAction: 'set', writeVersion: true, releaseVersion: 'v1.3.18' },
+  );
+  await fs.mkdir(path.join(loreHome, 'hermes', 'lore_memory'), { recursive: true });
+  await fs.mkdir(path.join(loreHome, 'pi'), { recursive: true });
+  const { lines, log } = silentLog();
+
+  const exit = await runUpdate(parseArgv(['update']), {
+    isTTY: false,
+    env: { ...process.env, LORE_HOME: loreHome, HOME: loreHome, PATH: '' },
+    log,
+    fetchImpl: async (input) => {
+      if (String(input).endsWith('/releases/latest')) {
+        return new Response(null, { status: 302, headers: { location: 'https://github.com/FFatTiger/lore/releases/tag/v1.3.18' } });
+      }
+      return new Response('ok', { status: 200 });
+    },
+    run: async () => ({ code: 0, stdout: '', stderr: '' }),
+  });
+
+  assert.equal(exit, 0);
+  const sections = lines.filter((line) => line.startsWith('section:'));
+  assert.deepEqual(sections, ['section:pi', 'section:hermes']);
 });

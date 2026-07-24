@@ -1,4 +1,9 @@
-import type { ChannelId, ConnectionMode as InstallConnectionMode, Lang } from '../core/types.js';
+import type {
+  ChannelId,
+  ConnectionMode as InstallConnectionMode,
+  InstallOperation,
+  Lang,
+} from '../core/types.js';
 import { ALL_CHANNELS } from '../core/types.js';
 import type { InstallSnapshot } from '../core/snapshot.js';
 import { formatSnapshot } from '../core/snapshot.js';
@@ -17,6 +22,7 @@ export type WizardResult =
   | { kind: 'exit'; lang: Lang };
 
 export type InstallPlan = {
+  operation: InstallOperation;
   connectionMode: InstallConnectionMode;
   lang: Lang;
   baseUrl?: string;
@@ -116,6 +122,7 @@ export async function runInteractiveWizard(opts: RunWizardOptions): Promise<Wiza
       purpose: 'install',
     });
     const plan: InstallPlan = {
+      operation: 'install',
       connectionMode: conn.connectionMode,
       lang,
       baseUrl: conn.baseUrl,
@@ -175,6 +182,7 @@ export async function runInteractiveWizard(opts: RunWizardOptions): Promise<Wiza
       purpose: 'install',
     });
     const plan: InstallPlan = {
+      operation: 'install',
       connectionMode: conn.connectionMode,
       lang,
       baseUrl: conn.baseUrl,
@@ -222,6 +230,7 @@ export async function runInteractiveWizard(opts: RunWizardOptions): Promise<Wiza
 
   const kind = opts.snapshot.serverKind;
   const plan: InstallPlan = {
+    operation: existing === 'update' ? 'update' : 'install',
     connectionMode: 'preserve',
     lang,
     baseUrl: opts.snapshot.config.base_url,

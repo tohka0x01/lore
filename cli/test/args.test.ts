@@ -77,7 +77,6 @@ test('parses boolean flags including short -y', () => {
     '--skip-docker',
     '--force',
     '--pre',
-    '--dev',
     '--yes',
     '--purge',
     '-y',
@@ -87,10 +86,14 @@ test('parses boolean flags including short -y', () => {
   assert.equal(args.skipDocker, true);
   assert.equal(args.force, true);
   assert.equal(args.pre, true);
-  assert.equal(args.dev, true);
+  assert.equal(args.dev, false);
   assert.equal(args.yes, true);
   assert.equal(args.purge, true);
   assert.equal(args.help, true);
+});
+
+test('--pre and --dev cannot be combined', () => {
+  assert.throws(() => parseArgv(['install', '--pre', '--dev']), /cannot.*together/i);
 });
 
 test('missing value for --base-url throws', () => {

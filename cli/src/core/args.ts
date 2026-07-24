@@ -138,5 +138,9 @@ export function parseArgv(argv: string[]): GlobalArgs {
     result.interactiveDefault = true;
   }
 
+  if (result.pre && result.dev) {
+    throw new Error('--pre and --dev cannot be used together');
+  }
+
   return result;
 }
