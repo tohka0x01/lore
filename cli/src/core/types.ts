@@ -17,6 +17,9 @@ export const ALL_CHANNELS: ChannelId[] = [
 
 export type NeedInstall = 0 | 1 | 2;
 export type Lang = 'en' | 'zh';
+export type ConnectionMode = 'preserve' | 'docker' | 'external';
+export type TokenAction = 'keep' | 'set' | 'clear';
+export type InstallOperation = 'install' | 'update';
 
 export type LoreConfig = {
   base_url?: string;
