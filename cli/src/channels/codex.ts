@@ -3,8 +3,8 @@ import os from 'node:os';
 import path from 'node:path';
 import { downloadOrSkipDetailed } from '../core/artifact.js';
 import { haveCommand } from '../core/detect.js';
-import { createExec } from '../core/exec.js';
-import { ensureDir, readJsonFile, writeJsonAtomic } from '../core/fs.js';
+import { createExec, runChecked } from '../core/exec.js';
+import { ensureDir, readJsonFile, readJsonFileStrict, writeJsonAtomic } from '../core/fs.js';
 import { channelDir } from '../core/paths.js';
 import { removeTomlSection, setTomlSectionKeys } from '../core/toml.js';
 import type { ChannelResult, ChannelStatus } from '../core/types.js';
@@ -17,6 +17,102 @@ function codexHome(homeDir: string, env: NodeJS.ProcessEnv = process.env): strin
 async function copyDir(src: string, dest: string): Promise<void> {
   await fs.rm(dest, { recursive: true, force: true }).catch(() => undefined);
   await fs.cp(src, dest, { recursive: true });
+}
+
+function replaceStrings(value: unknown, from: string, to: string): unknown {
+  if (typeof value === 'string') return value.split(from).join(to);
+  if (Array.isArray(value)) return value.map((item) => replaceStrings(item, from, to));
+  if (value && typeof value === 'object') {
+    return Object.fromEntries(
+      Object.entries(value).map(([key, item]) => [key, replaceStrings(item, from, to)]),
+    );
+  }
+  return value;
+}
+
+async function patchBundledHooks(pluginRoot: string): Promise<void> {
+  const hooksPath = path.join(pluginRoot, 'hooks', 'hooks.json');
+  const hooks = await readJsonFileStrict<unknown>(hooksPath);
+  if (hooks === undefined) return;
+  const patched = replaceStrings(hooks, '__LORE_CODEX_PLUGIN_ROOT__', pluginRoot);
+  await writeJsonAtomic(hooksPath, patched, { mode: 0o644 });
+}
+
+function isLoreLegacyCommand(command: string): boolean {
+  return command.includes('/hooks/lore/hooks/rules-inject.') ||
+    command.includes('/hooks/lore/hooks/recall-inject.') ||
+    (command.includes('LORE_CODEX_PLUGIN_ROOT=') &&
+      (command.includes('rules-inject.') || command.includes('recall-inject.')));
+}
+
+type LegacyHook = { command?: unknown; [key: string]: unknown };
+type LegacyEntry = { hooks?: unknown; [key: string]: unknown };
+type LegacyHooksDocument = { hooks?: unknown; [key: string]: unknown };
+
+async function readLegacyHooks(hooksJson: string): Promise<LegacyHooksDocument | undefined> {
+  const data = await readJsonFileStrict<unknown>(hooksJson);
+  if (data === undefined) return undefined;
+  if (!data || typeof data !== 'object' || Array.isArray(data)) {
+    throw new Error(`Invalid JSON object in ${hooksJson}`);
+  }
+  return data as LegacyHooksDocument;
+}
+
+async function removeLegacyLoreHooks(
+  cHome: string,
+  data: LegacyHooksDocument | undefined,
+): Promise<void> {
+  const hooksJson = path.join(cHome, 'hooks.json');
+  let changed = false;
+  if (data?.hooks && typeof data.hooks === 'object' && !Array.isArray(data.hooks)) {
+    const events = data.hooks as Record<string, unknown>;
+    for (const [eventName, rawEntries] of Object.entries(events)) {
+      if (!Array.isArray(rawEntries)) continue;
+      const nextEntries: unknown[] = [];
+      for (const rawEntry of rawEntries) {
+        if (!rawEntry || typeof rawEntry !== 'object' || Array.isArray(rawEntry)) {
+          nextEntries.push(rawEntry);
+          continue;
+        }
+        const entry = rawEntry as LegacyEntry;
+        if (!Array.isArray(entry.hooks)) {
+          nextEntries.push(rawEntry);
+          continue;
+        }
+        const nextHooks = entry.hooks.filter((rawHook) => {
+          if (!rawHook || typeof rawHook !== 'object' || Array.isArray(rawHook)) return true;
+          const command = String((rawHook as LegacyHook).command ?? '');
+          return !isLoreLegacyCommand(command);
+        });
+        if (nextHooks.length !== entry.hooks.length) changed = true;
+        if (nextHooks.length > 0) {
+          nextEntries.push(nextHooks.length === entry.hooks.length ? rawEntry : { ...entry, hooks: nextHooks });
+        } else if (entry.hooks.length === 0) {
+          nextEntries.push(rawEntry);
+        }
+      }
+      if (nextEntries.length !== rawEntries.length) changed = true;
+      if (nextEntries.length > 0) events[eventName] = nextEntries;
+      else {
+        delete events[eventName];
+        changed = true;
+      }
+    }
+    if (Object.keys(events).length === 0) {
+      delete data.hooks;
+      changed = true;
+    }
+  }
+  if (data && changed) await writeJsonAtomic(hooksJson, data);
+  await fs.rm(path.join(cHome, 'hooks', 'lore'), { recursive: true, force: true });
+}
+
+function failure(err: unknown): ChannelResult {
+  return {
+    id: 'codex',
+    status: 'failed',
+    message: err instanceof Error ? err.message : String(err),
+  };
 }
 
 export const codexInstaller: ChannelInstaller = {
@@ -44,7 +140,8 @@ export const codexInstaller: ChannelInstaller = {
     }
 
     const homeDir = ctx.homeDir ?? os.homedir();
-    const cHome = codexHome(homeDir);
+    const env = ctx.env ?? process.env;
+    const cHome = codexHome(homeDir, env);
     const pluginRoot = path.join(cHome, 'plugins', 'cache', 'lore', 'lore', 'local');
     const sourcePlugin = path.join(marketDir, 'plugins', 'lore');
     try {
@@ -57,68 +154,87 @@ export const codexInstaller: ChannelInstaller = {
       };
     }
 
-    await ensureDir(path.dirname(pluginRoot));
-    const tmp = `${pluginRoot}.tmp`;
-    await copyDir(sourcePlugin, tmp);
-    await fs.rm(pluginRoot, { recursive: true, force: true }).catch(() => undefined);
-    await fs.rename(tmp, pluginRoot);
-
-    const hooksPath = path.join(pluginRoot, 'hooks', 'hooks.json');
     try {
-      const hooks = await fs.readFile(hooksPath, 'utf8');
-      await fs.writeFile(hooksPath, hooks.replaceAll('__LORE_CODEX_PLUGIN_ROOT__', pluginRoot), 'utf8');
-    } catch {
-      // optional
+      const hooksJson = path.join(cHome, 'hooks.json');
+      const legacyHooks = await readLegacyHooks(hooksJson);
+
+      await ensureDir(path.dirname(pluginRoot));
+      const tmp = `${pluginRoot}.tmp`;
+      await copyDir(sourcePlugin, tmp);
+      await fs.rm(pluginRoot, { recursive: true, force: true }).catch(() => undefined);
+      await fs.rename(tmp, pluginRoot);
+      await patchBundledHooks(pluginRoot);
+
+      const run = ctx.run ?? createExec();
+      const commandOpts = { quiet: true, env };
+      const redact = [ctx.apiToken ?? ''];
+      await runChecked(
+        run,
+        'Codex marketplace registration',
+        ['codex', 'plugin', 'marketplace', 'add', marketDir],
+        commandOpts,
+        { redact },
+      );
+
+      const mcpUrl = `${ctx.baseUrl.replace(/\/$/, '')}/api/mcp?client_type=codex`;
+      await run(['codex', 'mcp', 'remove', 'lore'], commandOpts).catch(() => undefined);
+      await runChecked(
+        run,
+        'Codex MCP registration',
+        ['codex', 'mcp', 'add', 'lore', '--url', mcpUrl],
+        commandOpts,
+        { redact },
+      );
+
+      const cfgPath = path.join(cHome, 'config.toml');
+      await ensureDir(path.dirname(cfgPath));
+      let cfg = '';
+      try {
+        cfg = await fs.readFile(cfgPath, 'utf8');
+      } catch (err) {
+        if ((err as NodeJS.ErrnoException).code !== 'ENOENT') throw err;
+      }
+      cfg = setTomlSectionKeys(cfg, '[plugins."lore@lore"]', { enabled: 'true' });
+      const mcpKeys: Record<string, string> = { url: JSON.stringify(mcpUrl) };
+      if (ctx.apiToken) {
+        mcpKeys.http_headers = `{ Authorization = ${JSON.stringify(`Bearer ${ctx.apiToken}`)} }`;
+      }
+      cfg = setTomlSectionKeys(cfg, '[mcp_servers.lore]', mcpKeys, [
+        'bearer_token_env_var',
+        'http_headers',
+        'env_http_headers',
+        'url',
+      ]);
+      cfg = setTomlSectionKeys(cfg, '[features]', { hooks: 'true' }, ['hooks', 'codex_hooks']);
+      await fs.writeFile(cfgPath, cfg, 'utf8');
+
+      await removeLegacyLoreHooks(cHome, legacyHooks);
+
+      if (env.LORE_CODEX_INSTALL_USER_HOOKS === '1') {
+        const installHooks = path.join(pluginRoot, 'scripts', 'install-hooks.sh');
+        await runChecked(
+          run,
+          'Codex legacy hook installation',
+          ['bash', installHooks],
+          {
+            quiet: true,
+            env: {
+              ...env,
+              LORE_CODEX_PLUGIN_ROOT: pluginRoot,
+              LORE_BASE_URL: ctx.baseUrl,
+              LORE_API_TOKEN: ctx.apiToken ?? '',
+              HOME: homeDir,
+              CODEX_HOME: cHome,
+            },
+          },
+          { redact },
+        );
+      }
+
+      return { id: 'codex', status: 'ok', message: 'Codex configured' };
+    } catch (err) {
+      return failure(err);
     }
-
-    const run = ctx.run ?? createExec();
-    await run(['codex', 'plugin', 'marketplace', 'add', marketDir], { quiet: true });
-
-    const cfgPath = path.join(cHome, 'config.toml');
-    await ensureDir(path.dirname(cfgPath));
-    let cfg = '';
-    try {
-      cfg = await fs.readFile(cfgPath, 'utf8');
-    } catch {
-      cfg = '';
-    }
-    cfg = setTomlSectionKeys(cfg, '[plugins."lore@lore"]', { enabled: 'true' });
-    const mcpUrl = `${ctx.baseUrl.replace(/\/$/, '')}/api/mcp?client_type=codex`;
-    const mcpKeys: Record<string, string> = { url: JSON.stringify(mcpUrl) };
-    if (ctx.apiToken) {
-      mcpKeys['http_headers'] = `{ Authorization = ${JSON.stringify(`Bearer ${ctx.apiToken}`)} }`;
-    }
-    cfg = setTomlSectionKeys(cfg, '[mcp_servers.lore]', mcpKeys, [
-      'bearer_token_env_var',
-      'http_headers',
-      'env_http_headers',
-      'url',
-    ]);
-    cfg = setTomlSectionKeys(cfg, '[features]', { hooks: 'true' }, ['hooks', 'codex_hooks']);
-    await fs.writeFile(cfgPath, cfg, 'utf8');
-
-    await run(['codex', 'mcp', 'remove', 'lore'], { quiet: true });
-    await run(['codex', 'mcp', 'add', 'lore', '--url', mcpUrl], { quiet: true });
-
-    const installHooks = path.join(pluginRoot, 'scripts', 'install-hooks.sh');
-    try {
-      await fs.access(installHooks);
-      await run(['bash', installHooks], {
-        quiet: true,
-        env: {
-          ...process.env,
-          LORE_CODEX_PLUGIN_ROOT: pluginRoot,
-          LORE_BASE_URL: ctx.baseUrl,
-          LORE_API_TOKEN: ctx.apiToken ?? '',
-          HOME: homeDir,
-          CODEX_HOME: cHome,
-        },
-      });
-    } catch {
-      // optional
-    }
-
-    return { id: 'codex', status: 'ok', message: 'Codex configured' };
   },
 
   async uninstall(ctx: UninstallContext): Promise<ChannelResult> {
@@ -144,7 +260,7 @@ export const codexInstaller: ChannelInstaller = {
           const filtered = entries.filter((entry) => {
             const hooks = (entry as { hooks?: Array<{ command?: string }> }).hooks;
             if (!Array.isArray(hooks)) return true;
-            return !hooks.some((h) => String(h.command ?? '').includes('/hooks/lore/hooks/recall-inject'));
+            return !hooks.some((h) => isLoreLegacyCommand(String(h.command ?? '')));
           });
           if (filtered.length) data.hooks[event] = filtered;
           else delete data.hooks[event];
