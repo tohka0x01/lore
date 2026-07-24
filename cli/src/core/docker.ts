@@ -3,6 +3,7 @@ import path from 'node:path';
 import crypto from 'node:crypto';
 import type { ConnectionMode, LoreConfig } from './types.js';
 import type { ExecFn } from './exec.js';
+import { runChecked } from './exec.js';
 import { dockerDir } from './paths.js';
 import { ensureDir } from './fs.js';
 import { normalizeBaseUrl } from './connection.js';
@@ -41,18 +42,20 @@ function success(
   return { ok: true, baseUrl, dockerManaged, skipped };
 }
 
-function commandDetail(result: { stdout: string; stderr: string }): string {
-  return [result.stderr, result.stdout]
-    .filter(Boolean)
-    .join(' ')
-    .replace(/\s+/g, ' ')
-    .trim()
-    .slice(0, 300);
-}
-
-function commandFailure(stage: string, result: { stdout: string; stderr: string }): DockerResult {
-  const detail = commandDetail(result);
-  return { ok: false, error: `${stage} failed${detail ? `: ${detail}` : ''}` };
+async function runDockerCommand(
+  run: ExecFn,
+  stage: string,
+  argv: string[],
+  cwd: string,
+): Promise<DockerResult | null> {
+  try {
+    await runChecked(run, stage, argv, { cwd });
+    return null;
+  } catch (err) {
+    const raw = err instanceof Error ? err.message : String(err);
+    const withStage = raw.startsWith(`${stage} failed`) ? raw : `${stage} failed: ${raw}`;
+    return { ok: false, error: withStage.replace(/ \(exit \d+\)/, '') };
+  }
 }
 
 function imageTag(pre: boolean, dev: boolean): string {
@@ -237,10 +240,20 @@ async function updateDocker(opts: {
     // Existing managed installs created by older versions may not have an env file.
   }
 
-  const pull = await opts.run([...prereq.composeCmd, 'pull'], { cwd: dockerPath });
-  if (pull.code !== 0) return commandFailure('docker compose pull', pull);
-  const up = await opts.run([...prereq.composeCmd, 'up', '-d'], { cwd: dockerPath });
-  if (up.code !== 0) return commandFailure('docker compose up', up);
+  const pullFailure = await runDockerCommand(
+    opts.run,
+    'docker compose pull',
+    [...prereq.composeCmd, 'pull'],
+    dockerPath,
+  );
+  if (pullFailure) return pullFailure;
+  const upFailure = await runDockerCommand(
+    opts.run,
+    'docker compose up',
+    [...prereq.composeCmd, 'up', '-d'],
+    dockerPath,
+  );
+  if (upFailure) return upFailure;
   if (!(await waitForHealth(opts.baseUrl, opts.fetchFn, opts.healthTimeoutMs, opts.healthPollMs))) {
     return { ok: false, error: `Lore Docker health check timed out for ${opts.baseUrl}` };
   }
@@ -274,8 +287,13 @@ async function startFreshDocker(opts: {
     await writeFreshEnv(envPath, dockerPath, opts.pre, opts.dev);
   }
 
-  const up = await opts.run([...prereq.composeCmd, 'up', '-d'], { cwd: dockerPath });
-  if (up.code !== 0) return commandFailure('docker compose up', up);
+  const upFailure = await runDockerCommand(
+    opts.run,
+    'docker compose up',
+    [...prereq.composeCmd, 'up', '-d'],
+    dockerPath,
+  );
+  if (upFailure) return upFailure;
   if (!(await waitForHealth(opts.defaultBaseUrl, opts.fetchFn, opts.healthTimeoutMs, opts.healthPollMs))) {
     return {
       ok: false,

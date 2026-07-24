@@ -1,9 +1,35 @@
 import { spawn } from 'node:child_process';
 
+export type ExecResult = { code: number; stdout: string; stderr: string };
+export type ExecOptions = { cwd?: string; env?: NodeJS.ProcessEnv; quiet?: boolean };
+
 export type ExecFn = (
   argv: string[],
-  opts?: { cwd?: string; env?: NodeJS.ProcessEnv; quiet?: boolean },
-) => Promise<{ code: number; stdout: string; stderr: string }>;
+  opts?: ExecOptions,
+) => Promise<ExecResult>;
+
+function boundedDetail(result: ExecResult, redact: string[]): string {
+  let detail = [result.stderr, result.stdout].filter(Boolean).join(' ').trim();
+  for (const secret of redact.filter(Boolean)) {
+    detail = detail.split(secret).join('[REDACTED]');
+  }
+  return detail.replace(/\s+/g, ' ').slice(0, 300);
+}
+
+export async function runChecked(
+  run: ExecFn,
+  stage: string,
+  argv: string[],
+  opts?: ExecOptions,
+  safety: { redact?: string[] } = {},
+): Promise<ExecResult> {
+  const result = await run(argv, opts);
+  if (result.code !== 0) {
+    const detail = boundedDetail(result, safety.redact ?? []);
+    throw new Error(`${stage} failed (exit ${result.code})${detail ? `: ${detail}` : ''}`);
+  }
+  return result;
+}
 
 export function createExec(): ExecFn {
   return (argv, opts = {}) =>
