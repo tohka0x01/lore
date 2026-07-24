@@ -80,7 +80,9 @@ The current installer supports macOS and Linux. Some integrations still invoke P
 
 ## Known deferred limitations
 
-The following are intentionally not part of the `1.3.19` safety patch:
+The Codex installer repairs Lore hook paths in the marketplace source, local cache, and versioned Codex cache entries on every install or update, and replaces an older `lore` marketplace source when necessary.
+
+The following are intentionally not part of the `1.3.20` safety patch:
 
 - per-channel artifact version markers and mixed-version recovery;
 - fully layered status checks for artifact, host plugin, MCP, hooks, and runtime health;

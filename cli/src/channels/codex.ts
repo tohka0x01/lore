@@ -30,12 +30,39 @@ function replaceStrings(value: unknown, from: string, to: string): unknown {
   return value;
 }
 
-async function patchBundledHooks(pluginRoot: string): Promise<void> {
+async function patchBundledHooks(
+  pluginRoot: string,
+  staleRoots: string[] = [],
+): Promise<void> {
   const hooksPath = path.join(pluginRoot, 'hooks', 'hooks.json');
-  const hooks = await readJsonFileStrict<unknown>(hooksPath);
+  let hooks = await readJsonFileStrict<unknown>(hooksPath);
   if (hooks === undefined) return;
-  const patched = replaceStrings(hooks, '__LORE_CODEX_PLUGIN_ROOT__', pluginRoot);
-  await writeJsonAtomic(hooksPath, patched, { mode: 0o644 });
+  const replacements = ['__LORE_CODEX_PLUGIN_ROOT__', ...staleRoots]
+    .filter((value, index, values) => value && value !== pluginRoot && values.indexOf(value) === index);
+  const serialized = JSON.stringify(hooks);
+  if (!replacements.some((value) => serialized.includes(value))) return;
+  for (const staleRoot of replacements) {
+    hooks = replaceStrings(hooks, staleRoot, pluginRoot);
+  }
+  await writeJsonAtomic(hooksPath, hooks, { mode: 0o644 });
+}
+
+async function patchCachedLoreHooks(
+  cHome: string,
+  staleRoots: string[],
+): Promise<void> {
+  const cacheRoot = path.join(cHome, 'plugins', 'cache', 'lore', 'lore');
+  let entries: import('node:fs').Dirent[];
+  try {
+    entries = await fs.readdir(cacheRoot, { withFileTypes: true });
+  } catch (err) {
+    if ((err as NodeJS.ErrnoException).code === 'ENOENT') return;
+    throw err;
+  }
+  for (const entry of entries) {
+    if (!entry.isDirectory()) continue;
+    await patchBundledHooks(path.join(cacheRoot, entry.name), staleRoots);
+  }
 }
 
 function isLoreLegacyCommand(command: string): boolean {
@@ -163,11 +190,16 @@ export const codexInstaller: ChannelInstaller = {
       await copyDir(sourcePlugin, tmp);
       await fs.rm(pluginRoot, { recursive: true, force: true }).catch(() => undefined);
       await fs.rename(tmp, pluginRoot);
-      await patchBundledHooks(pluginRoot);
+      await patchBundledHooks(pluginRoot, [sourcePlugin]);
+      await patchBundledHooks(sourcePlugin);
 
       const run = ctx.run ?? createExec();
       const commandOpts = { quiet: true, env };
       const redact = [ctx.apiToken ?? ''];
+      await run(
+        ['codex', 'plugin', 'marketplace', 'remove', 'lore'],
+        commandOpts,
+      ).catch(() => undefined);
       await runChecked(
         run,
         'Codex marketplace registration',
@@ -175,6 +207,7 @@ export const codexInstaller: ChannelInstaller = {
         commandOpts,
         { redact },
       );
+      await patchCachedLoreHooks(cHome, [sourcePlugin, pluginRoot]);
 
       const mcpUrl = `${ctx.baseUrl.replace(/\/$/, '')}/api/mcp?client_type=codex`;
       await run(['codex', 'mcp', 'remove', 'lore'], commandOpts).catch(() => undefined);

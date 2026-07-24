@@ -258,6 +258,104 @@ test('Claude uninstall removes legacy guidance imports and preserves unrelated c
   assert.equal(body, '# Keep this heading\nKeep this instruction\n');
 });
 
+test('codex replaces an existing marketplace source and patches source, local, and versioned hooks', async () => {
+  const { home, loreHome } = await tempHome();
+  const sourcePlugin = await seedCodexArtifact(loreHome, {
+    hooks: {
+      SessionStart: [
+        {
+          hooks: [
+            {
+              type: 'command',
+              command: 'node "__LORE_CODEX_PLUGIN_ROOT__/hooks/rules-inject.mjs"',
+            },
+          ],
+        },
+      ],
+    },
+  });
+  const cHome = path.join(home, '.codex');
+  const localRoot = path.join(cHome, 'plugins', 'cache', 'lore', 'lore', 'local');
+  const versionRoot = path.join(cHome, 'plugins', 'cache', 'lore', 'lore', '1.3.15');
+  const calls: string[] = [];
+  let removed = false;
+  const run: ExecFn = async (argv) => {
+    calls.push(argv.join(' '));
+    if (argv.join(' ') === 'codex plugin marketplace remove lore') {
+      removed = true;
+      return { code: 1, stdout: '', stderr: 'not found is acceptable' };
+    }
+    if (argv[0] === 'codex' && argv[1] === 'plugin' && argv[2] === 'marketplace' && argv[3] === 'add') {
+      if (!removed) {
+        return {
+          code: 1,
+          stdout: '',
+          stderr: "marketplace 'lore' is already added from a different source",
+        };
+      }
+      await fs.mkdir(path.dirname(versionRoot), { recursive: true });
+      await fs.cp(sourcePlugin, versionRoot, { recursive: true });
+    }
+    return { code: 0, stdout: '', stderr: '' };
+  };
+
+  await withBin(home, 'codex', async () => {
+    const result = await codexInstaller.install(ctx({ loreHome, homeDir: home, run }));
+    assert.equal(result.status, 'ok');
+  });
+
+  const removeIndex = calls.indexOf('codex plugin marketplace remove lore');
+  const addIndex = calls.findIndex((call) => call.startsWith('codex plugin marketplace add '));
+  assert.ok(removeIndex >= 0);
+  assert.ok(addIndex > removeIndex);
+
+  for (const root of [sourcePlugin, localRoot, versionRoot]) {
+    const raw = await fs.readFile(path.join(root, 'hooks', 'hooks.json'), 'utf8');
+    assert.doesNotMatch(raw, /__LORE_CODEX_PLUGIN_ROOT__/);
+    const parsed = JSON.parse(raw) as {
+      hooks: { SessionStart: Array<{ hooks: Array<{ command: string }> }> };
+    };
+    assert.ok(parsed.hooks.SessionStart[0].hooks[0].command.includes(root));
+  }
+});
+
+test('codex patches a pre-existing versioned cache after marketplace registration', async () => {
+  const { home, loreHome } = await tempHome();
+  await seedCodexArtifact(loreHome);
+  const versionRoot = path.join(home, '.codex', 'plugins', 'cache', 'lore', 'lore', '1.3.15');
+  await fs.mkdir(path.join(versionRoot, 'hooks'), { recursive: true });
+  await fs.writeFile(
+    path.join(versionRoot, 'hooks', 'hooks.json'),
+    `${JSON.stringify({
+      hooks: {
+        UserPromptSubmit: [
+          {
+            hooks: [
+              {
+                type: 'command',
+                command: 'node "__LORE_CODEX_PLUGIN_ROOT__/hooks/recall-inject.mjs"',
+              },
+            ],
+          },
+        ],
+      },
+    }, null, 2)}\n`,
+  );
+
+  await withBin(home, 'codex', async () => {
+    const result = await codexInstaller.install(ctx({
+      loreHome,
+      homeDir: home,
+      run: async () => ({ code: 0, stdout: '', stderr: '' }),
+    }));
+    assert.equal(result.status, 'ok');
+  });
+
+  const raw = await fs.readFile(path.join(versionRoot, 'hooks', 'hooks.json'), 'utf8');
+  assert.doesNotMatch(raw, /__LORE_CODEX_PLUGIN_ROOT__/);
+  assert.ok(raw.includes(versionRoot));
+});
+
 test('codex final TOML preserves Authorization after host MCP mutation', async () => {
   const { home, loreHome } = await tempHome();
   await seedCodexArtifact(loreHome);
@@ -395,7 +493,12 @@ test('codex marketplace failure returns failed with token redacted', async () =>
   const { home, loreHome } = await tempHome();
   await seedCodexArtifact(loreHome);
   const run: ExecFn = async (argv) => {
-    if (argv[0] === 'codex' && argv[1] === 'plugin' && argv[2] === 'marketplace') {
+    if (
+      argv[0] === 'codex' &&
+      argv[1] === 'plugin' &&
+      argv[2] === 'marketplace' &&
+      argv[3] === 'add'
+    ) {
       return { code: 1, stdout: '', stderr: 'failed for lm_x' };
     }
     return { code: 0, stdout: '', stderr: '' };
